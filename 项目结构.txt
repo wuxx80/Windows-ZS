@@ -1,0 +1,64 @@
+﻿## 项目结构
+
+```
+D:\Users\Desktop\Windows-ZS\
+│
+├── .gitignore                          # Git 忽略规则
+├── README.md                           # 项目说明文档
+├── 项目理解报告.md                     # 项目架构与核心逻辑
+├── 项目结构.txt                        # 项目目录结构
+├── 操作指南.md                         # 安装/配置/启动/部署
+├── 版本更新记录.md                     # 版本历史与变更记录
+│
+├── 设计文档\                           # 设计文档目录
+│   ├── 详细设计文档.md                 # 系统架构/数据库/API/目录结构
+│   ├── Web后台详细设计.md              # 后台各模块详细设计（21章）
+│   └── 一键装机交互设计.md             # 客户端一键装机交互设计（18章）
+│
+└── 360截图20260830185410947.jpg        # 界面参考截图
+```
+
+## 数据库表结构（设计阶段，共 35+ 表）
+
+### 核心模块
+- zs_users              # 管理后台用户
+- zs_roles              # 角色权限
+- zs_images             # 镜像管理
+- zs_image_sources      # 镜像源管理
+- zs_image_versions     # 镜像版本历史
+- zs_image_tags         # 镜像标签
+- zs_image_tag_relations # 镜像标签关联
+- zs_download_links     # 下载链接管理
+- zs_download_logs      # 下载日志
+- zs_download_queue     # 远程下载队列
+- zs_clients            # 客户端管理
+- zs_client_groups      # 客户端分组
+- zs_client_versions    # 客户端版本
+- zs_tasks              # 装机任务
+- zs_task_records       # 任务记录/日志
+- zs_task_templates     # 任务模板
+- zs_unattend_templates # 无人值守模板
+
+### 扩展功能
+- zs_software           # 软件管理
+- zs_software_categories # 软件分类
+- zs_software_templates # 装机软件模板
+- zs_drivers            # 驱动管理
+- zs_scripts            # 脚本管理
+
+### PE 定制 & 网络部署
+- zs_pe_versions        # PE 版本管理
+- zs_pe_customize       # PE 定制配置
+- zs_pxe_configs        # PXE 配置
+- zs_network_deploy     # 网络部署任务
+
+### 客户管理 & 系统管理
+- zs_customers          # 客户信息
+- zs_work_orders        # 维修工单
+- zs_settings           # 系统配置
+- zs_logs               # 操作日志
+- zs_scheduled_tasks    # 调度任务
+- zs_scheduled_task_logs # 调度任务执行记录
+- zs_notifications      # 消息通知
+- zs_recycle_bin        # 回收站
+- zs_webhook_logs       # Webhook 日志

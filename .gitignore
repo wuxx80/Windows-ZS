@@ -1,0 +1,31 @@
+﻿# OS files
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# IDE
+.idea/
+.vscode/
+*.suo
+*.user
+
+# Logs
+*.log
+
+# Temp
+tmp/
+temp/
+*.tmp
+
+# Large files
+*.iso
+*.wim
+*.esd
+*.gho
+*.swm
+*.part
+
+# Dependencies
+node_modules/
+vendor/
