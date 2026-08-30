@@ -27,6 +27,11 @@ namespace WinPE_Client.Models
 
         [JsonPropertyName("partitions")]
         public List<PartitionInfo> Partitions { get; set; } = new();
+
+        /// <summary>分区表类型判断（设计文档 §5.4 GPT/MBR）</summary>
+        public bool HasGpt => Partitions.Any(p => p.Type == "GPT" || p.Type == "EFI");
+        public bool HasMbr => Partitions.Count > 0 && !HasGpt;
+        public string PartitionTable => HasGpt ? "GPT" : (Partitions.Count > 0 ? "MBR" : "");
     }
 
     public class PartitionInfo

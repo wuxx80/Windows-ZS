@@ -51,8 +51,8 @@ ZS 装机助手是一套完整的 Windows 系统安装与维护解决方案，�
 | 后端骨架（ThinkPHP 6 + 35张表 + 30个控制器） | ✅ 已完成 |
 | 管理后台前端（29个管理页面，Layui风格） | ✅ 已完成 |
 | 核心业务逻辑（所有控制器+服务层，浏览器全量测试验证） | ✅ 已完成 |
-| WinPE 客户端（.NET 8 WPF） | ✅ 已完成 |
-| Windows 客户端（.NET 8 WPF） | ✅ 已完成 |
+| WinPE 客户端（.NET 8 WPF，六步向导） | ✅ 已完成 |
+| Windows 客户端（.NET 8 WPF，六步向导） | ✅ 已完成 |
 | 客户端集成（注册/建任务/进度上报） | ✅ 已完成 |
 | API 全量联调测试（44/44 接口通过） | ✅ 已完成 |
 | 客户端端到端回归测试（15 项 PASS） | ✅ 已完成 |
@@ -120,17 +120,19 @@ Windows-ZS/
 │   ├── WinPE_Client.csproj
 │   ├── App.xaml
 │   ├── MainWindow.xaml
-│   ├── Models/
+│   ├── InstallWizardWindow.xaml       ← 一键装机六步向导窗口
+│   ├── Models/                       （含 WizardModels.cs 向导模型）
 │   ├── Services/
-│   ├── ViewModels/
+│   ├── ViewModels/                   （含 InstallWizardViewModel.cs 六步向导）
 │   └── Helpers/
 ├── Windows_Client/                  ← Windows 客户端 (.NET 8 WPF)
 │   ├── Windows_Client.csproj
 │   ├── App.xaml
 │   ├── MainWindow.xaml
+│   ├── InstallWizardWindow.xaml       ← 一键装机六步向导窗口（安全版）
 │   ├── Models/
-│   ├── Services/
-│   ├── ViewModels/
+│   ├── Services/                     （含 Device/DiskPart/ImageDeploy 服务）
+│   ├── ViewModels/                   （含 InstallWizardViewModel.cs 六步向导）
 │   └── Helpers/
 └── publish/                         ← 客户端发布产物（git 忽略）
     ├── WinPE_Client/                ← 自包含发布（~146MB）

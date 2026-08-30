@@ -135,33 +135,43 @@ D:\Users\Desktop\Windows-ZS\
 │   ├── App.xaml                        # 应用程序入口
 │   ├── MainWindow.xaml                 # 主窗口 UI
 │   ├── MainWindow.xaml.cs              # 主窗口代码
+│   ├── InstallWizardWindow.xaml        # 一键装机六步向导窗口 UI
+│   ├── InstallWizardWindow.xaml.cs     # 向导窗口代码（拖拽/关闭）
 │   ├── Models\                         # 数据模型
 │   │   ├── ApiResponse.cs              # API 响应模型
-│   │   ├── ImageInfo.cs                # 镜像信息模型
-│   │   └── DiskInfo.cs                 # 磁盘/分区模型
+│   │   ├── ImageInfo.cs                # 镜像信息模型（含缓存状态）
+│   │   ├── DiskInfo.cs                 # 磁盘/分区模型
+│   │   └── WizardModels.cs             # 六步向导模型（环境检测/选项/步骤/冲突/分区编辑）
 │   ├── Services\                       # 服务层
-│   │   ├── ApiService.cs               # HTTP API 通信服务
+│   │   ├── ApiService.cs               # HTTP API 通信服务（含分页/过滤/任务控制）
 │   │   ├── DeviceService.cs            # 设备信息采集（WMI）
 │   │   ├── ImageDeployService.cs       # 镜像部署引擎
 │   │   └── DiskPartService.cs          # DiskPart 分区工具
 │   ├── ViewModels\                     # 视图模型
-│   │   └── MainViewModel.cs            # 主视图模型
+│   │   ├── MainViewModel.cs            # 主视图模型
+│   │   └── InstallWizardViewModel.cs   # 六步向导视图模型（完整装机执行）
 │   └── Helpers\                        # 辅助类
-│       └── Converters.cs               # 值转换器
+│       └── Converters.cs               # 值转换器（含 StringToBrush/分区方案单选）
 │
 ├── Windows_Client\                     # Windows 客户端（.NET 8 WPF）
 │   ├── Windows_Client.csproj           # 项目文件
 │   ├── App.xaml                        # 应用程序入口
 │   ├── MainWindow.xaml                 # 主窗口 UI（四大入口）
 │   ├── MainWindow.xaml.cs              # 主窗口代码
+│   ├── InstallWizardWindow.xaml        # 一键装机六步向导窗口 UI（安全版）
+│   ├── InstallWizardWindow.xaml.cs     # 向导窗口代码（拖拽/关闭）
 │   ├── Models\                         # 数据模型
-│   │   └── ApiModels.cs                # API 数据模型
+│   │   └── ApiModels.cs                # API 数据模型（含向导相关模型）
 │   ├── Services\                       # 服务层
-│   │   └── ApiService.cs               # HTTP API 通信服务
+│   │   ├── ApiService.cs               # HTTP API 通信服务（含分页/过滤/任务控制）
+│   │   ├── DeviceService.cs            # 设备信息采集（WMI，自 WinPE 迁移）
+│   │   ├── ImageDeployService.cs       # 镜像部署引擎（自 WinPE 迁移）
+│   │   └── DiskPartService.cs          # DiskPart 分区工具（自 WinPE 迁移）
 │   ├── ViewModels\                     # 视图模型
-│   │   └── MainViewModel.cs            # 主视图模型
+│   │   ├── MainViewModel.cs            # 主视图模型
+│   │   └── InstallWizardViewModel.cs   # 六步向导视图模型（安全版：仅建任务，装机在 WinPE 执行）
 │   └── Helpers\                        # 辅助类
-│       └── Converters.cs               # 值转换器
+│       └── Converters.cs               # 值转换器（含 StringToBrush/分区方案单选）
 │
 └── publish\                            # 客户端发布产物（git 忽略）
     ├── WinPE_Client\                   # WinPE 客户端自包含发布（~146MB）
@@ -172,3 +182,4 @@ D:\Users\Desktop\Windows-ZS\
 
 当前版本：v0.0.268311
 API 联调验证 + 性能优化 + 安全审查 + 部署文档 + 打包发布 已完成
+一键装机六步向导（WinPE 完整版 + Windows 安全版）已完成并同步

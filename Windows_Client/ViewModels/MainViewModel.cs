@@ -4,6 +4,7 @@ using System.ComponentModel;
 using System.Linq;
 using System.Net.NetworkInformation;
 using System.Threading.Tasks;
+using System.Windows;
 using System.Windows.Input;
 using Windows_Client.Models;
 using Windows_Client.Services;
@@ -18,17 +19,13 @@ namespace Windows_Client.ViewModels
         private string _clientId = "";
         private int _serverClientId;
 
-        // 当前装机任务（创建后保存，用于进度上报）
-        private int _taskId;
-
         public MainViewModel()
         {
             NavigateCommand = new RelayCommand<string>(Navigate);
+            OpenInstallWizardCommand = new RelayCommand(OpenInstallWizard);
             LoginCommand = new RelayCommand(async () => await Login(), () => !IsLoggedIn);
             LogoutCommand = new RelayCommand(async () => await Logout(), () => IsLoggedIn);
-            RefreshImagesCommand = new RelayCommand(async () => await RefreshImages());
             RefreshSoftwareCommand = new RelayCommand(async () => await RefreshSoftware());
-            StartInstallCommand = new RelayCommand(async () => await StartInstall(), () => CanStartInstall);
         }
 
         private string _serverUrl = "http://localhost";
@@ -68,53 +65,14 @@ namespace Windows_Client.ViewModels
             set { _currentView = value; OnPropertyChanged(); }
         }
 
-        // 一键装机
-        private ImageInfo? _selectedImage;
-        public ImageInfo? SelectedImage
-        {
-            get => _selectedImage;
-            set { _selectedImage = value; OnPropertyChanged(); }
-        }
-
-        private DiskInfo? _selectedDisk;
-        public DiskInfo? SelectedDisk
-        {
-            get => _selectedDisk;
-            set { _selectedDisk = value; OnPropertyChanged(); }
-        }
-
-        private bool _autoPartition = true;
-        public bool AutoPartition { get => _autoPartition; set { _autoPartition = value; OnPropertyChanged(); } }
-
-        private bool _autoRepairBoot = true;
-        public bool AutoRepairBoot { get => _autoRepairBoot; set { _autoRepairBoot = value; OnPropertyChanged(); } }
-
-        private bool _isInstalling;
-        public bool IsInstalling
-        {
-            get => _isInstalling;
-            set { _isInstalling = value; OnPropertyChanged(); OnPropertyChanged(nameof(CanStartInstall)); }
-        }
-
-        public bool CanStartInstall => !IsInstalling && IsLoggedIn && SelectedImage != null;
-
-        private int _progressValue;
-        public int ProgressValue
-        {
-            get => _progressValue;
-            set { _progressValue = value; OnPropertyChanged(); }
-        }
-
-        public ObservableCollection<ImageInfo> Images { get; } = new();
-        public ObservableCollection<DiskInfo> Disks { get; } = new();
+        // 一键装机六步向导（独立子窗口，见 InstallWizardWindow / InstallWizardViewModel）
         public ObservableCollection<SoftwareInfo> SoftwareList { get; } = new();
 
         public ICommand NavigateCommand { get; }
+        public ICommand OpenInstallWizardCommand { get; }
         public ICommand LoginCommand { get; }
         public ICommand LogoutCommand { get; }
-        public ICommand RefreshImagesCommand { get; }
         public ICommand RefreshSoftwareCommand { get; }
-        public ICommand StartInstallCommand { get; }
 
         private async Task Login()
         {
@@ -127,7 +85,6 @@ namespace Windows_Client.ViewModels
                 IsLoggedIn = true;
                 StatusMessage = "登录成功 - 已连接到服务器";
                 await RegisterClient();
-                await RefreshImages();
             }
             else
             {
@@ -160,70 +117,6 @@ namespace Windows_Client.ViewModels
             }
         }
 
-        /// <summary>一键装机：创建装机任务并通过 API 上报进度</summary>
-        private async Task StartInstall()
-        {
-            if (SelectedImage == null) return;
-
-            IsInstalling = true;
-            StatusMessage = "开始创建装机任务...";
-            ProgressValue = 0;
-            _taskId = 0;
-
-            try
-            {
-                // 创建装机任务（服务端记录，客户端后续上报进度）
-                var taskResult = await _api.CreateTaskAsync(
-                    imageId: SelectedImage.Id,
-                    clientId: _serverClientId > 0 ? _serverClientId : (int?)null,
-                    targetDiskIndex: 0,
-                    targetPartition: "C:",
-                    partitionScheme: AutoPartition ? "auto" : "keep",
-                    optionsJson: System.Text.Json.JsonSerializer.Serialize(new
-                    {
-                        auto_partition = AutoPartition,
-                        auto_repair_boot = AutoRepairBoot,
-                        image_index = 1
-                    }));
-                if (!taskResult.IsSuccess || taskResult.Data == null)
-                {
-                    StatusMessage = "创建任务失败: " + taskResult.Message;
-                    IsInstalling = false;
-                    return;
-                }
-                _taskId = taskResult.Data.Id;
-
-                // 上报任务已创建（保持 running 状态，等待重启进入 WinPE 后由 PE 端继续执行装机）
-                await ReportProgress(5, "任务已创建，等待进入 WinPE 执行装机", "创建任务", "running");
-
-                ProgressValue = 5;
-                StatusMessage = "装机任务已创建：任务编号 " + taskResult.Data.TaskNo + "，请在 PE 环境继续执行";
-            }
-            catch (Exception ex)
-            {
-                StatusMessage = "创建任务异常: " + ex.Message;
-                await ReportProgress(0, "创建任务异常: " + ex.Message, "异常", "failed");
-            }
-            finally
-            {
-                IsInstalling = false;
-            }
-        }
-
-        /// <summary>上报任务进度（任务未创建成功时静默跳过）</summary>
-        private async Task ReportProgress(int progress, string? message, string? stepName, string? status)
-        {
-            if (_taskId <= 0) return;
-            try
-            {
-                await _api.ReportProgressAsync(_taskId, progress, message, stepName, status);
-            }
-            catch
-            {
-                // 进度上报失败不影响主流程
-            }
-        }
-
         private static string GetHostname() => Environment.MachineName;
 
         private static string GetMacAddress()
@@ -250,19 +143,6 @@ namespace Windows_Client.ViewModels
             IsLoggedIn = false;
             _api.SetToken(null);
             StatusMessage = "已退出登录";
-            Images.Clear();
-        }
-
-        private async Task RefreshImages()
-        {
-            var result = await _api.GetImagesAsync();
-            if (result.IsSuccess && result.Data != null)
-            {
-                Images.Clear();
-                foreach (var img in result.Data.List)
-                    Images.Add(img);
-                StatusMessage = "已加载 " + Images.Count + " 个镜像";
-            }
         }
 
         private async Task RefreshSoftware()
@@ -280,6 +160,16 @@ namespace Windows_Client.ViewModels
         private void Navigate(string? view)
         {
             CurrentView = view ?? "Home";
+        }
+
+        /// <summary>打开一键装机六步向导子窗口（Windows 端仅创建任务，实际装机在 WinPE 执行）</summary>
+        private void OpenInstallWizard()
+        {
+            var vm = new InstallWizardViewModel(_api, new DeviceService(), ServerUrl);
+            var win = new InstallWizardWindow { DataContext = vm };
+            vm.RequestClose += () => win.Close();
+            win.Owner = Application.Current.MainWindow;
+            win.ShowDialog();
         }
 
         public event PropertyChangedEventHandler? PropertyChanged;

@@ -43,6 +43,7 @@ namespace WinPE_Client.ViewModels
             };
 
             NavigateCommand = new RelayCommand<string>(Navigate);
+            OpenInstallWizardCommand = new RelayCommand(OpenInstallWizard);
             StartInstallCommand = new RelayCommand(async () => await StartInstall(), () => CanStartInstall);
             RefreshDisksCommand = new RelayCommand(async () => await RefreshDisks());
             RefreshImagesCommand = new RelayCommand(async () => await RefreshImages());
@@ -150,6 +151,7 @@ namespace WinPE_Client.ViewModels
         public ObservableCollection<DiskInfo> Disks { get; } = new();
 
         public ICommand NavigateCommand { get; }
+        public ICommand OpenInstallWizardCommand { get; }
         public ICommand StartInstallCommand { get; }
         public ICommand RefreshDisksCommand { get; }
         public ICommand RefreshImagesCommand { get; }
@@ -360,6 +362,16 @@ namespace WinPE_Client.ViewModels
         private void Navigate(string? view)
         {
             CurrentView = view ?? "Home";
+        }
+
+        /// <summary>打开一键装机六步向导子窗口</summary>
+        private void OpenInstallWizard()
+        {
+            var vm = new InstallWizardViewModel(_api, _device, ServerUrl);
+            var win = new InstallWizardWindow { DataContext = vm };
+            vm.RequestClose += () => win.Close();
+            win.Owner = Application.Current.MainWindow;
+            win.ShowDialog();
         }
 
         public event PropertyChangedEventHandler? PropertyChanged;

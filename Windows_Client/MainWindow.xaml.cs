@@ -13,7 +13,7 @@ namespace Windows_Client
         private void OnInstallClick(object sender, MouseButtonEventArgs e)
         {
             var vm = DataContext as ViewModels.MainViewModel;
-            vm?.NavigateCommand.Execute("Install");
+            vm?.OpenInstallWizardCommand.Execute(null);
         }
 
         private void OnUsbClick(object sender, MouseButtonEventArgs e)

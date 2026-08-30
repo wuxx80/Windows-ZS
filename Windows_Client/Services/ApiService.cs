@@ -71,8 +71,51 @@ namespace Windows_Client.Services
         public async Task<ApiResponse<object>> LoginAsync(string username, string password)
             => await PostAsync<object>("/api/v1/auth/login", new { username, password });
 
-        public async Task<ApiResponse<PaginatedData<ImageInfo>>> GetImagesAsync(int page = 1, int limit = 20)
-            => await GetAsync<PaginatedData<ImageInfo>>("/api/v1/images?page=" + page + "&limit=" + limit);
+        public async Task<ApiResponse<PaginatedData<T>>> GetPaginatedAsync<T>(string endpoint, int page = 1, int limit = 20)
+        {
+            var sep = endpoint.Contains("?") ? "&" : "?";
+            return await GetAsync<PaginatedData<T>>(endpoint + sep + "page=" + page + "&limit=" + limit);
+        }
+
+        public async Task<ApiResponse<PaginatedData<ImageInfo>>> GetImagesAsync(int page = 1, int limit = 20, string? keyword = null, string? format = null, string? osType = null)
+        {
+            var endpoint = "/api/v1/images?page=" + page + "&limit=" + limit;
+            if (!string.IsNullOrEmpty(keyword))
+                endpoint += "&keyword=" + Uri.EscapeDataString(keyword);
+            if (!string.IsNullOrEmpty(format))
+                endpoint += "&format=" + Uri.EscapeDataString(format);
+            if (!string.IsNullOrEmpty(osType))
+                endpoint += "&os_type=" + Uri.EscapeDataString(osType);
+            return await GetAsync<PaginatedData<ImageInfo>>(endpoint);
+        }
+
+        /// <summary>添加远程镜像 URL（镜像来源-远程URL模式）</summary>
+        public async Task<ApiResponse<object>> AddRemoteUrlAsync(string url, string name)
+            => await PostAsync<object>("/api/v1/images/addRemoteUrl", new { url, name });
+
+        /// <summary>获取无人值守模板列表（扩展配置-无人值守）</summary>
+        public async Task<ApiResponse<PaginatedData<object>>> GetUnattendTemplatesAsync(int page = 1, int limit = 200)
+            => await GetPaginatedAsync<object>("/api/v1/unattendTemplates", page, limit);
+
+        /// <summary>获取软件模板列表（扩展配置-软件包）</summary>
+        public async Task<ApiResponse<PaginatedData<object>>> GetSoftwareTemplatesAsync(int page = 1, int limit = 200)
+            => await GetPaginatedAsync<object>("/api/v1/softwareTemplates", page, limit);
+
+        /// <summary>获取驱动包列表（扩展配置-驱动注入）</summary>
+        public async Task<ApiResponse<PaginatedData<object>>> GetDriversAsync(int page = 1, int limit = 200)
+            => await GetPaginatedAsync<object>("/api/v1/drivers", page, limit);
+
+        /// <summary>暂停任务</summary>
+        public async Task<ApiResponse<object>> PauseTaskAsync(int taskId)
+            => await PostAsync<object>("/api/v1/tasks/" + taskId + "/pause");
+
+        /// <summary>恢复任务</summary>
+        public async Task<ApiResponse<object>> ResumeTaskAsync(int taskId)
+            => await PostAsync<object>("/api/v1/tasks/" + taskId + "/resume");
+
+        /// <summary>取消任务</summary>
+        public async Task<ApiResponse<object>> CancelTaskAsync(int taskId)
+            => await PostAsync<object>("/api/v1/tasks/" + taskId + "/cancel");
 
         public async Task<ApiResponse<PaginatedData<SoftwareInfo>>> GetSoftwareAsync(int page = 1, int limit = 20, int? categoryId = null)
         {

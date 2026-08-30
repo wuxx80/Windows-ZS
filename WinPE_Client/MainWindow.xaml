@@ -67,7 +67,7 @@
                 </Border>
                 <StackPanel Grid.Row="1" Margin="0,10,0,0">
                     <Button Content="首页" Style="{StaticResource NavButton}" Command="{Binding NavigateCommand}" CommandParameter="Home"/>
-                    <Button Content="一键装机" Style="{StaticResource NavButton}" Command="{Binding NavigateCommand}" CommandParameter="Install"/>
+                    <Button Content="一键装机" Style="{StaticResource NavButton}" Command="{Binding OpenInstallWizardCommand}"/>
                     <Button Content="磁盘工具" Style="{StaticResource NavButton}" Command="{Binding NavigateCommand}" CommandParameter="Disk"/>
                     <Button Content="引导修复" Style="{StaticResource NavButton}" Command="{Binding NavigateCommand}" CommandParameter="Boot"/>
                     <Button Content="驱动注入" Style="{StaticResource NavButton}" Command="{Binding NavigateCommand}" CommandParameter="Driver"/>
@@ -107,92 +107,6 @@
                     <Border Background="White" CornerRadius="8" Padding="20">
                         <TextBlock Text="从左侧菜单选择功能开始操作" FontSize="13" Foreground="#999"/>
                     </Border>
-                </StackPanel>
-                <StackPanel Visibility="{Binding CurrentView, Converter={StaticResource ViewConverter}, ConverterParameter=Install}">
-                    <TextBlock Text="一键装机" FontSize="20" FontWeight="SemiBold" Margin="0,0,0,15"/>
-                    <Border Background="White" CornerRadius="8" Padding="20" Margin="0,0,0,15">
-                        <StackPanel>
-                            <Grid Margin="0,0,0,10">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0" Text="选择系统镜像" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center"/>
-                                <StackPanel Grid.Column="1" Orientation="Horizontal">
-                                    <TextBox Text="{Binding SearchKeyword}" Width="150" Height="30" FontSize="12" Margin="0,0,5,0"/>
-                                    <Button Content="搜索" Style="{StaticResource ActionButton}" Height="30" Command="{Binding RefreshImagesCommand}"/>
-                                </StackPanel>
-                            </Grid>
-                            <ListBox ItemsSource="{Binding Images}" SelectedItem="{Binding SelectedImage}" Height="150" Margin="0,0,0,10" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
-                                <ListBox.ItemTemplate>
-                                    <DataTemplate>
-                                        <Border Padding="8" Margin="0,2">
-                                            <Grid>
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="Auto"/>
-                                                    <ColumnDefinition Width="*"/>
-                                                    <ColumnDefinition Width="Auto"/>
-                                                </Grid.ColumnDefinitions>
-                                                <Border Grid.Column="0" Background="#E3F2FD" CornerRadius="4" Padding="6,3" Margin="0,0,10,0">
-                                                    <TextBlock Text="{Binding Format}" FontSize="11" Foreground="#1565C0"/>
-                                                </Border>
-                                                <StackPanel Grid.Column="1">
-                                                    <TextBlock Text="{Binding Name}" FontSize="13" FontWeight="SemiBold"/>
-                                                    <TextBlock Text="{Binding SizeDisplay}" FontSize="11" Foreground="#888"/>
-                                                </StackPanel>
-                                                <TextBlock Grid.Column="2" Text="{Binding OsType}" FontSize="11" Foreground="#666" VerticalAlignment="Center"/>
-                                            </Grid>
-                                        </Border>
-                                    </DataTemplate>
-                                </ListBox.ItemTemplate>
-                            </ListBox>
-                        </StackPanel>
-                    </Border>
-                    <Border Background="White" CornerRadius="8" Padding="20" Margin="0,0,0,15">
-                        <StackPanel>
-                            <Grid Margin="0,0,0,10">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0" Text="选择目标磁盘" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center"/>
-                                <Button Grid.Column="1" Content="刷新" Style="{StaticResource ActionButton}" Height="30" Command="{Binding RefreshDisksCommand}"/>
-                            </Grid>
-                            <ListBox ItemsSource="{Binding Disks}" SelectedItem="{Binding SelectedDisk}" Height="120" Margin="0,0,0,10" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
-                                <ListBox.ItemTemplate>
-                                    <DataTemplate>
-                                        <Border Padding="8" Margin="0,2">
-                                            <Grid>
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="Auto"/>
-                                                    <ColumnDefinition Width="*"/>
-                                                    <ColumnDefinition Width="Auto"/>
-                                                </Grid.ColumnDefinitions>
-                                                <Border Grid.Column="0" Background="#FFF3E0" CornerRadius="4" Padding="6,3" Margin="0,0,10,0">
-                                                    <TextBlock Text="{Binding Index, StringFormat=磁盘 {0}}" FontSize="11" Foreground="#E65100"/>
-                                                </Border>
-                                                <StackPanel Grid.Column="1">
-                                                    <TextBlock Text="{Binding Model}" FontSize="13" FontWeight="SemiBold"/>
-                                                    <TextBlock Text="{Binding SizeDisplay}" FontSize="11" Foreground="#888"/>
-                                                </StackPanel>
-                                                <TextBlock Grid.Column="2" Text="{Binding InterfaceType}" FontSize="11" Foreground="#666" VerticalAlignment="Center"/>
-                                            </Grid>
-                                        </Border>
-                                    </DataTemplate>
-                                </ListBox.ItemTemplate>
-                            </ListBox>
-                        </StackPanel>
-                    </Border>
-                    <Border Background="White" CornerRadius="8" Padding="20" Margin="0,0,0,15">
-                        <StackPanel>
-                            <TextBlock Text="安装选项" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,10"/>
-                            <CheckBox IsChecked="{Binding AutoPartition}" Content="自动分区 (GPT)" Margin="0,0,0,8"/>
-                            <CheckBox IsChecked="{Binding AutoRepairBoot}" Content="自动修复引导" Margin="0,0,0,8"/>
-                            <CheckBox IsChecked="{Binding AutoInjectDrivers}" Content="自动注入驱动" Margin="0,0,0,8"/>
-                            <TextBox Text="{Binding DriverPath}" Height="30" FontSize="12" IsEnabled="{Binding AutoInjectDrivers}" ToolTip="驱动文件夹路径"/>
-                        </StackPanel>
-                    </Border>
-                    <Button Content="开始装机" Style="{StaticResource ActionButton}" Height="44" FontSize="16" Command="{Binding StartInstallCommand}" HorizontalAlignment="Center" Width="200"/>
                 </StackPanel>
                 <StackPanel Visibility="{Binding CurrentView, Converter={StaticResource ViewConverter}, ConverterParameter=Disk}">
                     <TextBlock Text="磁盘工具" FontSize="20" FontWeight="SemiBold" Margin="0,0,0,15"/>
