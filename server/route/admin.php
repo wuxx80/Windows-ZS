@@ -49,6 +49,7 @@ Route::group('api/v1', function () {
 
     // Clients
     Route::get('clients', 'admin.Client/index');
+    Route::post('clients/register', 'admin.Client/register');
     Route::get('clients/:id', 'admin.Client/detail');
     Route::post('clients/:id/approve', 'admin.Client/approve');
     Route::post('clients/batchApprove', 'admin.Client/batchApprove');

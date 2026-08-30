@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
@@ -57,13 +57,6 @@ body { padding: 24px; background: transparent; }
     <option value="failed">失败</option>
     <option value="cancelled">已取消</option>
   </select>
-  <select id="searchType">
-    <option value="">全部类型</option>
-    <option value="install">系统安装</option>
-    <option value="usb">USB制作</option>
-    <option value="repair">系统修复</option>
-    <option value="other">其他</option>
-  </select>
   <div class="search-date">
     <input type="date" id="searchStartDate" placeholder="开始日期">
     <span>至</span>
@@ -81,8 +74,7 @@ body { padding: 24px; background: transparent; }
       <thead>
         <tr>
           <th style="width:60px;">ID</th>
-          <th>任务名称</th>
-          <th style="width:80px;">类型</th>
+          <th>任务编号</th>
           <th style="width:80px;">状态</th>
           <th style="width:130px;">进度</th>
           <th style="width:120px;">客户端</th>
@@ -108,38 +100,37 @@ body { padding: 24px; background: transparent; }
       <button onclick="closeCreateModal()" style="background:none;border:none;font-size:20px;cursor:pointer;color:#94a3b8;">&times;</button>
     </div>
     <div style="padding:20px 24px;">
-      <div class="form-group">
-        <label>任务名称 <span style="color:#dc2626;">*</span></label>
-        <input type="text" id="createName" placeholder="请输入任务名称">
-      </div>
       <div class="form-row">
-        <div class="form-group">
-          <label>任务类型 <span style="color:#dc2626;">*</span></label>
-          <select id="createType">
-            <option value="install">系统安装</option>
-            <option value="usb">USB制作</option>
-            <option value="repair">系统修复</option>
-            <option value="other">其他</option>
-          </select>
-        </div>
         <div class="form-group">
           <label>客户端ID</label>
-          <input type="text" id="createClientId" placeholder="选择或输入客户端ID">
+          <input type="number" id="createClientId" placeholder="客户端数据库ID（可留空）">
+        </div>
+        <div class="form-group">
+          <label>镜像ID <span style="color:#dc2626;">*</span></label>
+          <input type="number" id="createImageId" placeholder="镜像ID（必填）">
         </div>
       </div>
       <div class="form-row">
         <div class="form-group">
-          <label>镜像ID</label>
-          <input type="text" id="createImageId" placeholder="镜像ID">
+          <label>目标磁盘</label>
+          <input type="number" id="createDiskIndex" value="0" placeholder="磁盘索引">
         </div>
         <div class="form-group">
-          <label>模板ID</label>
-          <input type="text" id="createTemplateId" placeholder="模板ID">
+          <label>目标分区</label>
+          <input type="text" id="createPartition" value="C:" placeholder="分区盘符">
         </div>
       </div>
       <div class="form-group">
-        <label>参数（JSON格式）</label>
-        <textarea id="createParams" placeholder='{"key": "value"}' style="min-height:60px;"></textarea>
+        <label>分区方案</label>
+        <select id="createPartitionScheme">
+          <option value="auto">自动分区</option>
+          <option value="custom">自定义分区</option>
+          <option value="keep">保留现有分区</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>其他参数（JSON格式，可选）</label>
+        <textarea id="createParams" placeholder='{"type": "install"}' style="min-height:60px;"></textarea>
       </div>
       <div class="form-actions">
         <button class="btn-cancel" onclick="closeCreateModal()">取消</button>
@@ -189,7 +180,6 @@ var totalCount = 0;
 function loadTasks() {
   var keyword = document.getElementById('searchKeyword').value;
   var status = document.getElementById('searchStatus').value;
-  var type = document.getElementById('searchType').value;
   var startDate = document.getElementById('searchStartDate').value;
   var endDate = document.getElementById('searchEndDate').value;
   var params = [];
@@ -197,7 +187,6 @@ function loadTasks() {
   params.push('pageSize=' + pageSize);
   if (keyword) params.push('keyword=' + encodeURIComponent(keyword));
   if (status) params.push('status=' + encodeURIComponent(status));
-  if (type) params.push('type=' + encodeURIComponent(type));
   if (startDate) params.push('start_date=' + encodeURIComponent(startDate));
   if (endDate) params.push('end_date=' + encodeURIComponent(endDate));
   var tbody = document.getElementById('taskBody');
@@ -225,13 +214,11 @@ function renderTasks(data) {
   for (var i = 0; i < list.length; i++) {
     var item = list[i];
     var statusHtml = statusBadge(item.status, item.status);
-    var typeLabel = getTypeLabel(item.type);
     var progressHtml = renderProgress(item.progress, item.status);
     var actionsHtml = buildActions(item);
     html += '<tr>' +
       '<td>' + esc(item.id) + '</td>' +
-      '<td><a href="javascript:void(0)" onclick="showDetail(\'' + item.id + '\')" style="color:var(--primary);text-decoration:none;font-weight:500;">' + esc(item.name) + '</a></td>' +
-      '<td>' + esc(typeLabel) + '</td>' +
+      '<td><a href="javascript:void(0)" onclick="showDetail(\'' + item.id + '\')" style="color:var(--primary);text-decoration:none;font-weight:500;">' + esc(item.task_no || item.id) + '</a></td>' +
       '<td>' + statusHtml + '</td>' +
       '<td>' + progressHtml + '</td>' +
       '<td style="font-size:12px;">' + esc(item.client_id) + '</td>' +
@@ -259,11 +246,6 @@ function renderTasks(data) {
 function goToPage(page) {
   currentPage = page;
   loadTasks();
-}
-
-function getTypeLabel(type) {
-  var map = { 'install': '系统安装', 'usb': 'USB制作', 'repair': '系统修复', 'other': '其他' };
-  return map[type] || type || '-';
 }
 
 function renderProgress(progress, status) {
@@ -296,7 +278,7 @@ function buildActions(item) {
   if (item.status === 'paused') {
     actions += '<button class="action-btn resume" onclick="resumeTask(\'' + id + '\')">继续</button>';
   }
-  actions += '<button class="action-btn log" onclick="showLogs(\'' + id + '\', \'' + esc(item.name) + '\')">日志</button>';
+  actions += '<button class="action-btn log" onclick="showLogs(\'' + id + '\', \'' + esc(item.task_no || item.id) + '\')">日志</button>';
   return actions;
 }
 
@@ -308,7 +290,6 @@ function searchTasks() {
 function resetSearch() {
   document.getElementById('searchKeyword').value = '';
   document.getElementById('searchStatus').value = '';
-  document.getElementById('searchType').value = '';
   document.getElementById('searchStartDate').value = '';
   document.getElementById('searchEndDate').value = '';
   currentPage = 1;
@@ -317,11 +298,11 @@ function resetSearch() {
 
 function showCreateModal() {
   document.getElementById('createModalOverlay').style.display = 'flex';
-  document.getElementById('createName').value = '';
-  document.getElementById('createType').value = 'install';
   document.getElementById('createClientId').value = '';
   document.getElementById('createImageId').value = '';
-  document.getElementById('createTemplateId').value = '';
+  document.getElementById('createDiskIndex').value = '0';
+  document.getElementById('createPartition').value = 'C:';
+  document.getElementById('createPartitionScheme').value = 'auto';
   document.getElementById('createParams').value = '';
 }
 
@@ -330,21 +311,22 @@ function closeCreateModal() {
 }
 
 function submitCreateTask() {
-  var name = document.getElementById('createName').value.trim();
-  if (!name) {
-    toast('请输入任务名称', 'error');
+  var imageId = document.getElementById('createImageId').value.trim();
+  if (!imageId) {
+    toast('请输入镜像ID', 'error');
     return;
   }
-  var body = { name: name, type: document.getElementById('createType').value };
+  var body = {
+    image_id: imageId,
+    target_disk_index: document.getElementById('createDiskIndex').value || 0,
+    target_partition: document.getElementById('createPartition').value || 'C:',
+    partition_scheme: document.getElementById('createPartitionScheme').value
+  };
   var clientId = document.getElementById('createClientId').value.trim();
   if (clientId) body.client_id = clientId;
-  var imageId = document.getElementById('createImageId').value.trim();
-  if (imageId) body.image_id = imageId;
-  var templateId = document.getElementById('createTemplateId').value.trim();
-  if (templateId) body.template_id = templateId;
   var paramsStr = document.getElementById('createParams').value.trim();
   if (paramsStr) {
-    try { body.params = JSON.parse(paramsStr); } catch (e) {
+    try { body.options = JSON.parse(paramsStr); } catch (e) {
       toast('参数格式错误，请输入合法的JSON', 'error');
       return;
     }
@@ -413,20 +395,21 @@ function renderDetail(data) {
   var html = '';
   html += '<div class="modal-body-section"><h4>基本信息</h4><div class="detail-grid">';
   html += '<div class="detail-item"><div class="dt-label">任务ID</div><div class="dt-value">' + esc(item.id) + '</div></div>';
-  html += '<div class="detail-item"><div class="dt-label">任务名称</div><div class="dt-value">' + esc(item.name) + '</div></div>';
-  html += '<div class="detail-item"><div class="dt-label">类型</div><div class="dt-value">' + esc(getTypeLabel(item.type)) + '</div></div>';
+  html += '<div class="detail-item"><div class="dt-label">任务编号</div><div class="dt-value">' + esc(item.task_no || '-') + '</div></div>';
   html += '<div class="detail-item"><div class="dt-label">状态</div><div class="dt-value">' + statusBadge(item.status, item.status) + '</div></div>';
   html += '<div class="detail-item"><div class="dt-label">进度</div><div class="dt-value">' + (item.progress || 0) + '%</div></div>';
   html += '<div class="detail-item"><div class="dt-label">客户端ID</div><div class="dt-value">' + esc(item.client_id || '-') + '</div></div>';
   html += '<div class="detail-item"><div class="dt-label">镜像ID</div><div class="dt-value">' + esc(item.image_id || '-') + '</div></div>';
-  html += '<div class="detail-item"><div class="dt-label">模板ID</div><div class="dt-value">' + esc(item.template_id || '-') + '</div></div>';
+  html += '<div class="detail-item"><div class="dt-label">目标磁盘</div><div class="dt-value">' + esc(item.target_disk_index === undefined || item.target_disk_index === null ? '-' : item.target_disk_index) + '</div></div>';
+  html += '<div class="detail-item"><div class="dt-label">目标分区</div><div class="dt-value">' + esc(item.target_partition || '-') + '</div></div>';
+  html += '<div class="detail-item"><div class="dt-label">分区方案</div><div class="dt-value">' + esc(item.partition_scheme || '-') + '</div></div>';
   html += '<div class="detail-item"><div class="dt-label">创建时间</div><div class="dt-value">' + fmtDate(item.created_at) + '</div></div>';
   html += '<div class="detail-item"><div class="dt-label">开始时间</div><div class="dt-value">' + fmtDate(item.started_at) + '</div></div>';
   html += '<div class="detail-item"><div class="dt-label">完成时间</div><div class="dt-value">' + fmtDate(item.completed_at) + '</div></div>';
   html += '</div></div>';
-  if (item.params) {
+  if (item.options) {
     html += '<div class="modal-body-section"><h4>任务参数</h4>';
-    var paramsStr = typeof item.params === 'object' ? JSON.stringify(item.params, null, 2) : String(item.params);
+    var paramsStr = typeof item.options === 'object' ? JSON.stringify(item.options, null, 2) : String(item.options);
     html += '<pre style="background:#f8f9fa;padding:12px;border-radius:6px;font-size:12px;overflow-x:auto;max-height:200px;">' + esc(paramsStr) + '</pre></div>';
   }
   if (client) {
@@ -459,7 +442,7 @@ function renderDetail(data) {
   if (item.status === 'paused') {
     html += '<button class="action-btn resume" style="padding:6px 16px;font-size:13px;" onclick="resumeTaskFromDetail(\'' + item.id + '\')">恢复任务</button>';
   }
-  html += '<button class="action-btn log" style="padding:6px 16px;font-size:13px;" onclick="showLogsFromDetail(\'' + item.id + '\', \'' + esc(item.name) + '\')">查看日志</button>';
+  html += '<button class="action-btn log" style="padding:6px 16px;font-size:13px;" onclick="showLogsFromDetail(\'' + item.id + '\', \'' + esc(item.task_no || item.id) + '\')">查看日志</button>';
   html += '<button class="btn-cancel" onclick="closeDetailModal()" style="padding:6px 16px;font-size:13px;">关闭</button>';
   html += '</div>';
   document.getElementById('detailModalBody').innerHTML = html;
@@ -502,13 +485,17 @@ function renderLogs(data) {
     container.innerHTML = '<div style="text-align:center;color:#94a3b8;padding:20px;">暂无日志记录</div>';
     return;
   }
+  var levelMap = { 'completed': 'info', 'running': 'info', 'pending': 'info', 'failed': 'error', 'error': 'error', 'warn': 'warn', 'debug': 'debug' };
   var html = '';
   for (var i = 0; i < list.length; i++) {
     var log = list[i];
-    var level = (log.level || 'info').toLowerCase();
+    var rawLevel = log.level || log.status || 'info';
+    var level = (levelMap[String(rawLevel).toLowerCase()] || 'info');
     var time = fmtDate(log.created_at || log.time || log.timestamp);
+    var step = log.step_name ? '[' + esc(log.step_name) + '] ' : '';
+    var prog = (typeof log.progress === 'number' && log.progress > 0) ? ' (' + log.progress + '%)' : '';
     var msg = log.message || log.msg || '';
-    html += '<div class="log-entry"><span class="log-time">[' + time + ']</span><span class="log-level ' + level + '">' + esc((log.level || 'INFO').toUpperCase()) + '</span>' + esc(msg) + '</div>';
+    html += '<div class="log-entry"><span class="log-time">[' + time + ']</span><span class="log-level ' + level + '">' + esc(level.toUpperCase()) + '</span>' + step + esc(msg) + prog + '</div>';
   }
   container.innerHTML = html;
   container.scrollTop = container.scrollHeight;

@@ -32,6 +32,61 @@ class ClientController extends BaseController
         return $this->paginate($query);
     }
 
+    /**
+     * 客户端自注册（WinPE/Windows 客户端连接服务器时调用）
+     * 幂等：client_id 已存在则更新心跳信息并返回已有记录
+     */
+    public function register()
+    {
+        $clientCode = input('client_id') ?: Client::generateClientId();
+        $hostname = input('hostname', '');
+        $macAddress = input('mac_address', '');
+        $osVersion = input('os_version', '');
+        $clientVersion = input('client_version', '0.0.268311');
+        $clientType = input('client_type', 'winpe');
+
+        if (!in_array($clientType, ['winpe', 'windows_installer', 'windows'])) {
+            $clientType = 'winpe';
+        }
+
+        // 幂等：已存在则刷新心跳并返回
+        $existing = Client::where('client_id', $clientCode)->find();
+        if ($existing) {
+            $existing->last_heartbeat = date('Y-m-d H:i:s');
+            $existing->last_ip = request()->ip();
+            $existing->save();
+            return $this->success([
+                'id' => $existing->id,
+                'client_id' => $existing->client_id,
+                'status' => $existing->status,
+            ], '注册成功');
+        }
+
+        if (empty($hostname)) {
+            return $this->error('param_error', '主机名不能为空');
+        }
+
+        $client = Client::create([
+            'client_id' => $clientCode,
+            'name' => input('name') ?: $hostname,
+            'mac_address' => $macAddress ?: '00-00-00-00-00-00',
+            'hostname' => $hostname,
+            'os_version' => $osVersion ?: 'Unknown',
+            'client_version' => $clientVersion,
+            'client_type' => $clientType,
+            'first_ip' => request()->ip(),
+            'last_ip' => request()->ip(),
+            'last_heartbeat' => date('Y-m-d H:i:s'),
+            'status' => 'pending',
+        ]);
+
+        return $this->success([
+            'id' => $client->id,
+            'client_id' => $client->client_id,
+            'status' => $client->status,
+        ], '注册成功，等待审核');
+    }
+
     public function detail($id)
     {
         $client = Client::with(['group', 'lastTask'])->find($id);

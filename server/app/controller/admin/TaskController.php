@@ -3,6 +3,8 @@ namespace app\controller\admin;
 
 use app\model\Task;
 use app\model\TaskRecord;
+use app\model\Client;
+use app\model\Image;
 use think\facade\Db;
 
 class TaskController extends BaseController
@@ -11,7 +13,6 @@ class TaskController extends BaseController
     {
         $keyword = input('keyword');
         $status = input('status');
-        $type = input('type');
         $clientId = input('client_id');
         $startDate = input('start_date');
         $endDate = input('end_date');
@@ -19,13 +20,10 @@ class TaskController extends BaseController
         $query = Task::order('id', 'desc');
 
         if ($keyword) {
-            $query->where('name|description', 'like', '%' . $keyword . '%');
+            $query->where('task_no', 'like', '%' . $keyword . '%');
         }
         if ($status !== null && $status !== '') {
             $query->where('status', $status);
-        }
-        if ($type) {
-            $query->where('type', $type);
         }
         if ($clientId) {
             $query->where('client_id', $clientId);
@@ -51,24 +49,58 @@ class TaskController extends BaseController
 
     public function create()
     {
+        // 字段与 zs_tasks 表结构对齐（以 database/install.sql 设计为准）
         $data = [
-            'name' => input('name'),
-            'type' => input('type', 'install'),
-            'client_id' => input('client_id'),
+            'task_no' => $this->generateTaskNo(),
+            'client_id' => input('client_id') ?: null,
             'image_id' => input('image_id'),
-            'template_id' => input('template_id'),
-            'params' => input('params/a', []),
-            'scheduled_at' => input('scheduled_at'),
-            'priority' => input('priority', 0),
+            'unattend_template_id' => input('unattend_template_id') ?: input('template_id'),
+            'target_disk_index' => (int) input('target_disk_index', 0),
+            'target_partition' => input('target_partition', 'C:'),
+            'partition_scheme' => in_array(input('partition_scheme'), ['auto', 'custom', 'keep'])
+                ? input('partition_scheme') : 'auto',
+            'options' => $this->buildOptions(),
             'created_by' => $this->userId,
         ];
 
-        if (empty($data['name']) || empty($data['client_id'])) {
-            return $this->error('param_error', '任务名称和客户端不能为空');
+        if (empty($data['image_id'])) {
+            return $this->error('param_error', '镜像ID不能为空');
+        }
+        if (!Image::find($data['image_id'])) {
+            return $this->error('image_not_found', '镜像不存在');
+        }
+        if ($data['client_id'] && !Client::find($data['client_id'])) {
+            return $this->error('client_not_found', '客户端不存在');
         }
 
         $task = Task::create($data);
         return $this->success($task, '创建成功');
+    }
+
+    /**
+     * 生成任务编号：YYYYMMDDHHmmss + 6位随机数
+     */
+    private function generateTaskNo()
+    {
+        return date('YmdHis') . str_pad((string) mt_rand(0, 999999), 6, '0', STR_PAD_LEFT);
+    }
+
+    /**
+     * options 列存储 JSON：优先接收客户端 options，兼容旧 params/type 参数
+     */
+    private function buildOptions()
+    {
+        $options = input('options');
+        if ($options) {
+            return is_array($options) ? json_encode($options, JSON_UNESCAPED_UNICODE) : $options;
+        }
+        $params = input('params/a', []);
+        if ($params) {
+            return json_encode($params, JSON_UNESCAPED_UNICODE);
+        }
+        $type = input('type');
+        return $type ? json_encode(['type' => $type], JSON_UNESCAPED_UNICODE)
+            : json_encode(['type' => 'install'], JSON_UNESCAPED_UNICODE);
     }
 
     public function cancel($id)
@@ -162,27 +194,47 @@ class TaskController extends BaseController
         $progress = input('progress/d', 0);
         $message = input('message', '');
         $stepName = input('step_name', '');
+        // 客户端可上报状态：running/completed/failed
+        $reportStatus = input('status', '');
         if ($progress < 0 || $progress > 100) {
             return $this->error('param_error', '进度值必须在0-100之间');
         }
+
+        $recordStatus = 'running';
         $task->progress = $progress;
-        if ($progress >= 100) {
+
+        if ($reportStatus === 'failed') {
+            $task->status = 'failed';
+            $task->error_message = $message ?: '任务执行失败';
+            $task->completed_at = date('Y-m-d H:i:s');
+            $recordStatus = 'failed';
+        } elseif ($reportStatus === 'completed' || $progress >= 100) {
             $task->status = 'completed';
             $task->completed_at = date('Y-m-d H:i:s');
+            $task->progress = 100;
+            $recordStatus = 'completed';
         } elseif ($task->status === 'pending') {
             $task->status = 'running';
             $task->started_at = date('Y-m-d H:i:s');
         }
+
+        // 计算耗时（秒）
+        if ($task->started_at && in_array($task->status, ['completed', 'failed', 'cancelled'])) {
+            $task->duration = max(0, strtotime($task->completed_at ?: date('Y-m-d H:i:s')) - strtotime($task->started_at));
+        }
+
         $task->save();
+
         if ($message || $stepName) {
             TaskRecord::create([
                 'task_id' => $id,
                 'step_name' => $stepName ?: '进度更新',
                 'action' => 'progress',
-                'status' => 'running',
+                'status' => $recordStatus,
                 'progress' => $progress,
                 'message' => $message,
                 'started_at' => date('Y-m-d H:i:s'),
+                'completed_at' => in_array($recordStatus, ['completed', 'failed']) ? date('Y-m-d H:i:s') : null,
             ]);
         }
         return $this->success(['progress' => $progress, 'status' => $task->status], '进度已更新');
@@ -191,8 +243,9 @@ class TaskController extends BaseController
     public function template()
     {
         return $this->success([
-            'types' => ['install', 'uninstall', 'update', 'custom'],
-            'statuses' => ['pending', 'waiting', 'running', 'completed', 'failed', 'cancelled', 'paused'],
+            'types' => ['install', 'usb', 'repair', 'other'],
+            'statuses' => ['pending', 'running', 'paused', 'completed', 'failed', 'cancelled'],
+            'partition_schemes' => ['auto', 'custom', 'keep'],
             'priorities' => [0 => '低', 1 => '中', 2 => '高', 3 => '紧急'],
         ]);
     }
