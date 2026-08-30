@@ -5,6 +5,7 @@ using System.Linq;
 using System.Management;
 using System.Net.NetworkInformation;
 using System.Threading.Tasks;
+using System.Windows;
 using System.Windows.Input;
 using System.Windows.Threading;
 using Windows_Client.Models;
@@ -169,6 +170,12 @@ namespace Windows_Client.ViewModels
         private string _rebootText = "60 秒后自动重启";
         public string RebootText { get => _rebootText; set { _rebootText = value; OnPropertyChanged(); } }
 
+        // ===== Windows 端完成页：任务已创建（等待 WinPE 执行），非真正完成 =====
+        private string _completionTitle = "装机完成!";
+        public string CompletionTitle { get => _completionTitle; set { _completionTitle = value; OnPropertyChanged(); } }
+        private string _completionDesc = "";
+        public string CompletionDesc { get => _completionDesc; set { _completionDesc = value; OnPropertyChanged(); } }
+
         private string _failStep = "";
         public string FailStep { get => _failStep; set { _failStep = value; OnPropertyChanged(); } }
         private string _failReason = "";
@@ -247,7 +254,9 @@ namespace Windows_Client.ViewModels
 
         private void InitExecSteps()
         {
-            var names = new[] { "创建任务", "下载镜像", "校验镜像", "备份数据", "分区/格式化", "部署镜像", "注入驱动", "修复引导", "完成" };
+            // 与「全功能流程闭环清单」第 7.2 节对齐：Windows 端仅执行前 2 步（创建任务+完成），
+            // 其余实际装机步骤在 WinPE 中执行，此处以「等待」态展示
+            var names = new[] { "创建任务", "下载镜像", "校验镜像", "备份数据", "分区/格式化", "部署镜像", "注入驱动", "修复引导", "写入无人值守", "首次登录脚本", "完成" };
             for (int i = 0; i < names.Length; i++) ExecSteps.Add(new ExecStepItem { Name = names[i] });
         }
 
@@ -914,8 +923,9 @@ namespace Windows_Client.ViewModels
         }
         // ============ 执行（设计文档 §8）============
         /// <summary>
-        /// Windows 桌面端执行：创建装机任务并上报进度。
-        /// 分区/部署/驱动/引导等实际装机步骤交由 WinPE 客户端执行，避免在宿主机执行破坏性磁盘操作。
+        /// Windows 桌面端执行：仅创建装机任务（状态 waiting），进度停在 5%，
+        /// 分区/部署/驱动/引导/无人值守/首次登录脚本等实际装机步骤全部交由 WinPE 客户端执行，
+        /// 避免在宿主机执行破坏性磁盘操作。完成页引导用户重启进入 WinPE 自动续装。
         /// </summary>
         private async Task StartExecution()
         {
@@ -931,7 +941,7 @@ namespace Windows_Client.ViewModels
             _startTime = DateTime.Now;
             Logs.Clear();
             foreach (var s in ExecSteps) { s.Status = "waiting"; s.Detail = ""; s.Progress = 0; }
-            AddLog("开始创建装机任务（实际装机将在 WinPE 中执行）");
+            AddLog("开始创建装机任务（实际装机将在 WinPE 中自动执行）");
 
             try
             {
@@ -942,14 +952,8 @@ namespace Windows_Client.ViewModels
                     targetDiskIndex: SelectedDisk.Index,
                     targetPartition: "C:",
                     partitionScheme: PartitionScheme == 0 ? "auto" : "keep",
-                    optionsJson: System.Text.Json.JsonSerializer.Serialize(new
-                    {
-                        auto_partition = Options.First(o => o.Key == "auto_partition").IsOn,
-                        auto_repair_boot = Options.First(o => o.Key == "boot_fix").IsOn,
-                        auto_inject_drivers = Options.First(o => o.Key == "driver_inject").IsOn,
-                        unattended = Options.First(o => o.Key == "unattended").IsOn,
-                        image_index = 1
-                    }));
+                    status: "waiting",
+                    optionsJson: BuildOptionsJson());
                 if (!taskResult.IsSuccess || taskResult.Data == null)
                 {
                     FailAt("创建任务", taskResult.Message);
@@ -957,12 +961,13 @@ namespace Windows_Client.ViewModels
                 }
                 _taskId = taskResult.Data.Id;
                 SetExec(0, "completed", "任务编号 " + taskResult.Data.TaskNo);
-                AddLog("任务已创建：" + taskResult.Data.TaskNo);
-                await ReportProgress(5, "任务已创建", "创建任务", "running");
+                AddLog("任务已创建：" + taskResult.Data.TaskNo + "（状态：等待 WinPE 执行）");
+                // 关键闭环：Windows 端只下单，进度上报 waiting，绝不上报 completed
+                await ReportProgress(5, "任务已创建，等待 WinPE 执行", "创建任务", "waiting");
                 ProgressValue = 5;
 
-                // 实际装机步骤（下载/校验/备份/分区/部署/驱动/引导）在 WinPE 中执行，此处标记待办
-                var peOnly = new (int idx, string name, int prog)[]
+                // 实际装机步骤全部在 WinPE 中执行，此处以「等待」态展示（不跳过、不完成）
+                var peSteps = new (int idx, string name, int prog)[]
                 {
                     (1, "下载镜像", 20),
                     (2, "校验镜像", 30),
@@ -971,22 +976,24 @@ namespace Windows_Client.ViewModels
                     (5, "部署镜像", 80),
                     (6, "注入驱动", 90),
                     (7, "修复引导", 95),
+                    (8, "写入无人值守", 97),
+                    (9, "首次登录脚本", 99),
                 };
-                foreach (var st in peOnly)
+                foreach (var st in peSteps)
                 {
-                    SetExec(st.idx, "skipped", "将在 WinPE 中执行");
-                    await Task.Delay(120);
+                    SetExec(st.idx, "waiting", "将在 WinPE 中执行");
+                    await Task.Delay(60);
                 }
 
-                ProgressValue = 100;
-                SetExec(8, "completed", "任务已创建");
-                AddLog("装机任务创建完成，请在 WinPE 客户端中继续执行装机");
-                await ReportProgress(100, "任务已创建，请在 WinPE 中继续执行装机", "完成", "completed");
+                // 完成页：引导重启进 PE，而非报「装机完成」
+                SetExec(10, "completed", "任务已创建");
+                CompletionTitle = "任务已创建";
+                CompletionDesc = "请重启电脑并进入 WinPE 环境，ZS 装机助手将自动检测并继续完成装机，全程无人值守。";
+                RebootText = "进入 WinPE 后，客户端会自动识别本任务并全自动完成装机";
                 IsFinished = true;
                 IsFinishedOk = true;
-                StatusText = "装机任务已创建！请在 WinPE 中继续执行";
+                StatusText = "任务已创建！请重启进入 WinPE 自动继续装机";
                 ElapsedText = "耗时: " + FormatDuration(DateTime.Now - _startTime);
-                RebootText = "实际装机将在 WinPE 环境继续执行";
             }
             catch (OperationCanceledException)
             {
@@ -1000,6 +1007,34 @@ namespace Windows_Client.ViewModels
             {
                 IsExecuting = false;
             }
+        }
+
+        /// <summary>
+        /// 构建完整 options 契约（对齐「全功能流程闭环清单」第 7.2 节），
+        /// 供 WinPE 端续装时完整读取镜像/分区/无人值守/软件/优化等全部选项。
+        /// </summary>
+        private string BuildOptionsJson()
+        {
+            string CleanValue(string? v)
+                => string.IsNullOrEmpty(v) || v == "none" ? "" : v;
+
+            return System.Text.Json.JsonSerializer.Serialize(new
+            {
+                type = "install",
+                auto_partition = Options.First(o => o.Key == "auto_partition").IsOn,
+                auto_repair_boot = Options.First(o => o.Key == "boot_fix").IsOn,
+                auto_inject_drivers = Options.First(o => o.Key == "driver_inject").IsOn,
+                unattended = Options.First(o => o.Key == "unattended").IsOn,
+                install_software = Options.First(o => o.Key == "install_software").IsOn,
+                optimize = Options.First(o => o.Key == "optimize").IsOn,
+                backup_data = Options.First(o => o.Key == "backup_data").IsOn,
+                image_index = 1,
+                unattend_template_id = CleanValue(SelectedUnattendTemplate?.Value) is { Length: > 0 } ut ? ut : null,
+                software_template_id = CleanValue(SelectedSoftwareTemplate?.Value) is { Length: > 0 } st ? st : null,
+                driver_package = SelectedDriverPackage?.Value ?? "auto",
+                optimize_plan = SelectedOptimizePlan?.Value ?? "performance",
+                backup_location = SelectedBackupLocation?.Value ?? "auto"
+            });
         }
         private static string FormatDuration(TimeSpan ts)
         {

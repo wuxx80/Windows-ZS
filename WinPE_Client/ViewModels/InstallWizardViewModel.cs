@@ -25,6 +25,7 @@ namespace WinPE_Client.ViewModels
         private string _clientId = "";
         private int _serverClientId;
         private int _taskId;
+        private bool _isContinuation;
         private bool _detectionRan;
         private bool _isPaused;
         private DateTime _startTime;
@@ -34,11 +35,13 @@ namespace WinPE_Client.ViewModels
 
         public event Action? RequestClose;
 
-        public InstallWizardViewModel(ApiService api, DeviceService device, string serverUrl)
+        public InstallWizardViewModel(ApiService api, DeviceService device, string serverUrl, int serverClientId = 0, string clientId = "")
         {
             _api = api;
             _device = device;
             ServerUrl = serverUrl;
+            _serverClientId = serverClientId;
+            _clientId = clientId;
 
             _deploy.ProgressChanged += OnDeployProgress;
             _diskPart.ProgressChanged += OnDeployProgress;
@@ -247,7 +250,8 @@ namespace WinPE_Client.ViewModels
 
         private void InitExecSteps()
         {
-            var names = new[] { "创建任务", "下载镜像", "校验镜像", "备份数据", "分区/格式化", "部署镜像", "注入驱动", "修复引导", "完成" };
+            // 与「全功能流程闭环清单」第 7.2 节对齐：双端一致 11 步（含无人值守/首次登录脚本）
+            var names = new[] { "创建任务", "下载镜像", "校验镜像", "备份数据", "分区/格式化", "部署镜像", "注入驱动", "修复引导", "写入无人值守", "首次登录脚本", "完成" };
             for (int i = 0; i < names.Length; i++) ExecSteps.Add(new ExecStepItem { Name = names[i] });
         }
 
@@ -301,6 +305,141 @@ namespace WinPE_Client.ViewModels
             BackupLocations.Add(new TemplateItem { Name = "D:\\Backup", Value = "D:\\Backup" });
             BackupLocations.Add(new TemplateItem { Name = "网络位置", Value = "network" });
             SelectedBackupLocation = BackupLocations[0];
+        }
+
+        // ============ 续装闭环（Windows 下单 → PE 认领执行）============
+        /// <summary>
+        /// 从本机 waiting 任务预填向导（WinPE 首页点「立即继续」时调用）。
+        /// 复用服务端任务订单：镜像/磁盘/分区方案/全部安装选项，无需重新配置即可直接执行。
+        /// </summary>
+        public async Task LoadContinuationTask(TaskInfo task)
+        {
+            _isContinuation = true;
+            _taskId = task.Id;
+            StatusText = "已载入待执行任务，请确认配置后开始装机";
+
+            if (Images.Count == 0) await RefreshImages(1);
+            if (Disks.Count == 0) await RefreshDisks();
+            await LoadTemplatesFromServer();
+
+            // 预填镜像（按服务端 image_id）
+            if (task.ImageId > 0)
+                SelectedImage = Images.FirstOrDefault(i => i.Id == task.ImageId);
+
+            // 预填目标磁盘（按服务端磁盘序号）
+            if (task.TargetDiskIndex >= 0)
+                SelectedDisk = Disks.FirstOrDefault(d => d.Index == task.TargetDiskIndex);
+
+            // 预填分区方案
+            PartitionScheme = task.PartitionScheme switch
+            {
+                "custom" => 2,
+                "keep" => 1,
+                _ => 0
+            };
+
+            // 预填全部安装选项（对齐 options 契约）
+            ApplyOptionsFromJson(task.Options);
+
+            // 无人值守模板（服务端以任务自身 unattend_template_id 为准，此处仅回显）
+            if (task.UnattendTemplateId > 0)
+            {
+                var t = UnattendTemplates.FirstOrDefault(x => x.Value == task.UnattendTemplateId.ToString());
+                if (t != null) SelectedUnattendTemplate = t;
+            }
+
+            // 直接进入确认页，方便用户快速核对后开始执行
+            CurrentStep = 4;
+            BuildSummary();
+            BuildConfirm();
+        }
+
+        /// <summary>按 options JSON 回填安装选项开关与扩展配置（续装预填）</summary>
+        private void ApplyOptionsFromJson(string json)
+        {
+            if (string.IsNullOrWhiteSpace(json)) return;
+            try
+            {
+                using var doc = System.Text.Json.JsonDocument.Parse(json);
+                var root = doc.RootElement;
+                SetOptionBool("auto_partition", root);
+                SetOptionBool("auto_repair_boot", root, "boot_fix");
+                SetOptionBool("auto_inject_drivers", root, "driver_inject");
+                SetOptionBool("unattended", root);
+                SetOptionBool("install_software", root);
+                SetOptionBool("optimize", root);
+                SetOptionBool("backup_data", root);
+
+                var ut = GetProp(root, "unattend_template_id");
+                if (!string.IsNullOrEmpty(ut))
+                {
+                    var t = UnattendTemplates.FirstOrDefault(x => x.Value == ut);
+                    if (t != null) SelectedUnattendTemplate = t;
+                }
+                var st = GetProp(root, "software_template_id");
+                if (!string.IsNullOrEmpty(st))
+                {
+                    var t = SoftwareTemplates.FirstOrDefault(x => x.Value == st);
+                    if (t != null) SelectedSoftwareTemplate = t;
+                }
+                var dp = GetProp(root, "driver_package");
+                if (!string.IsNullOrEmpty(dp))
+                {
+                    var t = DriverPackages.FirstOrDefault(x => x.Value == dp);
+                    if (t != null) SelectedDriverPackage = t;
+                }
+                var op = GetProp(root, "optimize_plan");
+                if (!string.IsNullOrEmpty(op))
+                {
+                    var t = OptimizePlans.FirstOrDefault(x => x.Value == op);
+                    if (t != null) SelectedOptimizePlan = t;
+                }
+                UpdateOptionPanels();
+            }
+            catch { /* options 解析失败不阻塞续装 */ }
+        }
+
+        private void SetOptionBool(string key, System.Text.Json.JsonElement root, string? optionKey = null)
+        {
+            var opt = Options.FirstOrDefault(o => o.Key == (optionKey ?? key));
+            if (opt == null) return;
+            var v = GetProp(root, key);
+            if (bool.TryParse(v, out var b)) opt.IsOn = b;
+        }
+
+        private static string GetProp(System.Text.Json.JsonElement el, string key)
+        {
+            if (el.ValueKind == System.Text.Json.JsonValueKind.Object && el.TryGetProperty(key, out var v))
+                return v.ValueKind == System.Text.Json.JsonValueKind.String ? v.GetString() ?? "" : v.ToString();
+            return "";
+        }
+
+        /// <summary>
+        /// 构建完整 options 契约（对齐「全功能流程闭环清单」第 7.2 节），
+        /// 服务端据此生成无人值守应答与首次登录脚本（装软件/优化）。
+        /// </summary>
+        private string BuildOptionsJson()
+        {
+            string CleanValue(string? v)
+                => string.IsNullOrEmpty(v) || v == "none" ? "" : v;
+
+            return System.Text.Json.JsonSerializer.Serialize(new
+            {
+                type = "install",
+                auto_partition = Options.First(o => o.Key == "auto_partition").IsOn,
+                auto_repair_boot = Options.First(o => o.Key == "boot_fix").IsOn,
+                auto_inject_drivers = Options.First(o => o.Key == "driver_inject").IsOn,
+                unattended = Options.First(o => o.Key == "unattended").IsOn,
+                install_software = Options.First(o => o.Key == "install_software").IsOn,
+                optimize = Options.First(o => o.Key == "optimize").IsOn,
+                backup_data = Options.First(o => o.Key == "backup_data").IsOn,
+                image_index = 1,
+                unattend_template_id = CleanValue(SelectedUnattendTemplate?.Value) is { Length: > 0 } ut ? ut : null,
+                software_template_id = CleanValue(SelectedSoftwareTemplate?.Value) is { Length: > 0 } st ? st : null,
+                driver_package = SelectedDriverPackage?.Value ?? "auto",
+                optimize_plan = SelectedOptimizePlan?.Value ?? "performance",
+                backup_location = SelectedBackupLocation?.Value ?? "auto"
+            });
         }
 
         // ============ 步骤导航 ============
@@ -761,13 +900,18 @@ namespace WinPE_Client.ViewModels
 
         private async Task LoadTemplatesFromServer()
         {
-            // 无人值守模板
+            // 无人值守模板（Value 存服务端模板ID，供下单/续装时回传，保证无人值守模板闭环）
             var u = await _api.GetUnattendTemplatesAsync(1, 100);
             if (u.IsSuccess && u.Data != null && u.Data.List.Count > 0)
             {
                 UnattendTemplates.Clear();
                 UnattendTemplates.Add(new TemplateItem { Name = "无无人值守", Value = "none" });
-                foreach (var t in u.Data.List) UnattendTemplates.Add(new TemplateItem { Name = (t as IDictionary<string, object>)?["name"]?.ToString() ?? "模板", Value = "" });
+                foreach (var t in u.Data.List)
+                {
+                    var name = JGet(t, "name");
+                    var id = JGet(t, "id");
+                    UnattendTemplates.Add(new TemplateItem { Name = string.IsNullOrEmpty(name) ? "模板" : name, Value = id });
+                }
             }
             // 软件模板
             var s = await _api.GetSoftwareTemplatesAsync(1, 100);
@@ -775,7 +919,12 @@ namespace WinPE_Client.ViewModels
             {
                 SoftwareTemplates.Clear();
                 SoftwareTemplates.Add(new TemplateItem { Name = "不装软件", Value = "none" });
-                foreach (var t in s.Data.List) SoftwareTemplates.Add(new TemplateItem { Name = (t as IDictionary<string, object>)?["name"]?.ToString() ?? "模板", Value = "" });
+                foreach (var t in s.Data.List)
+                {
+                    var name = JGet(t, "name");
+                    var id = JGet(t, "id");
+                    SoftwareTemplates.Add(new TemplateItem { Name = string.IsNullOrEmpty(name) ? "模板" : name, Value = id });
+                }
             }
             // 驱动包
             var d = await _api.GetDriversAsync(1, 100);
@@ -783,8 +932,23 @@ namespace WinPE_Client.ViewModels
             {
                 DriverPackages.Clear();
                 DriverPackages.Add(new TemplateItem { Name = "自动检测", Value = "auto" });
-                foreach (var t in d.Data.List) DriverPackages.Add(new TemplateItem { Name = (t as IDictionary<string, object>)?["name"]?.ToString() ?? "驱动包", Value = "" });
+                foreach (var t in d.Data.List)
+                {
+                    var name = JGet(t, "name");
+                    var id = JGet(t, "id");
+                    DriverPackages.Add(new TemplateItem { Name = string.IsNullOrEmpty(name) ? "驱动包" : name, Value = id });
+                }
             }
+        }
+
+        /// <summary>从反序列化后的 object（实际为 JsonElement）安全读取字段值（修复模板 ID/名称取不到的问题）</summary>
+        private static string JGet(object? o, string key)
+        {
+            if (o is System.Text.Json.JsonElement je && je.TryGetProperty(key, out var v))
+                return v.ValueKind == System.Text.Json.JsonValueKind.String ? (v.GetString() ?? "") : v.ToString();
+            if (o is IDictionary<string, object> dict && dict.TryGetValue(key, out var val))
+                return val?.ToString() ?? "";
+            return "";
         }
 
         // ============ 扩展配置面板可见性（设计文档 §6 扩展配置）============
@@ -932,30 +1096,35 @@ namespace WinPE_Client.ViewModels
             try
             {
                 SetExec(0, "running", "正在创建任务...");
-                var taskResult = await _api.CreateTaskAsync(
-                    imageId: SelectedImage.Id,
-                    clientId: _serverClientId > 0 ? _serverClientId : (int?)null,
-                    targetDiskIndex: SelectedDisk.Index,
-                    targetPartition: "C:",
-                    partitionScheme: PartitionScheme == 0 ? "auto" : "keep",
-                    optionsJson: System.Text.Json.JsonSerializer.Serialize(new
-                    {
-                        auto_partition = Options.First(o => o.Key == "auto_partition").IsOn,
-                        auto_repair_boot = Options.First(o => o.Key == "boot_fix").IsOn,
-                        auto_inject_drivers = Options.First(o => o.Key == "driver_inject").IsOn,
-                        unattended = Options.First(o => o.Key == "unattended").IsOn,
-                        image_index = 1
-                    }));
-                if (!taskResult.IsSuccess || taskResult.Data == null)
+                if (_isContinuation && _taskId > 0)
                 {
-                    FailAt("创建任务", taskResult.Message);
-                    return;
+                    // 续装闭环：复用已有 waiting 任务，上报 running 触发服务端 waiting→running 认领
+                    AddLog("续装任务 " + _taskId + "，正在认领...");
+                    await ReportProgress(5, "续装开始，任务已认领", "创建任务", "running");
+                    SetExec(0, "completed", "任务已认领（等待→执行中）");
+                    AddLog("任务认领成功：等待→执行中");
+                    ProgressValue = 5;
                 }
-                _taskId = taskResult.Data.Id;
-                SetExec(0, "completed", "任务编号 " + taskResult.Data.TaskNo);
-                AddLog("任务已创建：" + taskResult.Data.TaskNo);
-                await ReportProgress(5, "任务已创建", "创建任务", "running");
-                ProgressValue = 5;
+                else
+                {
+                    var taskResult = await _api.CreateTaskAsync(
+                        imageId: SelectedImage.Id,
+                        clientId: _serverClientId > 0 ? _serverClientId : (int?)null,
+                        targetDiskIndex: SelectedDisk.Index,
+                        targetPartition: "C:",
+                        partitionScheme: PartitionScheme == 0 ? "auto" : "keep",
+                        optionsJson: BuildOptionsJson());
+                    if (!taskResult.IsSuccess || taskResult.Data == null)
+                    {
+                        FailAt("创建任务", taskResult.Message);
+                        return;
+                    }
+                    _taskId = taskResult.Data.Id;
+                    SetExec(0, "completed", "任务编号 " + taskResult.Data.TaskNo);
+                    AddLog("任务已创建：" + taskResult.Data.TaskNo);
+                    await ReportProgress(5, "任务已创建", "创建任务", "running");
+                    ProgressValue = 5;
+                }
 
                 // 下载镜像（模拟缓存检测，设计文档 §8.1）
                 bool cached = File.Exists(Path.Combine(_localCacheDir, SelectedImage.FileName));
@@ -1035,8 +1204,73 @@ namespace WinPE_Client.ViewModels
                 }
                 else SetExec(7, "skipped", "未启用引导修复");
 
+                // ===== 步骤 8：写入无人值守应答（部署后应用，供新系统跳过 OOBE/自动应答）=====
+                bool unattended = Options.First(o => o.Key == "unattended").IsOn;
+                if (unattended)
+                {
+                    SetExec(8, "running", "正在获取无人值守应答...");
+                    await ReportProgress(96, "正在写入无人值守应答", "写入无人值守", "running");
+                    await WaitIfPausedOrCanceled();
+                    try
+                    {
+                        var ur = await _api.GetTaskUnattendAsync(_taskId);
+                        if (ur.IsSuccess && ur.Data != null && !string.IsNullOrEmpty(ur.Data.Xml))
+                        {
+                            var panther = @"C:\Windows\Panther";
+                            Directory.CreateDirectory(panther);
+                            File.WriteAllText(Path.Combine(panther, "unattend.xml"), ur.Data.Xml, new System.Text.UTF8Encoding(false));
+                            SetExec(8, "completed", "unattend.xml 已写入");
+                            AddLog("无人值守应答已写入 C:\\Windows\\Panther\\unattend.xml");
+                        }
+                        else
+                        {
+                            SetExec(8, "skipped", "服务端无应答文件");
+                            AddLog("无人值守应答为空，已跳过");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        FailAt("写入无人值守", ex.Message);
+                        return;
+                    }
+                }
+                else SetExec(8, "skipped", "未启用无人值守");
+
+                // ===== 步骤 9：生成首次登录脚本（装软件/系统优化，首次进入桌面自动执行）=====
+                bool installSw = Options.First(o => o.Key == "install_software").IsOn;
+                bool optimize = Options.First(o => o.Key == "optimize").IsOn;
+                if (unattended && (installSw || optimize))
+                {
+                    SetExec(9, "running", "正在生成首次登录脚本...");
+                    await ReportProgress(98, "正在生成首次登录脚本", "首次登录脚本", "running");
+                    await WaitIfPausedOrCanceled();
+                    try
+                    {
+                        var fr = await _api.GetTaskFirstLogonAsync(_taskId);
+                        if (fr.IsSuccess && fr.Data != null && !string.IsNullOrEmpty(fr.Data.Cmd))
+                        {
+                            var setup = @"C:\Windows\Setup\Scripts";
+                            Directory.CreateDirectory(setup);
+                            File.WriteAllText(Path.Combine(setup, "SetupComplete.cmd"), fr.Data.Cmd, new System.Text.UTF8Encoding(false));
+                            SetExec(9, "completed", "SetupComplete.cmd 已生成");
+                            AddLog("首次登录脚本已写入 C:\\Windows\\Setup\\Scripts\\SetupComplete.cmd");
+                        }
+                        else
+                        {
+                            SetExec(9, "skipped", "服务端无脚本");
+                            AddLog("首次登录脚本为空，已跳过");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        FailAt("首次登录脚本", ex.Message);
+                        return;
+                    }
+                }
+                else SetExec(9, "skipped", "未启用装软件/优化");
+
                 ProgressValue = 100;
-                SetExec(8, "completed", "装机完成");
+                SetExec(10, "completed", "装机完成");
                 AddLog("装机完成！");
                 await ReportProgress(100, "装机完成", "完成", "completed");
                 IsFinished = true;

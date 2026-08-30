@@ -21,8 +21,16 @@ class IndexController extends BaseController
             ->count();
 
         $totalImages = Image::count();
-        $onlineClients = Client::where("status", "online")->count();
+        // 在线判定：已审核且 last_heartbeat 在 90 秒内（客户端状态字段恒为 approved/pending/blocked，在线是动态判定）
+        $onlineClients = Client::where("status", "approved")
+            ->where("last_heartbeat", ">=", date("Y-m-d H:i:s", time() - 90))
+            ->count();
         $pendingClients = Client::where("status", "pending")->count();
+
+        // 任务实时统计（后台更智能：一眼看到等待/执行中/失败的任务量）
+        $waitingTasks = Task::where("status", "waiting")->count();
+        $runningTasks = Task::where("status", "running")->count();
+        $failedTasks = Task::where("status", "failed")->count();
 
         $recentTasks = Task::order("created_at", "desc")
             ->limit(10)
@@ -60,6 +68,9 @@ class IndexController extends BaseController
             "total_images" => $totalImages,
             "online_clients" => $onlineClients,
             "pending_clients" => $pendingClients,
+            "waiting_tasks" => $waitingTasks,
+            "running_tasks" => $runningTasks,
+            "failed_tasks" => $failedTasks,
             "recent_tasks" => $recentTasks,
             "storage_usage" => [
                 "total_size" => (int) ($storageUsage["total_size"] ?? 0),

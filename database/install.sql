@@ -1,4 +1,4 @@
-﻿-- ============================================================
+-- ============================================================
 -- ZS 装机助手 - 数据库安装脚本
 -- 版本: 1.0.0
 -- 引擎: InnoDB
@@ -75,6 +75,8 @@ CREATE TABLE `zs_images` (
   `source_id` int unsigned DEFAULT NULL COMMENT '来源源ID',
   `source_type` enum('upload','download','import','sync') NOT NULL DEFAULT 'upload' COMMENT '来源类型',
   `download_count` int unsigned NOT NULL DEFAULT '0' COMMENT '下载次数',
+  `approved_at` datetime DEFAULT NULL COMMENT '审批通过时间',
+  `approved_by` int unsigned DEFAULT NULL COMMENT '审批人(管理员用户ID)',
   `install_count` int unsigned NOT NULL DEFAULT '0' COMMENT '安装次数',
   `status` tinyint(1) NOT NULL DEFAULT '1' COMMENT '状态(1=启用,0=禁用)',
   `version` int unsigned NOT NULL DEFAULT '1' COMMENT '当前版本号',
@@ -254,6 +256,8 @@ CREATE TABLE `zs_clients` (
   `first_ip` varchar(50) NOT NULL COMMENT '首次连接IP',
   `last_ip` varchar(50) NOT NULL COMMENT '最后连接IP',
   `last_heartbeat` datetime DEFAULT NULL COMMENT '最后心跳时间',
+  `approved_at` datetime DEFAULT NULL COMMENT '审批通过时间',
+  `approved_by` int unsigned DEFAULT NULL COMMENT '审批人(管理员用户ID)',
   `install_count` int unsigned NOT NULL DEFAULT '0' COMMENT '安装次数',
   `total_online_time` int unsigned NOT NULL DEFAULT '0' COMMENT '总在线时长(秒)',
   `remark` varchar(500) DEFAULT NULL COMMENT '备注',
@@ -320,7 +324,7 @@ CREATE TABLE `zs_tasks` (
   `target_partition` varchar(10) NOT NULL COMMENT '目标分区',
   `partition_scheme` enum('auto','custom','keep') NOT NULL DEFAULT 'auto' COMMENT '分区方案(auto=自动,custom=自定义,keep=保留)',
   `options` longtext COMMENT '其他选项(JSON)',
-  `status` enum('pending','running','paused','completed','failed','cancelled') NOT NULL DEFAULT 'pending' COMMENT '任务状态',
+  `status` enum('pending','waiting','running','paused','completed','failed','cancelled') NOT NULL DEFAULT 'pending' COMMENT '任务状态(pending=待认领,waiting=等待PE执行,running=执行中,paused=已暂停,completed=已完成,failed=失败,cancelled=已取消',
   `progress` tinyint unsigned NOT NULL DEFAULT '0' COMMENT '进度(0-100)',
   `current_step` varchar(50) DEFAULT NULL COMMENT '当前步骤',
   `started_at` datetime DEFAULT NULL COMMENT '开始时间',
@@ -328,6 +332,8 @@ CREATE TABLE `zs_tasks` (
   `duration` int unsigned NOT NULL DEFAULT '0' COMMENT '耗时(秒)',
   `error_message` text COMMENT '错误信息',
   `retry_count` int unsigned NOT NULL DEFAULT '0' COMMENT '重试次数',
+  `cancelled_at` datetime DEFAULT NULL COMMENT '取消时间',
+  `cancelled_by` varchar(50) DEFAULT NULL COMMENT '取消人(用户ID或客户端ID)',
   `created_by` varchar(50) DEFAULT NULL COMMENT '创建人',
   `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',

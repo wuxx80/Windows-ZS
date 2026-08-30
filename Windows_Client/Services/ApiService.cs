@@ -149,11 +149,11 @@ namespace Windows_Client.Services
             return await PostAsync<ClientInfo>("/api/v1/clients/register", data);
         }
 
-        /// <summary>创建装机任务</summary>
+        /// <summary>创建装机任务（Windows 端下单传 waiting，WinPE 端直接装机传 pending）</summary>
         public async Task<ApiResponse<TaskInfo>> CreateTaskAsync(
             int imageId, int? clientId = null, int targetDiskIndex = 0,
             string targetPartition = "C:", string partitionScheme = "auto",
-            string? optionsJson = null)
+            string? optionsJson = null, string status = "waiting")
         {
             var data = new Dictionary<string, object?>
             {
@@ -162,11 +162,38 @@ namespace Windows_Client.Services
                 ["target_disk_index"] = targetDiskIndex,
                 ["target_partition"] = targetPartition,
                 ["partition_scheme"] = partitionScheme,
+                ["status"] = status,
             };
             if (!string.IsNullOrEmpty(optionsJson))
                 data["options"] = optionsJson;
 
             return await PostAsync<TaskInfo>("/api/v1/tasks", data);
+        }
+
+        /// <summary>客户端心跳：刷新在线状态（Windows 端每 30 秒；后台据此判定在线/离线）</summary>
+        public async Task<ApiResponse<ClientInfo>> HeartbeatAsync(
+            string clientId, string macAddress, string hostname, string osVersion, string clientType = "windows")
+        {
+            var data = new Dictionary<string, object?>
+            {
+                ["client_id"] = clientId,
+                ["mac_address"] = macAddress,
+                ["hostname"] = hostname,
+                ["os_version"] = osVersion,
+                ["client_version"] = "0.0.268311",
+                ["client_type"] = clientType,
+            };
+            return await PostAsync<ClientInfo>("/api/v1/clients/heartbeat", data);
+        }
+
+        /// <summary>查询本机装机任务列表（Windows 端首页「最近任务」卡片）</summary>
+        public async Task<ApiResponse<PaginatedData<TaskInfo>>> GetMyTasksAsync(
+            int clientId, string? status = null, int page = 1, int limit = 20)
+        {
+            var ep = "/api/v1/tasks?client_id=" + clientId + "&page=" + page + "&limit=" + limit;
+            if (!string.IsNullOrEmpty(status))
+                ep += "&status=" + Uri.EscapeDataString(status);
+            return await GetAsync<PaginatedData<TaskInfo>>(ep);
         }
 
         /// <summary>上报任务进度（支持状态闭环：running/completed/failed）</summary>

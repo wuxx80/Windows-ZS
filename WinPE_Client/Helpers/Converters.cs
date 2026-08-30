@@ -70,6 +70,18 @@ namespace WinPE_Client.Helpers
         }
     }
 
+    /// <summary>字符串非空时可见（用于客户端审核状态等提示条显隐）</summary>
+    public class StringNotEmptyToVisibilityConverter : IValueConverter
+    {
+        public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+            => value is string s && !string.IsNullOrWhiteSpace(s) ? Visibility.Visible : Visibility.Collapsed;
+
+        public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        {
+            throw new NotImplementedException();
+        }
+    }
+
     /// <summary>分区方案单选：int == 0（自动分区）</summary>
     public class IndexZeroToBoolConverter : IValueConverter
     {

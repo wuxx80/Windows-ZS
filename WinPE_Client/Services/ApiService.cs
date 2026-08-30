@@ -134,6 +134,25 @@ namespace WinPE_Client.Services
             return await PostAsync<ClientInfo>("/api/v1/clients/register", data);
         }
 
+        /// <summary>
+        /// 客户端心跳（30 秒一次）：刷新在线状态，返回本机待执行任务数。
+        /// 离线判定：服务端 last_heartbeat 超过 90 秒即视为离线。
+        /// </summary>
+        public async Task<ApiResponse<HeartbeatResult>> HeartbeatAsync(
+            string clientId, string macAddress, string hostname, string osVersion, string clientType = "winpe")
+        {
+            var data = new Dictionary<string, object?>
+            {
+                ["client_id"] = clientId,
+                ["mac_address"] = macAddress,
+                ["hostname"] = hostname,
+                ["os_version"] = osVersion,
+                ["client_version"] = "0.0.268311",
+                ["client_type"] = clientType,
+            };
+            return await PostAsync<HeartbeatResult>("/api/v1/clients/heartbeat", data);
+        }
+
         /// <summary>创建装机任务</summary>
         public async Task<ApiResponse<TaskInfo>> CreateTaskAsync(
             int imageId, int? clientId = null, int targetDiskIndex = 0,
@@ -211,6 +230,31 @@ namespace WinPE_Client.Services
                 step_name = stepName,
                 status
             });
+        }
+
+        /// <summary>获取本机待执行任务（WinPE 续装：status=waiting）</summary>
+        public async Task<ApiResponse<PaginatedData<TaskInfo>>> GetMyTasksAsync(int clientId, string status = "waiting", int page = 1, int limit = 20)
+        {
+            var endpoint = "/api/v1/tasks?client_id=" + clientId + "&status=" + Uri.EscapeDataString(status) + "&page=" + page + "&limit=" + limit;
+            return await GetAsync<PaginatedData<TaskInfo>>(endpoint);
+        }
+
+        /// <summary>获取任务无人值守应答 XML（部署后写入 Panther\unattend.xml）</summary>
+        public async Task<ApiResponse<UnattendResult>> GetTaskUnattendAsync(int taskId)
+        {
+            return await GetAsync<UnattendResult>("/api/v1/tasks/" + taskId + "/unattend");
+        }
+
+        /// <summary>获取任务首次登录脚本（服务端生成，部署后写入 SetupComplete.cmd）</summary>
+        public async Task<ApiResponse<FirstLogonResult>> GetTaskFirstLogonAsync(int taskId)
+        {
+            return await GetAsync<FirstLogonResult>("/api/v1/tasks/" + taskId + "/firstLogon");
+        }
+
+        /// <summary>获取软件模板详情（含软件清单，供首次登录脚本生成）</summary>
+        public async Task<ApiResponse<object>> GetSoftwareTemplateAsync(int templateId)
+        {
+            return await GetAsync<object>("/api/v1/softwareTemplates/" + templateId);
         }
     }
 }

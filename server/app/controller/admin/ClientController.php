@@ -29,7 +29,33 @@ class ClientController extends BaseController
             $query->where('os', 'like', '%' . $os . '%');
         }
 
-        return $this->paginate($query);
+        $page = input("page", 1);
+        $limit = input("limit", input("pageSize", 20));
+        $list = $query->paginate($limit, false, ["page" => $page]);
+
+        // 离线判定：last_heartbeat 超过 90 秒（3 次心跳间隔）视为离线（仅展示，不落库）
+        $now = time();
+        $items = $list->items();
+        foreach ($items as $item) {
+            $item->display_status = $item->status;
+            $item->online = false;
+            if ($item->last_heartbeat) {
+                $diff = $now - strtotime($item->last_heartbeat);
+                $item->online = $diff <= 90;
+            }
+            // 已批准但心跳超时 → 展示为 offline
+            if ($item->status === 'approved' && !$item->online) {
+                $item->display_status = 'offline';
+            }
+        }
+
+        return $this->success([
+            "list" => $items,
+            "total" => $list->total(),
+            "page" => (int) $page,
+            "limit" => (int) $limit,
+            "pages" => $list->lastPage(),
+        ]);
     }
 
     /**
@@ -98,6 +124,55 @@ class ClientController extends BaseController
             'client_id' => $client->client_id,
             'status' => $client->status,
         ], '注册成功，等待审核');
+    }
+
+    /**
+     * 客户端心跳（客户端每 30s 调用一次）
+     * 入口: 客户端定时 POST /api/v1/clients/heartbeat
+     * 执行: ① 按 client_id → mac 匹配客户端
+     *       ② 刷新 last_heartbeat / last_ip / 版本信息
+     *       ③ 返回客户端审核状态 + 本机待执行任务数（PE 端据此提示续装）
+     * 退出: 客户端未注册（无匹配记录）→ 返回 error，客户端应重新 register
+     */
+    public function heartbeat()
+    {
+        $clientCode = input('client_id', '');
+        $macAddress = input('mac_address', '');
+        $hostname = input('hostname', '');
+        $osVersion = input('os_version', '');
+        $clientVersion = input('client_version', '');
+
+        $client = null;
+        if ($clientCode) {
+            $client = Client::where('client_id', $clientCode)->find();
+        }
+        if (!$client && $macAddress && $macAddress !== '00-00-00-00-00-00') {
+            $client = Client::where('mac_address', $macAddress)->order('id', 'asc')->find();
+        }
+
+        if (!$client) {
+            return $this->error('client_not_registered', '客户端尚未注册，请重新注册');
+        }
+
+        $client->last_heartbeat = date('Y-m-d H:i:s');
+        $client->last_ip = request()->ip();
+        if ($hostname) { $client->hostname = $hostname; }
+        if ($osVersion) { $client->os_version = $osVersion; }
+        if ($clientVersion) { $client->client_version = $clientVersion; }
+        $client->save();
+
+        // 统计本机等待 PE 执行的任务（PE 端据此提示「检测到待执行任务」）
+        $waitingCount = \app\model\Task::where('client_id', $client->id)
+            ->where('status', 'waiting')
+            ->count();
+
+        return $this->success([
+            'id' => $client->id,
+            'client_id' => $client->client_id,
+            'status' => $client->status,
+            'waiting_task_count' => (int) $waitingCount,
+            'server_time' => date('Y-m-d H:i:s'),
+        ], '心跳正常');
     }
 
     public function detail($id)

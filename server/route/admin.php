@@ -49,6 +49,7 @@ Route::group('api/v1', function () {
 
     // Clients（自注册 register 为客户端入口，无通用 POST clients）
     Route::post('clients/register', 'admin.Client/register');
+    Route::post('clients/heartbeat', 'admin.Client/heartbeat');
     Route::post('clients/:id/approve', 'admin.Client/approve');
     Route::post('clients/:id/block', 'admin.Client/block');
     Route::post('clients/batchApprove', 'admin.Client/batchApprove');
@@ -73,6 +74,8 @@ Route::group('api/v1', function () {
 
     // Tasks（进度上报等带 :id 的特定路由必须优先于通用 tasks）
     Route::get('tasks/:id/logs', 'admin.Task/logs');
+    Route::get('tasks/:id/firstLogon', 'admin.Task/firstLogon');
+    Route::get('tasks/:id/unattend', 'admin.Task/unattend');
     Route::post('tasks/:id/cancel', 'admin.Task/cancel');
     Route::post('tasks/:id/retry', 'admin.Task/retry');
     Route::post('tasks/:id/pause', 'admin.Task/pause');
@@ -118,6 +121,7 @@ Route::group('api/v1', function () {
     Route::post('softwareTemplates/:id/setDefault', 'admin.SoftwareTemplate/setDefault');
     Route::put('softwareTemplates/:id', 'admin.SoftwareTemplate/edit');
     Route::delete('softwareTemplates/:id', 'admin.SoftwareTemplate/delete');
+    Route::get('softwareTemplates/:id', 'admin.SoftwareTemplate/detail');
     Route::get('softwareTemplates', 'admin.SoftwareTemplate/index');
     Route::post('softwareTemplates', 'admin.SoftwareTemplate/create');
 

@@ -1,6 +1,7 @@
 <?php
 namespace app\controller\admin;
 
+use app\model\Software;
 use app\model\SoftwareTemplate;
 
 class SoftwareTemplateController extends BaseController
@@ -66,6 +67,39 @@ class SoftwareTemplateController extends BaseController
 
         $template->delete();
         return $this->success(null, '删除成功');
+    }
+
+    /**
+     * 模板详情：返回模板信息 + 解析后的软件清单（WinPE 生成首次登录脚本用）
+     */
+    public function detail($id)
+    {
+        $template = SoftwareTemplate::find($id);
+        if (!$template) {
+            return $this->error('not_found', '模板不存在');
+        }
+
+        // software_ids 兼容两种存储：JSON 数组 或 逗号分隔
+        $raw = $template->software_ids;
+        if (is_string($raw)) {
+            $decoded = json_decode($raw, true);
+            $softwareIds = is_array($decoded) ? $decoded : array_filter(array_map('trim', explode(',', (string) $raw)));
+        } else {
+            $softwareIds = is_array($raw) ? $raw : [];
+        }
+
+        $softwareList = [];
+        if ($softwareIds) {
+            $softwareList = Software::whereIn('id', array_map('intval', $softwareIds))
+                ->where('status', 1)
+                ->order('sort', 'asc')
+                ->select()
+                ->toArray();
+        }
+
+        $data = $template->toArray();
+        $data['software_list'] = $softwareList;
+        return $this->success($data);
     }
 
     public function setDefault($id)

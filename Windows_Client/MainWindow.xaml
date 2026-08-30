@@ -175,6 +175,26 @@
                             </StackPanel>
                         </Grid>
                     </Border>
+
+                    <!-- 最近任务卡片：下单后显示 waiting，提示进 PE 继续（闭环可视化） -->
+                    <Border Background="White" CornerRadius="12" Padding="20" Margin="0,0,0,15"
+                            Visibility="{Binding HasRecentTask, Converter={StaticResource BoolToVisibility}}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel>
+                                <TextBlock Text="最近任务" FontSize="14" Margin="0,0,0,6"/>
+                                <TextBlock Text="{Binding RecentTaskNo}" FontSize="14"/>
+                                <TextBlock Text="{Binding RecentTaskStatusText}" FontSize="12" Foreground="#1976D2" Margin="0,4,0,0"/>
+                                <TextBlock Text="任务已创建，请重启进入 WinPE 环境自动继续装机（全程无人值守）" FontSize="12" Foreground="#888" Margin="0,6,0,0"
+                                           TextWrapping="Wrap" Visibility="{Binding ShowRecentContinue, Converter={StaticResource BoolToVisibility}}"/>
+                            </StackPanel>
+                            <Button Grid.Column="1" Content="刷新" Style="{StaticResource ActionButton}" VerticalAlignment="Center"
+                                    Command="{Binding RefreshMyTasksCommand}"/>
+                        </Grid>
+                    </Border>
                 </StackPanel>
 
                 <!-- USB View -->

@@ -3,6 +3,7 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Linq;
 using System.Threading.Tasks;
+using System.Windows.Threading;
 using System.Windows;
 using System.Windows.Input;
 using WinPE_Client.Models;
@@ -16,6 +17,7 @@ namespace WinPE_Client.ViewModels
         private readonly DeviceService _device;
         private readonly ImageDeployService _deploy;
         private readonly DiskPartService _diskPart;
+        private readonly DispatcherTimer _heartbeatTimer;
 
         // 客户端注册信息（连接服务器后填充）
         private string _clientId = "";
@@ -23,6 +25,9 @@ namespace WinPE_Client.ViewModels
 
         // 当前装机任务（创建后保存，用于进度上报）
         private int _taskId;
+
+        // 本机待执行任务（首页「待执行任务」卡片 + 立即继续）
+        private TaskInfo? _pendingTask;
 
         public MainViewModel()
         {
@@ -42,14 +47,20 @@ namespace WinPE_Client.ViewModels
                 StatusMessage = m;
             };
 
+            // 心跳定时器：每 30 秒上报一次，刷新在线状态并感知本机待执行任务（WinPE 续装闭环）
+            _heartbeatTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(30) };
+            _heartbeatTimer.Tick += async (_, _) => await SendHeartbeat();
+
             NavigateCommand = new RelayCommand<string>(Navigate);
-            OpenInstallWizardCommand = new RelayCommand(OpenInstallWizard);
+            OpenInstallWizardCommand = new RelayCommand(async () => await OpenInstallWizard());
+            ContinueTaskCommand = new RelayCommand(async () => await OpenInstallWizardContinuation());
             StartInstallCommand = new RelayCommand(async () => await StartInstall(), () => CanStartInstall);
             RefreshDisksCommand = new RelayCommand(async () => await RefreshDisks());
             RefreshImagesCommand = new RelayCommand(async () => await RefreshImages());
             BootRepairCommand = new RelayCommand(async () => await BootRepair());
             InjectDriversCommand = new RelayCommand(async () => await InjectDrivers());
             ConnectCommand = new RelayCommand(async () => await Connect(), () => !IsConnected);
+            NotifyNotImplementedCommand = new RelayCommand<string>(NotifyNotImplemented);
         }
 
         private string _serverUrl = "http://localhost";
@@ -63,7 +74,7 @@ namespace WinPE_Client.ViewModels
         public bool IsConnected
         {
             get => _isConnected;
-            set { _isConnected = value; OnPropertyChanged(); OnPropertyChanged(nameof(IsNotConnected)); }
+            set { _isConnected = value; OnPropertyChanged(); OnPropertyChanged(nameof(IsNotConnected)); OnPropertyChanged(nameof(ServerStatusText)); }
         }
 
         public bool IsNotConnected => !IsConnected;
@@ -150,14 +161,57 @@ namespace WinPE_Client.ViewModels
         public ObservableCollection<ImageInfo> Images { get; } = new();
         public ObservableCollection<DiskInfo> Disks { get; } = new();
 
+        // ============ 首页待执行任务（Windows 下单 → PE 续装 闭环）============
+        /// <summary>是否存在待执行任务（首页显示「待执行任务」卡片）</summary>
+        public bool HasPendingTask => _pendingTask != null;
+        public string PendingTaskNo => _pendingTask?.TaskNo ?? "";
+        public string PendingTaskStatus => _pendingTask?.Status ?? "";
+        /// <summary>待执行任务对应的镜像名（从已加载镜像列表中反查）</summary>
+        public string PendingTaskImageName
+        {
+            get
+            {
+                if (_pendingTask == null || _pendingTask.ImageId <= 0) return "";
+                var img = Images.FirstOrDefault(i => i.Id == _pendingTask.ImageId);
+                return img?.Name ?? ("镜像 #" + _pendingTask.ImageId);
+            }
+        }
+
+        /// <summary>客户端审核状态提示（后台未审核时首页黄色提示）</summary>
+        private string _clientStatusText = "";
+        public string ClientStatusText
+        {
+            get => _clientStatusText;
+            set { _clientStatusText = value; OnPropertyChanged(); }
+        }
+
+        /// <summary>服务器状态文本（顶部状态点 + 连接信息）</summary>
+        public string ServerStatusText => IsConnected
+            ? (string.IsNullOrEmpty(_clientId) ? "已连接服务器" : "已连接 · " + _clientId)
+            : "未连接服务器";
+
         public ICommand NavigateCommand { get; }
         public ICommand OpenInstallWizardCommand { get; }
+        public ICommand ContinueTaskCommand { get; }
         public ICommand StartInstallCommand { get; }
         public ICommand RefreshDisksCommand { get; }
         public ICommand RefreshImagesCommand { get; }
         public ICommand BootRepairCommand { get; }
         public ICommand InjectDriversCommand { get; }
         public ICommand ConnectCommand { get; }
+        public ICommand NotifyNotImplementedCommand { get; }
+
+        /// <summary>窗口加载完成后自动初始化：连接服务器 → 自注册 → 检测待执行任务 → 启动心跳</summary>
+        public async Task Initialize()
+        {
+            if (IsConnected) return;
+            await Connect();
+            if (IsConnected)
+            {
+                _heartbeatTimer.Start();
+                await CheckWaitingTasks();
+            }
+        }
 
         public async Task Connect()
         {
@@ -191,6 +245,9 @@ namespace WinPE_Client.ViewModels
                 {
                     _clientId = reg.Data.ClientId;
                     _serverClientId = reg.Data.Id;
+                    ClientStatusText = reg.Data.Status == "pending"
+                        ? "客户端待后台审核，审核通过后才能派发任务"
+                        : "";
                     StatusMessage = "已注册客户端: " + _clientId;
                 }
                 else
@@ -202,6 +259,65 @@ namespace WinPE_Client.ViewModels
             {
                 StatusMessage = "客户端注册异常: " + ex.Message;
             }
+        }
+
+        /// <summary>心跳：每 30 秒刷新在线状态，并感知本机待执行任务（后台据此判定在线/离线）</summary>
+        private async Task SendHeartbeat()
+        {
+            if (!IsConnected || string.IsNullOrEmpty(_clientId)) return;
+            try
+            {
+                var hb = await _api.HeartbeatAsync(
+                    _clientId, _device.GetMacAddress(), _device.GetHostname(),
+                    _device.GetOsVersion(), "winpe");
+                if (hb.IsSuccess && hb.Data != null)
+                {
+                    _serverClientId = hb.Data.Id;
+                    ClientStatusText = hb.Data.Status switch
+                    {
+                        "pending" => "客户端待后台审核，审核通过后才能派发任务",
+                        "blocked" => "客户端已被禁用，请联系管理员",
+                        _ => ""
+                    };
+                    if (hb.Data.WaitingTaskCount > 0) await CheckWaitingTasks();
+                }
+                else if (hb.Message?.Contains("未注册") == true)
+                {
+                    // 服务端无记录（如库被重置）→ 重新注册
+                    await RegisterClient();
+                }
+            }
+            catch
+            {
+                // 心跳失败不打断主流程
+            }
+        }
+
+        /// <summary>检测本机待执行任务（Windows 下单 → PE 续装 的关键闭环）</summary>
+        public async Task CheckWaitingTasks()
+        {
+            if (_serverClientId <= 0) return;
+            try
+            {
+                var r = await _api.GetMyTasksAsync(_serverClientId, "waiting", 1, 5);
+                if (r.IsSuccess && r.Data != null && r.Data.List.Count > 0)
+                {
+                    _pendingTask = r.Data.List[0];
+                    StatusMessage = "检测到待执行任务：" + _pendingTask.TaskNo + "，可立即继续装机";
+                }
+                else
+                {
+                    _pendingTask = null;
+                }
+            }
+            catch
+            {
+                _pendingTask = null;
+            }
+            OnPropertyChanged(nameof(HasPendingTask));
+            OnPropertyChanged(nameof(PendingTaskNo));
+            OnPropertyChanged(nameof(PendingTaskStatus));
+            OnPropertyChanged(nameof(PendingTaskImageName));
         }
 
         public async Task RefreshImages()
@@ -364,14 +480,41 @@ namespace WinPE_Client.ViewModels
             CurrentView = view ?? "Home";
         }
 
-        /// <summary>打开一键装机六步向导子窗口</summary>
-        private void OpenInstallWizard()
+        /// <summary>打开一键装机六步向导子窗口（新配置模式）</summary>
+        private async Task OpenInstallWizard()
         {
+            if (!IsConnected) await Connect();
             var vm = new InstallWizardViewModel(_api, _device, ServerUrl);
             var win = new InstallWizardWindow { DataContext = vm };
             vm.RequestClose += () => win.Close();
             win.Owner = Application.Current.MainWindow;
             win.ShowDialog();
+            await CheckWaitingTasks();
+        }
+
+        /// <summary>打开一键装机向导（续装模式）：预填本机待执行任务，跳过配置直接确认执行</summary>
+        private async Task OpenInstallWizardContinuation()
+        {
+            if (!IsConnected) await Connect();
+            if (_pendingTask == null) await CheckWaitingTasks();
+            if (_pendingTask == null)
+            {
+                StatusMessage = "没有检测到待执行任务";
+                return;
+            }
+            var vm = new InstallWizardViewModel(_api, _device, ServerUrl);
+            await vm.LoadContinuationTask(_pendingTask);
+            var win = new InstallWizardWindow { DataContext = vm };
+            vm.RequestClose += () => win.Close();
+            win.Owner = Application.Current.MainWindow;
+            win.ShowDialog();
+            await CheckWaitingTasks();
+        }
+
+        /// <summary>占位入口：U盘制作 / 工具大全 / 绿色软件（设计文档规划中，未实现）</summary>
+        private void NotifyNotImplemented(string? feature)
+        {
+            StatusMessage = "【" + (feature ?? "该功能") + "】正在开发中，敬请期待";
         }
 
         public event PropertyChangedEventHandler? PropertyChanged;

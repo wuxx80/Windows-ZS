@@ -20,6 +20,14 @@ class Client extends BaseModel
         return $this->belongsTo(ClientGroup::class, "group_id", "id");
     }
 
+    /**
+     * 最近一次装机任务（客户端详情页展示最近任务）
+     */
+    public function lastTask()
+    {
+        return $this->hasOne(Task::class, "client_id", "id")->order("id", "desc");
+    }
+
     public static function generateClientId()
     {
         return strtoupper("ZS-" . bin2hex(random_bytes(8)));

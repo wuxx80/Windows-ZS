@@ -17,10 +17,12 @@ D:\Users\Desktop\Windows-ZS\
 ├── 设计文档\                           # 设计文档目录
 │   ├── 详细设计文档.md                 # 系统架构/数据库/API/目录结构
 │   ├── Web后台详细设计.md              # 后台各模块详细设计（21章）
-│   └── 一键装机交互设计.md             # 客户端一键装机交互设计（18章）
+│   ├── 一键装机交互设计.md             # 客户端一键装机交互设计（18章）
+│   └── 全功能流程闭环清单.md           # 全流程闭环梳理（首页/一键装机/无人值守全链路）
 │
 ├── database\                           # 数据库脚本
-│   └── install.sql                     # 35 张表建表 SQL + 种子数据
+│   ├── install.sql                     # 35 张表建表 SQL + 种子数据
+│   └── migration_closure.sql           # 闭环轮增量迁移（任务 waiting 状态/取消时间等）
 │
 ├── server\                             # PHP 后端项目（ThinkPHP 6）
 │   ├── .env                            # 环境配置（数据库连接等）
@@ -28,8 +30,11 @@ D:\Users\Desktop\Windows-ZS\
 │   ├── composer.json                   # Composer 依赖配置
 │   ├── composer.lock                   # 依赖锁文件
 │   ├── think                           # ThinkPHP CLI 入口
-│   ├── e2e_winpe_test.php              # 端到端回归测试脚本（WinPE/Windows 客户端流程）
+│   ├── e2e_winpe_test.php              # 端到端回归测试脚本（闭环 29 项，含无人值守/心跳/续装）
 │   ├── api_test.php                    # API 测试脚本
+│   ├── apply_migration.php             # 闭环轮增量迁移执行脚本（waiting 状态/取消时间）
+│   ├── schema_check.php                # 表结构核对脚本
+│   ├── router.php                      # 本地开发服务器路由入口（php -S 127.0.0.1:8001）
 │   ├── thinkphp.nginx.rewrite.conf     # 独立伪静态规则文件
 │   │
 │   ├── app\                            # 应用目录
@@ -180,6 +185,7 @@ D:\Users\Desktop\Windows-ZS\
 
 # 版本更新
 
-当前版本：v0.0.268311
+当前版本：v0.0.268311（含闭环整理轮 R1）
 API 联调验证 + 性能优化 + 安全审查 + 部署文档 + 打包发布 已完成
 一键装机六步向导（WinPE 完整版 + Windows 安全版）已完成并同步
+全功能流程闭环整理已完成：WinPE 首页 4 大入口 + 待执行任务续装卡片、Windows 首页最近任务卡片、双端 30 秒心跳、无人值守 XML 写入 + 首次登录脚本生成、后端仪表盘智能统计 + 任务停滞检测（详见 设计文档\全功能流程闭环清单.md）
