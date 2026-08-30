@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="Windows_Client/Windows_Client.csproj" />
+  <Project Path="WinPE_Client/WinPE_Client.csproj" />
+</Solution>

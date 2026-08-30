@@ -1,0 +1,308 @@
+<Window x:Class="Windows_Client.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="clr-namespace:Windows_Client.ViewModels"
+        Title="ZS 装机助手" 
+        Height="720" Width="1024"
+        WindowStartupLocation="CenterScreen"
+        Background="#F0F2F5"
+        FontFamily="Microsoft YaHei">
+    <Window.DataContext>
+        <vm:MainViewModel />
+    </Window.DataContext>
+    <Window.Resources>
+        <Style x:Key="NavButton" TargetType="Button">
+            <Setter Property="Height" Value="48"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="#CCCCCC"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" Padding="20,0">
+                            <TextBlock Text="{TemplateBinding Content}" VerticalAlignment="Center" Foreground="{TemplateBinding Foreground}"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="ActionButton" TargetType="Button">
+            <Setter Property="Height" Value="36"/>
+            <Setter Property="Padding" Value="20,0"/>
+            <Setter Property="Background" Value="#1976D2"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" CornerRadius="4" Padding="{TemplateBinding Padding}">
+                            <TextBlock Text="{TemplateBinding Content}" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{TemplateBinding Foreground}"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="EntranceCard" TargetType="Border">
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="CornerRadius" Value="12"/>
+            <Setter Property="Padding" Value="20"/>
+            <Setter Property="Margin" Value="0,0,0,15"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Effect">
+                <Setter.Value>
+                    <DropShadowEffect BlurRadius="8" ShadowDepth="2" Color="#20000000"/>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="220"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+        <Border Grid.Column="0" Background="#1E293B">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="70"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+                <Border Grid.Row="0" BorderBrush="#334155" BorderThickness="0,0,0,1">
+                    <StackPanel VerticalAlignment="Center" Margin="15,0">
+                        <TextBlock Text="ZS 装机助手" FontSize="18" Foreground="White" FontWeight="SemiBold"/>
+                        <TextBlock Text="Windows 客户端" FontSize="11" Foreground="#94A3B8"/>
+                    </StackPanel>
+                </Border>
+                <StackPanel Grid.Row="1" Margin="0,15,0,0">
+                    <Button Content="  首页" Style="{StaticResource NavButton}" Command="{Binding NavigateCommand}" CommandParameter="Home"/>
+                    <Button Content="  一键装机" Style="{StaticResource NavButton}" Command="{Binding NavigateCommand}" CommandParameter="Install"/>
+                    <Button Content="  U盘制作" Style="{StaticResource NavButton}" Command="{Binding NavigateCommand}" CommandParameter="Usb"/>
+                    <Button Content="  工具大全" Style="{StaticResource NavButton}" Command="{Binding NavigateCommand}" CommandParameter="Tools"/>
+                    <Button Content="  绿色软件" Style="{StaticResource NavButton}" Command="{Binding NavigateCommand}" CommandParameter="Software"/>
+                    <Button Content="  设置" Style="{StaticResource NavButton}" Command="{Binding NavigateCommand}" CommandParameter="Settings"/>
+                </StackPanel>
+                <Border Grid.Row="2" BorderBrush="#334155" BorderThickness="0,1,0,0" Padding="15">
+                    <StackPanel>
+                        <Border CornerRadius="4" Background="#334155" Padding="8">
+                            <TextBlock Text="{Binding StatusMessage}" FontSize="11" Foreground="#94A3B8" TextWrapping="Wrap"/>
+                        </Border>
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Border>
+        <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto">
+            <Grid Margin="20">
+                <!-- Home View -->
+                <StackPanel Visibility="{Binding CurrentView, Converter={StaticResource ViewConverter}, ConverterParameter=Home}">
+                    <TextBlock Text="欢迎使用 ZS 装机助手" FontSize="24" FontWeight="SemiBold" Margin="0,0,0,5"/>
+                    <TextBlock Text="Windows 系统安装与维护工具" FontSize="13" Foreground="#666" Margin="0,0,0,20"/>
+                    <Border Background="#E3F2FD" CornerRadius="8" Padding="15" Margin="0,0,0,20">
+                        <StackPanel>
+                            <TextBlock Text="服务器连接" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBox Grid.Column="0" Text="{Binding ServerUrl}" Height="36" FontSize="13" IsEnabled="{Binding IsNotLoggedIn}"/>
+                                <Button Grid.Column="1" Content="登录" Style="{StaticResource ActionButton}" Margin="10,0,0,0" Width="80" Command="{Binding LoginCommand}" Visibility="{Binding IsLoggedIn, Converter={StaticResource BoolToInverseVisibility}}"/>
+                                <Button Grid.Column="2" Content="退出" Style="{StaticResource ActionButton}" Margin="10,0,0,0" Width="80" Command="{Binding LogoutCommand}" Visibility="{Binding IsLoggedIn, Converter={StaticResource BoolToVisibility}}"/>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+                    <TextBlock Text="快速入口" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,15"/>
+                    <Border Style="{StaticResource EntranceCard}" MouseLeftButtonDown="OnInstallClick">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="60"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Border Grid.Column="0" Background="#E3F2FD" CornerRadius="8" Width="48" Height="48" HorizontalAlignment="Center">
+                                <TextBlock Text="&#x1F4BD;" FontSize="24" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <StackPanel Grid.Column="1" Margin="10,0,0,0" VerticalAlignment="Center">
+                                <TextBlock Text="一键装机" FontSize="16" FontWeight="SemiBold"/>
+                                <TextBlock Text="选择镜像，快速安装系统" FontSize="12" Foreground="#888"/>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+                    <Border Style="{StaticResource EntranceCard}" MouseLeftButtonDown="OnUsbClick">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="60"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Border Grid.Column="0" Background="#FFF3E0" CornerRadius="8" Width="48" Height="48" HorizontalAlignment="Center">
+                                <TextBlock Text="&#x1F4BF;" FontSize="24" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <StackPanel Grid.Column="1" Margin="10,0,0,0" VerticalAlignment="Center">
+                                <TextBlock Text="U盘制作" FontSize="16" FontWeight="SemiBold"/>
+                                <TextBlock Text="制作启动盘，PE 写入" FontSize="12" Foreground="#888"/>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+                    <Border Style="{StaticResource EntranceCard}" MouseLeftButtonDown="OnToolsClick">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="60"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Border Grid.Column="0" Background="#E8F5E9" CornerRadius="8" Width="48" Height="48" HorizontalAlignment="Center">
+                                <TextBlock Text="&#x1F527;" FontSize="24" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <StackPanel Grid.Column="1" Margin="10,0,0,0" VerticalAlignment="Center">
+                                <TextBlock Text="工具大全" FontSize="16" FontWeight="SemiBold"/>
+                                <TextBlock Text="磁盘管理、系统修复、密码重置" FontSize="12" Foreground="#888"/>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+                    <Border Style="{StaticResource EntranceCard}" MouseLeftButtonDown="OnSoftwareClick">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="60"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Border Grid.Column="0" Background="#FCE4EC" CornerRadius="8" Width="48" Height="48" HorizontalAlignment="Center">
+                                <TextBlock Text="&#x1F4E6;" FontSize="24" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <StackPanel Grid.Column="1" Margin="10,0,0,0" VerticalAlignment="Center">
+                                <TextBlock Text="绿色软件" FontSize="16" FontWeight="SemiBold"/>
+                                <TextBlock Text="常用软件在线安装" FontSize="12" Foreground="#888"/>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+                </StackPanel>
+
+                <!-- Install View -->
+                <StackPanel Visibility="{Binding CurrentView, Converter={StaticResource ViewConverter}, ConverterParameter=Install}">
+                    <TextBlock Text="一键装机" FontSize="20" FontWeight="SemiBold" Margin="0,0,0,15"/>
+                    <Border Background="White" CornerRadius="8" Padding="20" Margin="0,0,0,15">
+                        <StackPanel>
+                            <TextBlock Text="选择系统镜像" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,10"/>
+                            <ListBox ItemsSource="{Binding Images}" SelectedItem="{Binding SelectedImage}" Height="150" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Padding="8">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
+                                                <Border Grid.Column="0" Background="#E3F2FD" CornerRadius="4" Padding="6,3" Margin="0,0,10,0">
+                                                    <TextBlock Text="{Binding Format}" FontSize="11" Foreground="#1565C0"/>
+                                                </Border>
+                                                <StackPanel Grid.Column="1">
+                                                    <TextBlock Text="{Binding Name}" FontSize="13"/>
+                                                    <TextBlock Text="{Binding SizeDisplay}" FontSize="11" Foreground="#888"/>
+                                                </StackPanel>
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                            <Button Content="刷新镜像列表" Style="{StaticResource ActionButton}" Margin="0,10,0,0" Command="{Binding RefreshImagesCommand}"/>
+                        </StackPanel>
+                    </Border>
+                    <Border Background="White" CornerRadius="8" Padding="20" Margin="0,0,0,15">
+                        <StackPanel>
+                            <TextBlock Text="安装选项" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,10"/>
+                            <CheckBox IsChecked="{Binding AutoPartition}" Content="自动分区 (GPT)" Margin="0,0,0,8"/>
+                            <CheckBox IsChecked="{Binding AutoRepairBoot}" Content="自动修复引导" Margin="0,0,0,8"/>
+                        </StackPanel>
+                    </Border>
+                    <Button Content="开始安装" Style="{StaticResource ActionButton}" Height="44" FontSize="16" HorizontalAlignment="Center" Width="200"/>
+                </StackPanel>
+
+                <!-- USB View -->
+                <StackPanel Visibility="{Binding CurrentView, Converter={StaticResource ViewConverter}, ConverterParameter=Usb}">
+                    <TextBlock Text="U盘制作" FontSize="20" FontWeight="SemiBold" Margin="0,0,0,15"/>
+                    <Border Background="White" CornerRadius="8" Padding="20">
+                        <StackPanel>
+                            <TextBlock Text="制作 Windows 启动盘" FontSize="14" Foreground="#666" Margin="0,0,0,15"/>
+                            <TextBlock Text="支持 PE 写入、格式化还原、多PE 启动" FontSize="12" Foreground="#888"/>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
+                <!-- Tools View -->
+                <StackPanel Visibility="{Binding CurrentView, Converter={StaticResource ViewConverter}, ConverterParameter=Tools}">
+                    <TextBlock Text="工具大全" FontSize="20" FontWeight="SemiBold" Margin="0,0,0,15"/>
+                    <WrapPanel>
+                        <Border Style="{StaticResource EntranceCard}" Width="180" Height="120" Margin="0,0,15,15">
+                            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <TextBlock Text="&#x1F4BE;" FontSize="28" HorizontalAlignment="Center"/>
+                                <TextBlock Text="磁盘管理" FontSize="13" HorizontalAlignment="Center" Margin="0,5,0,0"/>
+                            </StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource EntranceCard}" Width="180" Height="120" Margin="0,0,15,15">
+                            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <TextBlock Text="&#x1F527;" FontSize="28" HorizontalAlignment="Center"/>
+                                <TextBlock Text="系统修复" FontSize="13" HorizontalAlignment="Center" Margin="0,5,0,0"/>
+                            </StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource EntranceCard}" Width="180" Height="120" Margin="0,0,15,15">
+                            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <TextBlock Text="&#x1F511;" FontSize="28" HorizontalAlignment="Center"/>
+                                <TextBlock Text="密码重置" FontSize="13" HorizontalAlignment="Center" Margin="0,5,0,0"/>
+                            </StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource EntranceCard}" Width="180" Height="120" Margin="0,0,15,15">
+                            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <TextBlock Text="&#x1F4CA;" FontSize="28" HorizontalAlignment="Center"/>
+                                <TextBlock Text="数据恢复" FontSize="13" HorizontalAlignment="Center" Margin="0,5,0,0"/>
+                            </StackPanel>
+                        </Border>
+                    </WrapPanel>
+                </StackPanel>
+
+                <!-- Software View -->
+                <StackPanel Visibility="{Binding CurrentView, Converter={StaticResource ViewConverter}, ConverterParameter=Software}">
+                    <TextBlock Text="绿色软件" FontSize="20" FontWeight="SemiBold" Margin="0,0,0,15"/>
+                    <Border Background="White" CornerRadius="8" Padding="20" Margin="0,0,0,15">
+                        <StackPanel>
+                            <TextBlock Text="常用软件在线安装" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,10"/>
+                            <Button Content="刷新软件列表" Style="{StaticResource ActionButton}" Command="{Binding RefreshSoftwareCommand}"/>
+                        </StackPanel>
+                    </Border>
+                    <ListBox ItemsSource="{Binding SoftwareList}" Height="300" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <Border Padding="10">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0">
+                                            <TextBlock Text="{Binding Name}" FontSize="14" FontWeight="SemiBold"/>
+                                            <TextBlock Text="{Binding Version}" FontSize="11" Foreground="#888"/>
+                                        </StackPanel>
+                                        <TextBlock Grid.Column="1" Text="{Binding SizeDisplay}" FontSize="12" Foreground="#666" VerticalAlignment="Center"/>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </StackPanel>
+
+                <!-- Settings View -->
+                <StackPanel Visibility="{Binding CurrentView, Converter={StaticResource ViewConverter}, ConverterParameter=Settings}">
+                    <TextBlock Text="设置" FontSize="20" FontWeight="SemiBold" Margin="0,0,0,15"/>
+                    <Border Background="White" CornerRadius="8" Padding="20">
+                        <StackPanel>
+                            <TextBlock Text="服务器地址" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,5"/>
+                            <TextBox Text="{Binding ServerUrl}" Height="36" FontSize="13" Margin="0,0,0,15"/>
+                            <TextBlock Text="版本信息" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,5"/>
+                            <TextBlock Text="ZS 装机助手 Windows 客户端 v1.0.0" FontSize="12" Foreground="#888"/>
+                            <TextBlock Text="目标框架: .NET 8.0" FontSize="12" Foreground="#888"/>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </Grid>
+        </ScrollViewer>
+    </Grid>
+</Window>

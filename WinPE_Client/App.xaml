@@ -1,0 +1,12 @@
+<Application x:Class="WinPE_Client.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:WinPE_Client"
+             xmlns:helpers="clr-namespace:WinPE_Client.Helpers"
+             StartupUri="MainWindow.xaml">
+    <Application.Resources>
+        <helpers:ViewConverter x:Key="ViewConverter"/>
+        <helpers:BoolToConnectTextConverter x:Key="BoolToConnectText"/>
+        <helpers:BoolToStatusBgConverter x:Key="BoolToStatusBg"/>
+    </Application.Resources>
+</Application>
