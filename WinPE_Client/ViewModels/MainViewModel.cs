@@ -281,7 +281,7 @@ namespace WinPE_Client.ViewModels
 
         private void Navigate(string? view)
         {
-            CurrentView = view;
+            CurrentView = view ?? "Home";
         }
 
         public event PropertyChangedEventHandler? PropertyChanged;

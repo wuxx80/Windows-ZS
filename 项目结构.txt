@@ -11,6 +11,7 @@ D:\Users\Desktop\Windows-ZS\
 ├── 版本更新记录.md                     # 版本历史与变更记录
 ├── 开发计划表.md                       # 详细开发计划（第六件套）
 ├── ZS_Installer.sln                    # .NET 解决方案文件
+├── publish.ps1                         # 客户端发布脚本（WinPE/Windows）
 │
 ├── 设计文档\                           # 设计文档目录
 │   ├── 详细设计文档.md                 # 系统架构/数据库/API/目录结构
@@ -29,13 +30,14 @@ D:\Users\Desktop\Windows-ZS\
 │   │   ├── common.php                  # 公共函数
 │   │   ├── BaseController.php          # 基础控制器
 │   │   │
-│   │   ├── controller\admin\           # 后台控制器（31个）
+│   │   ├── controller\admin\           # 后台控制器（32个）
+│   │   │   ├── BaseController.php      # 后台基础控制器（认证/响应）
 │   │   │   ├── AuthController.php      # 认证（登录/退出/改密）
 │   │   │   ├── IndexController.php     # 控制台仪表盘
 │   │   │   ├── ImageController.php     # 镜像管理
 │   │   │   ├── ImageSourceController.php # 镜像源管理
 │   │   │   ├── ImageTagController.php  # 镜像标签
-│   │   │   ├── TaskController.php      # 任务管理
+│   │   │   ├── TaskController.php      # 任务管理（含进度更新）
 │   │   │   ├── TaskTemplateController.php # 任务模板
 │   │   │   ├── UnattendController.php  # 无人值守模板
 │   │   │   ├── ClientController.php    # 客户端管理
@@ -60,7 +62,8 @@ D:\Users\Desktop\Windows-ZS\
 │   │   │   ├── WebhookController.php   # Webhook 管理
 │   │   │   ├── LogController.php       # 日志审计
 │   │   │   ├── RecycleBinController.php # 回收站
-│   │   │   └── ReportController.php    # 报表统计
+│   │   │   ├── ReportController.php    # 报表统计
+│   │   │   └── DeviceController.php    # 设备信息（磁盘列表）
 │   │   │
 │   │   ├── model\                      # 数据模型（36个）
 │   │   │   ├── BaseModel.php           # 基础模型
@@ -71,7 +74,7 @@ D:\Users\Desktop\Windows-ZS\
 │   │   ├── middleware\                 # 中间件
 │   │   │   ├── AuthMiddleware.php      # 认证中间件
 │   │   │   ├── CorsMiddleware.php      # 跨域中间件
-│   │   │   └── LogMiddleware.php       # 日志中间件
+│   │   │   └── LogMiddleware.php       # 日志中间件（密码脱敏）
 │   │   │
 │   │   ├── exception\                  # 异常处理
 │   │   │   └── HttpExceptionHandler.php
@@ -80,7 +83,7 @@ D:\Users\Desktop\Windows-ZS\
 │   │       ├── AuthService.php         # 认证服务
 │   │       ├── ImageService.php        # 镜像服务
 │   │       ├── TaskService.php         # 任务服务
-│   │       ├── FileService.php         # 文件服务
+│   │       ├── FileService.php         # 文件服务（分片上传）
 │   │       ├── BackupService.php       # 备份服务
 │   │       ├── CacheService.php        # 缓存服务
 │   │       ├── NotificationService.php # 通知服务
@@ -91,13 +94,14 @@ D:\Users\Desktop\Windows-ZS\
 │   │   ├── database.php                # 数据库配置
 │   │   ├── cache.php                   # 缓存配置
 │   │   ├── log.php                     # 日志配置
-│   │   ├── status.php                  # 状态码配置
+│   │   ├── status.php                  # 状态码配置（36个）
 │   │   ├── auth.php                    # 认证配置
 │   │   ├── filesystem.php             # 文件系统配置
+│   │   ├── upload.php                  # 上传配置
 │   │   └── middleware.php             # 中间件配置
 │   │
 │   ├── route\                          # 路由
-│   │   └── admin.php                   # 后台 API 路由
+│   │   └── admin.php                   # 后台 API 路由（44个接口）
 │   │
 │   ├── runtime\                        # 运行时（缓存/日志/编译）
 │   └── public\                         # 入口目录
@@ -152,9 +156,13 @@ D:\Users\Desktop\Windows-ZS\
 │   │   └── MainViewModel.cs            # 主视图模型
 │   └── Helpers\                        # 辅助类
 │       └── Converters.cs               # 值转换器
+│
+└── publish\                            # 客户端发布产物（git 忽略）
+    ├── WinPE_Client\                   # WinPE 客户端自包含发布（~146MB）
+    └── Windows_Client\                 # Windows 客户端框架依赖发布（~0.5MB）
 `
 
 # 版本更新
 
-当前版本：v1.7.0
-WinPE 客户端 + Windows 客户端开发完成
+当前版本：v0.0.268311
+API 联调验证 + 性能优化 + 安全审查 + 部署文档 + 打包发布 已完成

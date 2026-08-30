@@ -59,7 +59,11 @@ class AuthController extends BaseController
 
     public function profile()
     {
-        return $this->success($this->user);
+        $user = $this->user;
+        if (!$user) {
+            $user = request()->user ?? null;
+        }
+        return $this->success($user);
     }
 
     public function updatePassword()

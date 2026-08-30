@@ -43,7 +43,7 @@ ZS 装机助手是一套完整的 Windows 系统安装与维护解决方案，�
 
 ## 项目状态
 
-当前版本：v1.7.0（WinPE/Windows 客户端开发完成）
+当前版本：v0.0.268311（联调部署完成，客户端可打包发布）
 
 | 阶段 | 状态 |
 |------|------|
@@ -53,7 +53,10 @@ ZS 装机助手是一套完整的 Windows 系统安装与维护解决方案，�
 | 核心业务逻辑（所有控制器+服务层，浏览器全量测试验证） | ✅ 已完成 |
 | WinPE 客户端（.NET 8 WPF） | ✅ 已完成 |
 | Windows 客户端（.NET 8 WPF） | ✅ 已完成 |
-| 联调与部署 | ⏳ 待开始 |
+| API 全量联调测试（44/44 接口通过） | ✅ 已完成 |
+| 性能优化（N+1 查询消除） | ✅ 已完成 |
+| 安全审查（认证/CORS/上传/日志） | ✅ 已完成 |
+| 部署文档与打包发布（publish.ps1） | ✅ 已完成 |
 
 ## 文档列表（六件套）
 
@@ -62,7 +65,7 @@ ZS 装机助手是一套完整的 Windows 系统安装与维护解决方案，�
 | [README.md](README.md) | 项目说明（本文档） |
 | [项目理解报告.md](项目理解报告.md) | 项目架构与技术方案 |
 | [项目结构.txt](项目结构.txt) | 目录结构说明 |
-| [操作指南.md](操作指南.md) | 安装/配置/启动/使用 |
+| [操作指南.md](操作指南.md) | 安装/配置/启动/使用/部署 |
 | [版本更新记录.md](版本更新记录.md) | 版本变更历史 |
 | [开发计划表.md](开发计划表.md) | 详细开发任务清单与里程碑 |
 
@@ -78,6 +81,7 @@ Windows-ZS/
 ├── 版本更新记录.md
 ├── 开发计划表.md                    ← 第六件套
 ├── ZS_Installer.sln                 ← .NET 解决方案文件
+├── publish.ps1                      ← 客户端发布脚本
 ├── 设计文档/
 │   ├── 详细设计文档.md
 │   ├── Web后台详细设计.md
@@ -86,7 +90,7 @@ Windows-ZS/
 │   └── install.sql                  ← 35张表建表SQL
 ├── server/                          ← PHP 后端项目
 │   ├── app/
-│   │   ├── controller/admin/        ← 31个后台控制器
+│   │   ├── controller/admin/        ← 32个后台控制器
 │   │   ├── model/                   ← 36个数据模型
 │   │   ├── service/                 ← 8个服务层
 │   │   ├── middleware/              ← 3个中间件
@@ -117,14 +121,17 @@ Windows-ZS/
 │   ├── Services/
 │   ├── ViewModels/
 │   └── Helpers/
-└── Windows_Client/                  ← Windows 客户端 (.NET 8 WPF)
-    ├── Windows_Client.csproj
-    ├── App.xaml
-    ├── MainWindow.xaml
-    ├── Models/
-    ├── Services/
-    ├── ViewModels/
-    └── Helpers/
+├── Windows_Client/                  ← Windows 客户端 (.NET 8 WPF)
+│   ├── Windows_Client.csproj
+│   ├── App.xaml
+│   ├── MainWindow.xaml
+│   ├── Models/
+│   ├── Services/
+│   ├── ViewModels/
+│   └── Helpers/
+└── publish/                         ← 客户端发布产物（git 忽略）
+    ├── WinPE_Client/                ← 自包含发布（~146MB）
+    └── Windows_Client/              ← 框架依赖发布（~0.5MB）
 ```
 
 ## 快速开始
@@ -166,6 +173,16 @@ composer install
 
 ### 6. 访问后台
 浏览器访问 http://你的域名/admin/login.html
+
+### 7. 构建客户端
+```powershell
+# 发布所有客户端（WinPE 自包含 + Windows 框架依赖）
+.\publish.ps1
+
+# 或单独发布
+.\publish.ps1 -WinPE
+.\publish.ps1 -Windows
+```
 
 ## 默认管理员
 - 用户名：admin

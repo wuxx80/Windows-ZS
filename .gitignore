@@ -42,3 +42,10 @@ server/runtime/
 # Temp scripts
 *.ps1
 temp_hash.php
+# Publish output
+publish/
+!publish.ps1
+
+# Build output
+bin/
+obj/

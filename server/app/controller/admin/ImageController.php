@@ -29,7 +29,7 @@ class ImageController extends BaseController
         $query = Image::order($sortField, $sortOrder);
 
         if ($keyword) {
-            $query->where("name|description|filename|os_type|os_version", "like", "%" . $keyword . "%");
+            $query->where("name|description|file_name|os_type|os_version", "like", "%" . $keyword . "%");
         }
         if ($format) {
             $query->where("format", $format);
@@ -76,7 +76,7 @@ class ImageController extends BaseController
 
         $filePath = input("file_path", "");
         $fileSize = 0;
-        $osInfo = ["os_type" => "", "os_edition" => "", "os_arch" => "x64", "os_version" => ""];
+        $osInfo = ["os_type" => "", "os_edition" => "", "os_arch" => "x64", "os_version" => "", "os_language" => "zh-CN"];
 
         if ($filePath && file_exists($filePath)) {
             $osInfo = ImageService::detectOsInfo($filePath);
@@ -86,20 +86,19 @@ class ImageController extends BaseController
         $data = [
             "name"        => $name,
             "description" => input("description", ""),
-            "filename"    => $filename,
+            "file_name"   => $filename,
             "file_path"   => $filePath,
             "format"      => $format ?: "wim",
             "file_size"   => input("file_size", $fileSize, "intval"),
-            "sha256"      => input("sha256", ""),
+            "file_hash"   => input("sha256", ""),
             "os_type"     => input("os_type", $osInfo["os_type"]),
             "os_edition"  => input("os_edition", $osInfo["os_edition"]),
             "os_version"  => input("os_version", $osInfo["os_version"]),
             "os_arch"     => input("os_arch", $osInfo["os_arch"]),
-            "os_language" => input("os_language", "zh-CN"),
+            "language"    => input("os_language", "zh-CN"),
             "source_id"   => input("source_id", 0, "intval"),
-            "source_url"  => input("source_url", ""),
+            "source_type" => input("source_type", "upload"),
             "status"      => self::parseStatus(input("status", "enabled")),
-            "is_public"   => input("is_public", 1, "intval"),
             "created_by"  => $this->userId,
             "created_at"  => date("Y-m-d H:i:s"),
         ];
@@ -166,16 +165,16 @@ class ImageController extends BaseController
         }
 
         $imageData = $image->toArray();
-        $image->delete_time = time();
         $image->status = 0;
         $image->save();
 
         Db::name("recycle_bin")->insert([
             "original_table" => "zs_images",
             "original_id"   => $id,
-            "deleted_content" => json_encode($imageData),
+            "data"          => json_encode($imageData),
             "deleted_by"    => $this->userId,
             "deleted_at"    => date("Y-m-d H:i:s"),
+            "expire_at"     => date("Y-m-d H:i:s", strtotime("+30 days")),
         ]);
 
         $this->log("image", "删除镜像: " . $image->name, $id);
@@ -185,7 +184,7 @@ class ImageController extends BaseController
     public function detail($id)
     {
         $image = Image::find($id);
-        if (!$image) {
+        if (!$image || !$image->id) {
             return $this->error("image_not_found");
         }
         return $this->success(ImageService::getInfo($id));
@@ -300,12 +299,12 @@ class ImageController extends BaseController
         $data = [
             "name"        => $name,
             "description" => input("description", ""),
-            "filename"    => $filename,
+            "file_name"   => $filename,
             "format"      => $format ?: "wim",
-            "source_url"  => $url,
+            "file_path"   => "",
             "source_id"   => input("source_id", 0, "intval"),
+            "source_type" => "download",
             "status"      => 0,
-            "is_public"   => input("is_public", 1, "intval"),
             "created_by"  => $this->userId,
             "created_at"  => date("Y-m-d H:i:s"),
         ];

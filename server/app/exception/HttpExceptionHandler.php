@@ -14,7 +14,6 @@ class HttpExceptionHandler extends Handle
             return json([
                 'code' => 1001,
                 'message' => $e->getError(),
-                'request_id' => $request->id(),
                 'timestamp' => time(),
             ]);
         }
@@ -23,7 +22,6 @@ class HttpExceptionHandler extends Handle
             return json([
                 'code' => 1002,
                 'message' => '资源不存在',
-                'request_id' => $request->id(),
                 'timestamp' => time(),
             ], $e->getStatusCode());
         }
@@ -35,7 +33,6 @@ class HttpExceptionHandler extends Handle
         return json([
             'code' => 1000,
             'message' => '系统错误',
-            'request_id' => $request->id(),
             'timestamp' => time(),
         ]);
     }

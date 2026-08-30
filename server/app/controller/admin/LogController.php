@@ -16,10 +16,10 @@ class LogController extends BaseController
         $query = Db::name('logs')->order('id', 'desc');
 
         if ($type) {
-            $query->where('type', $type);
+            $query->where('resource_type', $type);
         }
         if ($keyword) {
-            $query->where('content|ip_address|user_agent', 'like', '%' . $keyword . '%');
+            $query->where('detail|ip|user_agent|action', 'like', '%' . $keyword . '%');
         }
         if ($startDate) {
             $query->where('created_at', '>=', $startDate);
@@ -56,8 +56,8 @@ class LogController extends BaseController
     public function types()
     {
         $types = Db::name('logs')
-            ->field('type, COUNT(*) as count')
-            ->group('type')
+            ->field('resource_type as type, COUNT(*) as count')
+            ->group('resource_type')
             ->order('count', 'desc')
             ->select()
             ->toArray();

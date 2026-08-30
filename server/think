@@ -1,0 +1,23 @@
+#!/usr/bin/env php
+<?php
+// +----------------------------------------------------------------------
+// | ThinkPHP [ WE CAN DO IT JUST THINK ]
+// +----------------------------------------------------------------------
+// | Copyright (c) 2006-2023 http://thinkphp.cn All rights reserved.
+// +----------------------------------------------------------------------
+// | Licensed ( http://www.apache.org/licenses/LICENSE-2.0 )
+// +----------------------------------------------------------------------
+// | Author: liu21st <liu21st@gmail.com>
+// +----------------------------------------------------------------------
+
+namespace think;
+
+// 载入 Composer 自动加载
+require __DIR__ . '/vendor/autoload.php';
+
+// 创建应用实例
+$app = new App();
+$app->initialize();
+
+$console = new Console($app);
+$console->run();

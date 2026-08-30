@@ -33,15 +33,24 @@ class IndexController extends BaseController
             ->field("SUM(file_size) as total_size, COUNT(*) as total_files")
             ->find();
 
+                // 单次查询7天趋势，避免循环N+1
+        $rawTrend = Db::name("tasks")
+            ->field("DATE(created_at) as date, COUNT(*) as count")
+            ->where("status", "completed")
+            ->where("created_at", ">=", date("Y-m-d", strtotime("-6 days")))
+            ->group("DATE(created_at)")
+            ->select()
+            ->toArray();
+        $trendMap = [];
+        foreach ($rawTrend as $t) {
+            $trendMap[$t["date"]] = (int) $t["count"];
+        }
         $installTrend = [];
         for ($i = 6; $i >= 0; $i--) {
             $date = date("Y-m-d", strtotime("-" . $i . " days"));
-            $count = Task::where("status", "completed")
-                ->whereBetween("created_at", [$date . " 00:00:00", $date . " 23:59:59"])
-                ->count();
             $installTrend[] = [
                 "date" => $date,
-                "count" => $count,
+                "count" => $trendMap[$date] ?? 0,
             ];
         }
 

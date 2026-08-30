@@ -7,7 +7,7 @@ class ImageSourceController extends BaseController
 {
     public function index()
     {
-        $query = ImageSource::order('sort', 'asc')->order('id', 'desc');
+        $query = ImageSource::order('id', 'desc');
         return $this->paginate($query);
     }
 
@@ -15,14 +15,14 @@ class ImageSourceController extends BaseController
     {
         $data = [
             'name' => input('name'),
-            'type' => input('type', 'local'),
+            'source_type' => input('type', 'local'),
             'url' => input('url'),
-            'username' => input('username'),
-            'password' => input('password'),
-            'path' => input('path'),
+            'auth_username' => input('username'),
+            'auth_password' => input('password'),
+            'protocol' => input('protocol', 'http'),
+            'auth_type' => input('auth_type', 'none'),
+            'sync_interval' => input('sync_interval', 0, 'intval'),
             'status' => self::parseStatus(input('status', 'enabled')),
-            'sort' => input('sort', 0),
-            'description' => input('description'),
         ];
 
         if (empty($data['name'])) {
@@ -41,11 +41,16 @@ class ImageSourceController extends BaseController
         }
 
         $data = [];
-        foreach (['name', 'type', 'url', 'username', 'password', 'path', 'sort', 'description'] as $field) {
+        foreach (['name', 'source_type', 'url', 'auth_username', 'auth_password', 'protocol', 'auth_type', 'sync_interval'] as $field) {
             $val = input($field);
             if ($val !== null) {
                 $data[$field] = $val;
             }
+        }
+        // 兼容旧字段名
+        $typeVal = input('type');
+        if ($typeVal !== null && !isset($data['source_type'])) {
+            $data['source_type'] = $typeVal;
         }
         $statusVal = input('status');
         if ($statusVal !== null) {

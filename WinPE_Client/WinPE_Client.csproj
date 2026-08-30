@@ -6,6 +6,9 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
+    <!-- 仅保留中文和英文语言资源，减小自包含发布体积 -->
+    <SatelliteResourceLanguages>zh-Hans;en</SatelliteResourceLanguages>
+    <Version>0.0.268311</Version>
   </PropertyGroup>
 
   <ItemGroup>

@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 use think\facade\Route;
 
 // Public routes (no auth required)
@@ -18,11 +18,11 @@ Route::group('api/v1', function () {
     Route::get('dashboard', 'admin.Index/index');
 
     // Images
+    Route::get('images/:id', 'admin.Image/detail');
     Route::get('images', 'admin.Image/index');
     Route::post('images', 'admin.Image/create');
     Route::put('images/:id', 'admin.Image/edit');
     Route::delete('images/:id', 'admin.Image/delete');
-    Route::get('images/:id', 'admin.Image/detail');
     Route::post('images/upload', 'admin.Image/upload');
     Route::post('images/uploadComplete', 'admin.Image/uploadComplete');
     Route::post('images/addRemoteUrl', 'admin.Image/addRemoteUrl');
@@ -79,6 +79,10 @@ Route::group('api/v1', function () {
     Route::post('tasks/:id/pause', 'admin.Task/pause');
     Route::post('tasks/:id/resume', 'admin.Task/resume');
     Route::get('tasks/:id/logs', 'admin.Task/logs');
+    Route::post('tasks/:id/progress', 'admin.Task/progress');
+
+    // Devices
+    Route::get('devices/disks', 'admin.Device/disks');
 
     // Task Templates
     Route::get('taskTemplates', 'admin.TaskTemplate/index');
@@ -200,10 +204,10 @@ Route::group('api/v1', function () {
     Route::get('reports/workOrder', 'admin.Report/workOrderReport');
 
     // Notifications
+    Route::get('notifications/unread_count', 'admin.Notification/unreadCount');
     Route::get('notifications', 'admin.Notification/index');
     Route::post('notifications/:id/read', 'admin.Notification/read');
     Route::post('notifications/batchRead', 'admin.Notification/batchRead');
-    Route::get('notifications/unreadCount', 'admin.Notification/unreadCount');
 
     // Scheduled Tasks
     Route::get('scheduledTasks', 'admin.ScheduledTask/index');
@@ -222,9 +226,4 @@ Route::group('api/v1', function () {
     Route::post('recycleBin/:id/restore', 'admin.RecycleBin/restore');
     Route::delete('recycleBin/:id', 'admin.RecycleBin/delete');
     Route::delete('recycleBin', 'admin.RecycleBin/clear');
-})->middleware(\app\middleware\AuthMiddleware::class);
-
-
-
-
-
+})->middleware(app\middleware\AuthMiddleware::class);

@@ -18,7 +18,7 @@ class ImageService
             ->alias("r")
             ->join("zs_image_tags t", "r.tag_id = t.id")
             ->where("r.image_id", $id)
-            ->field("t.id, t.name, t.color, t.type")
+            ->field("t.id, t.name, t.color, t.is_auto")
             ->select()
             ->toArray();
 
@@ -29,10 +29,7 @@ class ImageService
             ->select()
             ->toArray();
 
-        $image["sources"] = Db::name("image_sources")
-            ->where("image_id", $id)
-            ->select()
-            ->toArray();
+        $image["source"] = $image["source_id"] ? Db::name("image_sources")->find($image["source_id"]) : null;
 
         $image["file_size_human"] = self::getFormattedSize($image["file_size"] ?? 0);
         $image["download_count"] = Db::name("download_logs")->where("image_id", $id)->count();
@@ -174,19 +171,10 @@ class ImageService
         $snapshot = [
             "image_id"    => $imageId,
             "version"     => $newVersion,
-            "name"        => $image["name"],
-            "description" => $image["description"],
-            "filename"    => $image["filename"],
-            "file_path"   => $image["file_path"],
-            "file_size"   => $image["file_size"],
-            "sha256"      => $image["sha256"],
-            "format"      => $image["format"],
-            "os_type"     => $image["os_type"],
-            "os_version"  => $image["os_version"],
-            "os_arch"     => $image["os_arch"],
-            "snapshot"    => json_encode($image),
-            "remark"      => $remark,
-            "created_by"  => $image["created_by"] ?? 0,
+            "file_hash"   => $image["file_hash"] ?? "",
+            "file_size"   => $image["file_size"] ?? 0,
+            "change_log"  => $remark ?: "初始版本",
+            "operator_id" => $image["created_by"] ?? 0,
             "created_at"  => date("Y-m-d H:i:s"),
         ];
 
@@ -266,13 +254,14 @@ class ImageService
      */
     public static function getAllTags(): array
     {
-        $tags = Db::name("image_tags")->order("id", "asc")->select()->toArray();
-        foreach ($tags as &$tag) {
-            $tag["image_count"] = Db::name("image_tag_relations")
-                ->where("tag_id", $tag["id"])
-                ->count();
-        }
-        return $tags;
+        return Db::name("image_tags")
+            ->alias("t")
+            ->field("t.*, COUNT(r.id) as image_count")
+            ->join("zs_image_tag_relations r", "r.tag_id = t.id", "LEFT")
+            ->group("t.id")
+            ->order("t.id", "asc")
+            ->select()
+            ->toArray();
     }
 
     /**

@@ -13,25 +13,30 @@ class ClientVersionController extends BaseController
 
     public function create()
     {
-        $data = [
-            'version' => input('version'),
-            'description' => input('description'),
-            'file_url' => input('file_url'),
-            'file_size' => input('file_size', 0),
-            'md5' => input('md5'),
-            'force_update' => input('force_update', 0),
-            'status' => self::parseStatus(input('status', 'enabled')),
-            'created_by' => $this->userId,
-        ];
+        $version = input('version');
+        $fileUrl = input('file_url');
 
-        if (empty($data['version']) || empty($data['file_url'])) {
+        if (empty($version) || empty($fileUrl)) {
             return $this->error('param_error', '版本号和文件URL不能为空');
         }
 
-        $exists = ClientVersion::where('version', $data['version'])->find();
+        $exists = ClientVersion::where('version', $version)->find();
         if ($exists) {
             return $this->error('param_error', '版本号已存在');
         }
+
+        $data = [
+            'version'       => $version,
+            'client_type'   => input('client_type', 'windows'),
+            'file_name'     => input('file_name', basename(parse_url($fileUrl, PHP_URL_PATH))),
+            'file_path'     => $fileUrl,
+            'file_size'     => input('file_size', 0, 'intval'),
+            'file_hash'     => input('md5', ''),
+            'changelog'     => input('description', ''),
+            'is_force_update' => input('force_update', 0, 'intval'),
+            'status'        => self::parseStatus(input('status', 'enabled')),
+            'publish_time'  => date('Y-m-d H:i:s'),
+        ];
 
         $version = ClientVersion::create($data);
         return $this->success($version, '创建成功');
@@ -45,7 +50,7 @@ class ClientVersionController extends BaseController
         }
 
         $data = [];
-        foreach (['version', 'description', 'file_url', 'file_size', 'md5', 'force_update'] as $field) {
+        foreach (['version', 'changelog', 'file_path', 'file_size', 'file_hash', 'is_force_update', 'file_name', 'client_type', 'min_compatible_version'] as $field) {
             $val = input($field);
             if ($val !== null) {
                 $data[$field] = $val;

@@ -2,7 +2,7 @@
 namespace app\controller\admin;
 
 use app\model\Task;
-use app\model\TaskLog;
+use app\model\TaskRecord;
 use think\facade\Db;
 
 class TaskController extends BaseController
@@ -42,7 +42,7 @@ class TaskController extends BaseController
 
     public function detail($id)
     {
-        $task = Task::with(['client', 'logs'])->find($id);
+        $task = Task::with(['client', 'image', 'records'])->find($id);
         if (!$task) {
             return $this->error('task_not_found');
         }
@@ -149,8 +149,43 @@ class TaskController extends BaseController
             return $this->error('task_not_found');
         }
 
-        $query = TaskLog::where('task_id', $id)->order('id', 'asc');
+        $query = TaskRecord::where('task_id', $id)->order('id', 'asc');
         return $this->paginate($query);
+    }
+
+    public function progress($id)
+    {
+        $task = Task::find($id);
+        if (!$task) {
+            return $this->error('task_not_found');
+        }
+        $progress = input('progress/d', 0);
+        $message = input('message', '');
+        $stepName = input('step_name', '');
+        if ($progress < 0 || $progress > 100) {
+            return $this->error('param_error', '进度值必须在0-100之间');
+        }
+        $task->progress = $progress;
+        if ($progress >= 100) {
+            $task->status = 'completed';
+            $task->completed_at = date('Y-m-d H:i:s');
+        } elseif ($task->status === 'pending') {
+            $task->status = 'running';
+            $task->started_at = date('Y-m-d H:i:s');
+        }
+        $task->save();
+        if ($message || $stepName) {
+            TaskRecord::create([
+                'task_id' => $id,
+                'step_name' => $stepName ?: '进度更新',
+                'action' => 'progress',
+                'status' => 'running',
+                'progress' => $progress,
+                'message' => $message,
+                'started_at' => date('Y-m-d H:i:s'),
+            ]);
+        }
+        return $this->success(['progress' => $progress, 'status' => $task->status], '进度已更新');
     }
 
     public function template()

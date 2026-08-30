@@ -15,13 +15,13 @@ class ReportController extends BaseController
         $endDate = input('end_date', date('Y-m-d'));
 
         $dailyStats = Task::whereBetween('created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59'])
-            ->field('DATE(created_at) as date, COUNT(*) as total, SUM(CASE WHEN status = "completed" THEN 1 ELSE 0 END) as success, SUM(CASE WHEN status = "failed" THEN 1 ELSE 0 END) as failed')
+            ->fieldRaw('DATE(created_at) as date, COUNT(*) as total, SUM(CASE WHEN status = "completed" THEN 1 ELSE 0 END) as success, SUM(CASE WHEN status = "failed" THEN 1 ELSE 0 END) as failed')
             ->group('DATE(created_at)')
             ->select()
             ->toArray();
 
         $summary = Task::whereBetween('created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59'])
-            ->field('COUNT(*) as total, SUM(CASE WHEN status = "completed" THEN 1 ELSE 0 END) as success, SUM(CASE WHEN status = "failed" THEN 1 ELSE 0 END) as failed')
+            ->fieldRaw('COUNT(*) as total, SUM(CASE WHEN status = "completed" THEN 1 ELSE 0 END) as success, SUM(CASE WHEN status = "failed" THEN 1 ELSE 0 END) as failed')
             ->find();
 
         return $this->success([
@@ -81,12 +81,12 @@ class ReportController extends BaseController
         $endDate = input('end_date', date('Y-m-d'));
 
         $dailyOrders = Task::whereBetween('created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59'])
-            ->field('DATE(created_at) as date, COUNT(*) as count')
+            ->fieldRaw('DATE(created_at) as date, COUNT(*) as count')
             ->group('DATE(created_at)')
             ->select()
             ->toArray();
 
-        $statusStats = Task::field('status, COUNT(*) as count')
+        $statusStats = Task::fieldRaw('status, COUNT(*) as count')
             ->group('status')
             ->select()
             ->toArray();
@@ -104,19 +104,19 @@ class ReportController extends BaseController
         $startDate = input('start_date', date('Y-m-d', strtotime('-30 days')));
         $endDate = input('end_date', date('Y-m-d'));
 
-        $statusStats = WorkOrder::field('status, COUNT(*) as count')
+        $statusStats = WorkOrder::fieldRaw('status, COUNT(*) as count')
             ->group('status')
             ->select()
             ->toArray();
 
-        $typeStats = WorkOrder::field('type, COUNT(*) as count')
-            ->group('type')
+        $typeStats = WorkOrder::fieldRaw('device_type, COUNT(*) as count')
+            ->group('device_type')
             ->select()
             ->toArray();
 
         $resolution = WorkOrder::where('status', 'completed')
             ->whereBetween('created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59'])
-            ->field('AVG(TIMESTAMPDIFF(HOUR, created_at, updated_at)) as avg_hours')
+            ->fieldRaw('AVG(TIMESTAMPDIFF(HOUR, created_at, updated_at)) as avg_hours')
             ->find();
 
         return $this->success([

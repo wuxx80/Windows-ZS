@@ -64,7 +64,7 @@ class NotificationController extends BaseController
             ->count();
 
         return $this->success([
-            'count' => $count,
+            'unread_count' => $count,
         ]);
     }
 }
