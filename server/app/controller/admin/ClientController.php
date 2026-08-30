@@ -14,7 +14,7 @@ class ClientController extends BaseController
         $groupId = input('group_id');
         $os = input('os');
 
-        $query = Client::order('last_online_time', 'desc');
+        $query = Client::order('last_heartbeat', 'desc');
 
         if ($keyword) {
             $query->where('hostname|ip_address|mac_address|client_id', 'like', '%' . $keyword . '%');
@@ -34,11 +34,14 @@ class ClientController extends BaseController
 
     /**
      * 客户端自注册（WinPE/Windows 客户端连接服务器时调用）
-     * 幂等：client_id 已存在则更新心跳信息并返回已有记录
+     * 幂等策略（按优先级）：
+     *   1. 传入 client_id：按 client_id 匹配，刷新心跳返回已有记录
+     *   2. 未传 client_id 但 mac_address 匹配已有客户端：复用（兼容 WinPE 重启丢失本地 client_id）
+     *   3. 否则创建新客户端
      */
     public function register()
     {
-        $clientCode = input('client_id') ?: Client::generateClientId();
+        $clientCode = input('client_id', '');
         $hostname = input('hostname', '');
         $macAddress = input('mac_address', '');
         $osVersion = input('os_version', '');
@@ -49,11 +52,21 @@ class ClientController extends BaseController
             $clientType = 'winpe';
         }
 
-        // 幂等：已存在则刷新心跳并返回
-        $existing = Client::where('client_id', $clientCode)->find();
+        // 幂等匹配
+        $existing = null;
+        if ($clientCode) {
+            $existing = Client::where('client_id', $clientCode)->find();
+        }
+        if (!$existing && $macAddress && $macAddress !== '00-00-00-00-00-00') {
+            $existing = Client::where('mac_address', $macAddress)->order('id', 'asc')->find();
+        }
+
         if ($existing) {
             $existing->last_heartbeat = date('Y-m-d H:i:s');
             $existing->last_ip = request()->ip();
+            if ($hostname) { $existing->hostname = $hostname; }
+            if ($osVersion) { $existing->os_version = $osVersion; }
+            if ($clientVersion) { $existing->client_version = $clientVersion; }
             $existing->save();
             return $this->success([
                 'id' => $existing->id,
@@ -67,7 +80,7 @@ class ClientController extends BaseController
         }
 
         $client = Client::create([
-            'client_id' => $clientCode,
+            'client_id' => $clientCode ?: Client::generateClientId(),
             'name' => input('name') ?: $hostname,
             'mac_address' => $macAddress ?: '00-00-00-00-00-00',
             'hostname' => $hostname,

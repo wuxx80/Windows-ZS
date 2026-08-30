@@ -38,4 +38,33 @@ namespace WinPE_Client.Models
         [JsonPropertyName("pages")]
         public int Pages { get; set; }
     }
+
+    /// <summary>客户端自注册返回：服务端数据库 ID 与客户端唯一编号</summary>
+    public class ClientInfo
+    {
+        [JsonPropertyName("id")]
+        public int Id { get; set; }
+
+        [JsonPropertyName("client_id")]
+        public string ClientId { get; set; } = "";
+
+        [JsonPropertyName("status")]
+        public string Status { get; set; } = "";
+    }
+
+    /// <summary>装机任务信息：创建任务 / 进度上报返回</summary>
+    public class TaskInfo
+    {
+        [JsonPropertyName("id")]
+        public int Id { get; set; }
+
+        [JsonPropertyName("task_no")]
+        public string TaskNo { get; set; } = "";
+
+        [JsonPropertyName("status")]
+        public string Status { get; set; } = "";
+
+        [JsonPropertyName("progress")]
+        public int Progress { get; set; }
+    }
 }

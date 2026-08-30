@@ -12,6 +12,7 @@ D:\Users\Desktop\Windows-ZS\
 ├── 开发计划表.md                       # 详细开发计划（第六件套）
 ├── ZS_Installer.sln                    # .NET 解决方案文件
 ├── publish.ps1                         # 客户端发布脚本（WinPE/Windows）
+├── deploy_server.ps1                   # 服务器端部署包制作脚本（生成 zs_server_deploy.zip）
 │
 ├── 设计文档\                           # 设计文档目录
 │   ├── 详细设计文档.md                 # 系统架构/数据库/API/目录结构
@@ -23,7 +24,12 @@ D:\Users\Desktop\Windows-ZS\
 │
 ├── server\                             # PHP 后端项目（ThinkPHP 6）
 │   ├── .env                            # 环境配置（数据库连接等）
+│   ├── .env.example                    # 环境配置模板
 │   ├── composer.json                   # Composer 依赖配置
+│   ├── composer.lock                   # 依赖锁文件
+│   ├── think                           # ThinkPHP CLI 入口
+│   ├── e2e_winpe_test.php              # 端到端回归测试脚本（WinPE/Windows 客户端流程）
+│   ├── api_test.php                    # API 测试脚本
 │   ├── thinkphp.nginx.rewrite.conf     # 独立伪静态规则文件
 │   │
 │   ├── app\                            # 应用目录
@@ -40,7 +46,7 @@ D:\Users\Desktop\Windows-ZS\
 │   │   │   ├── TaskController.php      # 任务管理（含进度更新）
 │   │   │   ├── TaskTemplateController.php # 任务模板
 │   │   │   ├── UnattendController.php  # 无人值守模板
-│   │   │   ├── ClientController.php    # 客户端管理
+│   │   │   ├── ClientController.php    # 客户端管理（含自注册 register，幂等）
 │   │   │   ├── ClientGroupController.php # 客户端分组
 │   │   │   ├── ClientVersionController.php # 客户端版本
 │   │   │   ├── SoftwareController.php  # 软件管理

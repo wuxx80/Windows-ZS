@@ -83,5 +83,60 @@ namespace Windows_Client.Services
 
         public async Task<ApiResponse<List<DiskInfo>>> GetDiskInfoAsync()
             => await GetAsync<List<DiskInfo>>("/api/v1/devices/disks");
+
+        /// <summary>
+        /// 客户端自注册（幂等）：首次注册由服务端生成 client_id；
+        /// 再次调用时传入已有 clientId，服务端仅刷新心跳并返回已有记录。
+        /// </summary>
+        public async Task<ApiResponse<ClientInfo>> RegisterClientAsync(
+            string hostname, string macAddress, string osVersion,
+            string clientType = "windows", string? clientId = null)
+        {
+            var data = new Dictionary<string, object?>
+            {
+                ["hostname"] = hostname,
+                ["mac_address"] = macAddress,
+                ["os_version"] = osVersion,
+                ["client_version"] = "0.0.268311",
+                ["client_type"] = clientType,
+            };
+            if (!string.IsNullOrEmpty(clientId))
+                data["client_id"] = clientId;
+
+            return await PostAsync<ClientInfo>("/api/v1/clients/register", data);
+        }
+
+        /// <summary>创建装机任务</summary>
+        public async Task<ApiResponse<TaskInfo>> CreateTaskAsync(
+            int imageId, int? clientId = null, int targetDiskIndex = 0,
+            string targetPartition = "C:", string partitionScheme = "auto",
+            string? optionsJson = null)
+        {
+            var data = new Dictionary<string, object?>
+            {
+                ["image_id"] = imageId,
+                ["client_id"] = clientId,
+                ["target_disk_index"] = targetDiskIndex,
+                ["target_partition"] = targetPartition,
+                ["partition_scheme"] = partitionScheme,
+            };
+            if (!string.IsNullOrEmpty(optionsJson))
+                data["options"] = optionsJson;
+
+            return await PostAsync<TaskInfo>("/api/v1/tasks", data);
+        }
+
+        /// <summary>上报任务进度（支持状态闭环：running/completed/failed）</summary>
+        public async Task<ApiResponse<object>> ReportProgressAsync(
+            int taskId, int progress, string? message = null, string? stepName = null, string? status = null)
+        {
+            return await PostAsync<object>("/api/v1/tasks/" + taskId + "/progress", new
+            {
+                progress,
+                message,
+                step_name = stepName,
+                status
+            });
+        }
     }
 }

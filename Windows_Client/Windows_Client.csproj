@@ -8,7 +8,8 @@
     <UseWPF>true</UseWPF>
     <!-- 仅保留中文和英文语言资源 -->
     <SatelliteResourceLanguages>zh-Hans;en</SatelliteResourceLanguages>
-    <Version>0.0.268311</Version>
+    <!-- .NET 程序集版本要求各段 0-65534，268311 拆分为 268.311，语义对应项目版本 0.0.268311 -->
+    <Version>0.0.268.311</Version>
   </PropertyGroup>
 
   <ItemGroup>

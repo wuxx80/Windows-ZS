@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
@@ -237,11 +237,11 @@ function renderClients(data) {
       '<td>' + esc(item.id) + '</td>' +
       '<td><div class="client-id-cell" title="' + esc(item.client_id) + '">' + esc(item.client_id) + '</div></td>' +
       '<td><a href="javascript:void(0)" class="hostname-link" onclick="showDetail(' + item.id + ')">' + esc(item.hostname || '-') + '</a></td>' +
-      '<td><span class="ip-cell">' + esc(item.ip_address || '-') + '</span></td>' +
+      '<td><span class="ip-cell">' + esc(item.last_ip || '-') + '</span></td>' +
       '<td><span class="mac-cell">' + esc(item.mac_address || '-') + '</span></td>' +
       '<td>' + esc(osLabel) + osVersion + '</td>' +
       '<td>' + statusHtml + '</td>' +
-      '<td><span class="last-online-cell">' + fmtDate(item.last_online_time) + '</span></td>' +
+      '<td><span class="last-online-cell">' + fmtDate(item.last_heartbeat) + '</span></td>' +
       '<td><div class="actions-cell">' + actionsHtml + '</div></td>' +
       '</tr>';
   }
@@ -515,13 +515,13 @@ function renderDetail(data) {
   html += '<div class="detail-item"><div class="dt-label">ID</div><div class="dt-value">' + esc(client.id) + '</div></div>';
   html += '<div class="detail-item"><div class="dt-label">客户端标识</div><div class="dt-value" style="font-size:12px;font-family:monospace;">' + esc(client.client_id) + '</div></div>';
   html += '<div class="detail-item"><div class="dt-label">主机名</div><div class="dt-value">' + esc(client.hostname || '-') + '</div></div>';
-  html += '<div class="detail-item"><div class="dt-label">IP地址</div><div class="dt-value">' + esc(client.ip_address || '-') + '</div></div>';
+  html += '<div class="detail-item"><div class="dt-label">IP地址</div><div class="dt-value">' + esc(client.last_ip || '-') + '</div></div>';
   html += '<div class="detail-item"><div class="dt-label">MAC地址</div><div class="dt-value" style="font-size:12px;font-family:monospace;">' + esc(client.mac_address || '-') + '</div></div>';
   html += '<div class="detail-item"><div class="dt-label">操作系统</div><div class="dt-value">' + esc((osLabelMap[client.os] || client.os || '-')) + (client.os_version ? ' ' + esc(client.os_version) : '') + '</div></div>';
   html += '<div class="detail-item"><div class="dt-label">状态</div><div class="dt-value">' + buildStatusBadge(client.status) + '</div></div>';
   html += '<div class="detail-item"><div class="dt-label">分组ID</div><div class="dt-value">' + esc(client.group_id || '-') + '</div></div>';
   html += '<div class="detail-item"><div class="dt-label">备注</div><div class="dt-value">' + esc(client.remark || '-') + '</div></div>';
-  html += '<div class="detail-item"><div class="dt-label">最后在线时间</div><div class="dt-value">' + fmtDate(client.last_online_time) + '</div></div>';
+  html += '<div class="detail-item"><div class="dt-label">最后在线时间</div><div class="dt-value">' + fmtDate(client.last_heartbeat) + '</div></div>';
   html += '<div class="detail-item"><div class="dt-label">创建时间</div><div class="dt-value">' + fmtDate(client.created_at) + '</div></div>';
   html += '</div></div>';
 

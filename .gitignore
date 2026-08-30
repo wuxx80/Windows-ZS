@@ -41,10 +41,13 @@ server/runtime/
 
 # Temp scripts
 *.ps1
+!publish.ps1
+!deploy_server.ps1
 temp_hash.php
 # Publish output
 publish/
 !publish.ps1
+zs_server_deploy.zip
 
 # Build output
 bin/

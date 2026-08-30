@@ -214,7 +214,14 @@
                             <CheckBox IsChecked="{Binding AutoRepairBoot}" Content="自动修复引导" Margin="0,0,0,8"/>
                         </StackPanel>
                     </Border>
-                    <Button Content="开始安装" Style="{StaticResource ActionButton}" Height="44" FontSize="16" HorizontalAlignment="Center" Width="200"/>
+                    <Border Background="White" CornerRadius="8" Padding="20" Margin="0,0,0,15">
+                        <StackPanel>
+                            <TextBlock Text="任务进度" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,10"/>
+                            <ProgressBar Value="{Binding ProgressValue}" Maximum="100" Height="8" Margin="0,0,0,6"/>
+                            <TextBlock Text="{Binding StatusMessage}" FontSize="12" Foreground="#666"/>
+                        </StackPanel>
+                    </Border>
+                    <Button Content="开始安装" Style="{StaticResource ActionButton}" Height="44" FontSize="16" HorizontalAlignment="Center" Width="200" Command="{Binding StartInstallCommand}" IsEnabled="{Binding CanStartInstall}"/>
                 </StackPanel>
 
                 <!-- USB View -->

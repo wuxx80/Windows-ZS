@@ -1,12 +1,54 @@
 using System;
 using System.Management;
 using System.Collections.Generic;
+using System.Linq;
+using System.Net.NetworkInformation;
 using WinPE_Client.Models;
 
 namespace WinPE_Client.Services
 {
     public class DeviceService
     {
+        /// <summary>主机名（注册客户端使用）</summary>
+        public string GetHostname() => Environment.MachineName;
+
+        /// <summary>首选 MAC 地址（注册客户端使用，取第一个非虚拟网卡）</summary>
+        public string GetMacAddress()
+        {
+            try
+            {
+                var nic = NetworkInterface.GetAllNetworkInterfaces()
+                    .Where(n => n.NetworkInterfaceType != NetworkInterfaceType.Loopback
+                        && n.OperationalStatus == OperationalStatus.Up
+                        && n.GetPhysicalAddress().GetAddressBytes().Length > 0)
+                    .Select(n => n.GetPhysicalAddress().ToString())
+                    .FirstOrDefault();
+                if (nic == null)
+                {
+                    var any = NetworkInterface.GetAllNetworkInterfaces()
+                        .FirstOrDefault(n => n.GetPhysicalAddress().GetAddressBytes().Length > 0);
+                    nic = any?.GetPhysicalAddress().ToString() ?? "";
+                }
+                return FormatMac(nic);
+            }
+            catch { return ""; }
+        }
+
+        /// <summary>操作系统版本（注册客户端使用）</summary>
+        public string GetOsVersion()
+        {
+            try { return Environment.OSVersion.VersionString; }
+            catch { return "Unknown"; }
+        }
+
+        private static string FormatMac(string mac)
+        {
+            if (string.IsNullOrEmpty(mac)) return "00-00-00-00-00-00";
+            var hex = mac.Replace("-", "").Replace(":", "");
+            return string.Join("-", Enumerable.Range(0, 6)
+                .Select(i => hex.Substring(i * 2, 2)).ToArray());
+        }
+
         public List<DiskInfo> GetDiskInfo()
         {
             var disks = new List<DiskInfo>();

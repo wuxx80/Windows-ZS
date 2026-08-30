@@ -17,6 +17,13 @@ namespace WinPE_Client.ViewModels
         private readonly ImageDeployService _deploy;
         private readonly DiskPartService _diskPart;
 
+        // 客户端注册信息（连接服务器后填充）
+        private string _clientId = "";
+        private int _serverClientId;
+
+        // 当前装机任务（创建后保存，用于进度上报）
+        private int _taskId;
+
         public MainViewModel()
         {
             _api = new ApiService();
@@ -160,12 +167,38 @@ namespace WinPE_Client.ViewModels
                 _api.SetToken(token);
                 IsConnected = true;
                 StatusMessage = "已连接到服务器";
+                await RegisterClient();
                 await RefreshImages();
                 await RefreshDisks();
             }
             else
             {
                 StatusMessage = "连接失败: " + result.Message;
+            }
+        }
+
+        /// <summary>客户端自注册：连接服务器后调用；已有 client_id 时复用（幂等）</summary>
+        private async Task RegisterClient()
+        {
+            try
+            {
+                var reg = await _api.RegisterClientAsync(
+                    _device.GetHostname(), _device.GetMacAddress(), _device.GetOsVersion(),
+                    "winpe", string.IsNullOrEmpty(_clientId) ? null : _clientId);
+                if (reg.IsSuccess && reg.Data != null)
+                {
+                    _clientId = reg.Data.ClientId;
+                    _serverClientId = reg.Data.Id;
+                    StatusMessage = "已注册客户端: " + _clientId;
+                }
+                else
+                {
+                    StatusMessage = "客户端注册失败: " + reg.Message;
+                }
+            }
+            catch (Exception ex)
+            {
+                StatusMessage = "客户端注册异常: " + ex.Message;
             }
         }
 
@@ -197,12 +230,36 @@ namespace WinPE_Client.ViewModels
             IsInstalling = true;
             StatusMessage = "开始装机...";
             ProgressValue = 0;
+            _taskId = 0;
 
             try
             {
+                // 1. 创建装机任务（服务端记录，客户端后续上报进度）
+                StatusMessage = "正在创建装机任务...";
+                var taskResult = await _api.CreateTaskAsync(
+                    imageId: SelectedImage.Id,
+                    clientId: _serverClientId > 0 ? _serverClientId : (int?)null,
+                    targetDiskIndex: SelectedDisk.Index,
+                    targetPartition: "C:",
+                    partitionScheme: AutoPartition ? "auto" : "keep",
+                    optionsJson: System.Text.Json.JsonSerializer.Serialize(new
+                    {
+                        auto_partition = AutoPartition,
+                        auto_repair_boot = AutoRepairBoot,
+                        auto_inject_drivers = AutoInjectDrivers,
+                        image_index = 1
+                    }));
+                if (!taskResult.IsSuccess || taskResult.Data == null)
+                {
+                    StatusMessage = "创建任务失败: " + taskResult.Message;
+                    IsInstalling = false;
+                    return;
+                }
+                _taskId = taskResult.Data.Id;
+
                 if (AutoPartition)
                 {
-                    StatusMessage = "正在分区...";
+                    await ReportProgress(5, "正在分区...", "分区", "running");
                     var op = new PartitionOperation
                     {
                         Operation = "create",
@@ -215,41 +272,62 @@ namespace WinPE_Client.ViewModels
                     if (!partResult)
                     {
                         StatusMessage = "分区失败，中止装机";
+                        await ReportProgress(0, "分区失败，中止装机", "分区", "failed");
                         IsInstalling = false;
                         return;
                     }
                 }
 
+                await ReportProgress(20, "正在部署镜像...", "部署镜像", "running");
                 var deployResult = await _deploy.DeployWimImage(
                     SelectedImage.FilePath, 1, "C:", false);
 
                 if (!deployResult)
                 {
                     StatusMessage = "镜像部署失败";
+                    await ReportProgress(0, "镜像部署失败", "部署镜像", "failed");
                     IsInstalling = false;
                     return;
                 }
 
                 if (AutoRepairBoot)
                 {
+                    await ReportProgress(80, "正在修复引导...", "修复引导", "running");
                     await _deploy.RepairBoot("C:");
                 }
 
                 if (AutoInjectDrivers && !string.IsNullOrEmpty(DriverPath))
                 {
+                    await ReportProgress(90, "正在注入驱动...", "注入驱动", "running");
                     await _deploy.InjectDrivers("C:", DriverPath);
                 }
 
                 ProgressValue = 100;
                 StatusMessage = "装机完成！";
+                await ReportProgress(100, "装机完成", "完成", "completed");
             }
             catch (Exception ex)
             {
                 StatusMessage = "装机失败: " + ex.Message;
+                await ReportProgress(0, "装机失败: " + ex.Message, "异常", "failed");
             }
             finally
             {
                 IsInstalling = false;
+            }
+        }
+
+        /// <summary>上报任务进度（任务未创建成功时静默跳过）</summary>
+        private async Task ReportProgress(int progress, string? message, string? stepName, string? status)
+        {
+            if (_taskId <= 0) return;
+            try
+            {
+                await _api.ReportProgressAsync(_taskId, progress, message, stepName, status);
+            }
+            catch
+            {
+                // 进度上报失败不影响装机主流程
             }
         }
 
