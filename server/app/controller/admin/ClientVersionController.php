@@ -20,7 +20,7 @@ class ClientVersionController extends BaseController
             'file_size' => input('file_size', 0),
             'md5' => input('md5'),
             'force_update' => input('force_update', 0),
-            'status' => input('status', 0),
+            'status' => self::parseStatus(input('status', 'enabled')),
             'created_by' => $this->userId,
         ];
 
@@ -45,11 +45,15 @@ class ClientVersionController extends BaseController
         }
 
         $data = [];
-        foreach (['version', 'description', 'file_url', 'file_size', 'md5', 'force_update', 'status'] as $field) {
+        foreach (['version', 'description', 'file_url', 'file_size', 'md5', 'force_update'] as $field) {
             $val = input($field);
             if ($val !== null) {
                 $data[$field] = $val;
             }
+        }
+        $statusVal = input('status');
+        if ($statusVal !== null) {
+            $data['status'] = self::parseStatus($statusVal);
         }
 
         $version->save($data);

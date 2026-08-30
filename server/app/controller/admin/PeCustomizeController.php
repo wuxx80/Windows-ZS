@@ -28,7 +28,7 @@ class PeCustomizeController extends BaseController
             'include_scripts' => input('include_scripts/a', []),
             'wallpaper' => input('wallpaper'),
             'boot_logo' => input('boot_logo'),
-            'status' => input('status', 0),
+            'status' => self::parseStatus(input('status', 'enabled')),
             'created_by' => $this->userId,
         ];
 
@@ -48,11 +48,15 @@ class PeCustomizeController extends BaseController
         }
 
         $data = [];
-        foreach (['name', 'description', 'pe_version_id', 'config', 'include_drivers', 'include_software', 'include_scripts', 'wallpaper', 'boot_logo', 'status'] as $field) {
+        foreach (['name', 'description', 'pe_version_id', 'config', 'include_drivers', 'include_software', 'include_scripts', 'wallpaper', 'boot_logo'] as $field) {
             $val = input($field);
             if ($val !== null) {
                 $data[$field] = $val;
             }
+        }
+        $statusVal = input('status');
+        if ($statusVal !== null) {
+            $data['status'] = self::parseStatus($statusVal);
         }
 
         $customize->save($data);

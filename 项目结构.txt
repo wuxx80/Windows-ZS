@@ -1,6 +1,6 @@
-## 项目结构
+﻿## 项目结构
 
-```
+`
 D:\Users\Desktop\Windows-ZS\
 │
 ├── .gitignore                          # Git 忽略规则
@@ -28,7 +28,7 @@ D:\Users\Desktop\Windows-ZS\
 │   │   ├── common.php                  # 公共函数
 │   │   ├── BaseController.php          # 基础控制器
 │   │   │
-│   │   ├── controller\admin\           # 后台控制器（30个）
+│   │   ├── controller\admin\           # 后台控制器（31个）
 │   │   │   ├── AuthController.php      # 认证（登录/退出/改密）
 │   │   │   ├── IndexController.php     # 控制台仪表盘
 │   │   │   ├── ImageController.php     # 镜像管理
@@ -51,7 +51,7 @@ D:\Users\Desktop\Windows-ZS\
 │   │   │   ├── NetworkDeployController.php # 网络部署
 │   │   │   ├── CustomerController.php  # 客户管理
 │   │   │   ├── WorkOrderController.php # 工单管理
-│   │   │   ├── UserController.php      # 用户管理
+│   │   │   ├── UserController.php      # 用户管理（新增）
 │   │   │   ├── RoleController.php      # 角色权限
 │   │   │   ├── SettingController.php   # 系统设置
 │   │   │   ├── LogController.php       # 操作日志
@@ -82,9 +82,9 @@ D:\Users\Desktop\Windows-ZS\
 │   │   │
 │   │   ├── service\                    # 服务层（8个）
 │   │   │   ├── AuthService.php         # 认证服务
-│   │   │   ├── ImageService.php        # 镜像服务
+│   │   │   ├── ImageService.php        # 镜像服务（完整业务逻辑）
 │   │   │   ├── TaskService.php         # 任务服务
-│   │   │   ├── FileService.php         # 文件服务
+│   │   │   ├── FileService.php         # 文件服务（分片上传/断点续传/下载限速）
 │   │   │   ├── CacheService.php        # 缓存服务
 │   │   │   ├── NotificationService.php # 通知服务
 │   │   │   ├── BackupService.php       # 备份服务
@@ -166,7 +166,7 @@ D:\Users\Desktop\Windows-ZS\
 │       └── cache\                      # 缓存文件
 │
 └── 360截图20260830185410947.jpg        # 界面参考截图
-```
+`
 
 ## 数据库表结构（35 张表）
 

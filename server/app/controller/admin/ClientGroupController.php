@@ -17,7 +17,7 @@ class ClientGroupController extends BaseController
             'name' => input('name'),
             'description' => input('description'),
             'sort' => input('sort', 0),
-            'status' => input('status', 1),
+            'status' => self::parseStatus(input('status', 'enabled')),
         ];
 
         if (empty($data['name'])) {
@@ -36,11 +36,15 @@ class ClientGroupController extends BaseController
         }
 
         $data = [];
-        foreach (['name', 'description', 'sort', 'status'] as $field) {
+        foreach (['name', 'description', 'sort'] as $field) {
             $val = input($field);
             if ($val !== null) {
                 $data[$field] = $val;
             }
+        }
+        $statusVal = input('status');
+        if ($statusVal !== null) {
+            $data['status'] = self::parseStatus($statusVal);
         }
 
         $group->save($data);

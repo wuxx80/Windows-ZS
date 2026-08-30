@@ -31,7 +31,7 @@ class CustomerController extends BaseController
             'email' => input('email'),
             'address' => input('address'),
             'remark' => input('remark'),
-            'status' => input('status', 1),
+            'status' => self::parseStatus(input('status', 'enabled')),
             'created_by' => $this->userId,
         ];
 
@@ -51,11 +51,15 @@ class CustomerController extends BaseController
         }
 
         $data = [];
-        foreach (['name', 'company', 'phone', 'email', 'address', 'remark', 'status'] as $field) {
+        foreach (['name', 'company', 'phone', 'email', 'address', 'remark'] as $field) {
             $val = input($field);
             if ($val !== null) {
                 $data[$field] = $val;
             }
+        }
+        $statusVal = input('status');
+        if ($statusVal !== null) {
+            $data['status'] = self::parseStatus($statusVal);
         }
 
         $customer->save($data);

@@ -159,6 +159,13 @@ Route::group('api/v1', function () {
     Route::post('networkDeploys/:id/start', 'admin.NetworkDeploy/start');
     Route::get('networkDeploys/:id/report', 'admin.NetworkDeploy/report');
 
+    // Users
+    Route::get('users/:id', 'admin.User/detail');
+    Route::get('users', 'admin.User/index');
+    Route::post('users', 'admin.User/create');
+    Route::put('users/:id', 'admin.User/edit');
+    Route::delete('users/:id', 'admin.User/delete');
+
     // Customers
     Route::get('customers', 'admin.Customer/index');
     Route::post('customers', 'admin.Customer/create');
@@ -216,4 +223,8 @@ Route::group('api/v1', function () {
     Route::delete('recycleBin/:id', 'admin.RecycleBin/delete');
     Route::delete('recycleBin', 'admin.RecycleBin/clear');
 })->middleware(\app\middleware\AuthMiddleware::class);
+
+
+
+
 

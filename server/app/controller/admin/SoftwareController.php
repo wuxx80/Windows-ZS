@@ -21,7 +21,7 @@ class SoftwareController extends BaseController
             $query->where('category_id', $categoryId);
         }
         if ($status !== null && $status !== '') {
-            $query->where('status', $status);
+            $query->where('status', self::parseStatus($status));
         }
 
         return $this->paginate($query);
@@ -41,7 +41,7 @@ class SoftwareController extends BaseController
             'silent_install' => input('silent_install', 1),
             'os_support' => input('os_support'),
             'arch_support' => input('arch_support', 'x64'),
-            'status' => input('status', 1),
+            'status' => self::parseStatus(input('status', 'enabled')),
             'sort' => input('sort', 0),
             'created_by' => $this->userId,
         ];
@@ -62,11 +62,15 @@ class SoftwareController extends BaseController
         }
 
         $data = [];
-        foreach (['name', 'category_id', 'description', 'version', 'publisher', 'file_url', 'file_size', 'install_params', 'silent_install', 'os_support', 'arch_support', 'status', 'sort'] as $field) {
+        foreach (['name', 'category_id', 'description', 'version', 'publisher', 'file_url', 'file_size', 'install_params', 'silent_install', 'os_support', 'arch_support', 'sort'] as $field) {
             $val = input($field);
             if ($val !== null) {
                 $data[$field] = $val;
             }
+        }
+        $statusVal = input('status');
+        if ($statusVal !== null) {
+            $data['status'] = self::parseStatus($statusVal);
         }
 
         $software->save($data);

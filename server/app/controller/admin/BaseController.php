@@ -61,10 +61,18 @@ class BaseController extends Base
         return json($status);
     }
 
+    protected static function parseStatus($val, int $default = 1): int
+    {
+        if ($val === null || $val === "") return $default;
+        if ($val === "enabled" || $val === "active" || $val === "1") return 1;
+        if ($val === "disabled" || $val === "inactive" || $val === "0") return 0;
+        return intval($val) ? 1 : 0;
+    }
+
     protected function paginate($query)
     {
         $page = input("page", 1);
-        $limit = input("limit", 20);
+        $limit = input("limit", input("pageSize", 20));
         $list = $query->paginate($limit, false, ["page" => $page]);
         return $this->success([
             "list" => $list->items(),

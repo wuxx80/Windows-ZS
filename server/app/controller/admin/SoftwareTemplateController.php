@@ -22,7 +22,7 @@ class SoftwareTemplateController extends BaseController
             'description' => input('description'),
             'software_ids' => input('software_ids/a', []),
             'is_default' => input('is_default', 0),
-            'status' => input('status', 1),
+            'status' => self::parseStatus(input('status', 'enabled')),
             'created_by' => $this->userId,
         ];
 
@@ -42,11 +42,15 @@ class SoftwareTemplateController extends BaseController
         }
 
         $data = [];
-        foreach (['name', 'description', 'software_ids', 'is_default', 'status'] as $field) {
+        foreach (['name', 'description', 'software_ids', 'is_default'] as $field) {
             $val = input($field);
             if ($val !== null) {
                 $data[$field] = $val;
             }
+        }
+        $statusVal = input('status');
+        if ($statusVal !== null) {
+            $data['status'] = self::parseStatus($statusVal);
         }
 
         $template->save($data);

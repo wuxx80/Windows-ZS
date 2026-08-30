@@ -19,7 +19,7 @@ class SoftwareCategoryController extends BaseController
             'description' => input('description'),
             'icon' => input('icon'),
             'sort_order' => input('sort_order', 0),
-            'status' => input('status', 1),
+            'status' => self::parseStatus(input('status', 'enabled')),
         ];
 
         if (empty($data['name'])) {
@@ -38,11 +38,15 @@ class SoftwareCategoryController extends BaseController
         }
 
         $data = [];
-        foreach (['name', 'parent_id', 'description', 'icon', 'sort_order', 'status'] as $field) {
+        foreach (['name', 'parent_id', 'description', 'icon', 'sort_order'] as $field) {
             $val = input($field);
             if ($val !== null) {
                 $data[$field] = $val;
             }
+        }
+        $statusVal = input('status');
+        if ($statusVal !== null) {
+            $data['status'] = self::parseStatus($statusVal);
         }
 
         $category->save($data);

@@ -38,7 +38,7 @@ class DriverController extends BaseController
             'file_size' => input('file_size', 0),
             'os_support' => input('os_support'),
             'arch_support' => input('arch_support', 'x64'),
-            'status' => input('status', 1),
+            'status' => self::parseStatus(input('status', 'enabled')),
             'created_by' => $this->userId,
         ];
 
@@ -58,11 +58,15 @@ class DriverController extends BaseController
         }
 
         $data = [];
-        foreach (['name', 'description', 'device_type', 'publisher', 'version', 'file_url', 'file_size', 'os_support', 'arch_support', 'status'] as $field) {
+        foreach (['name', 'description', 'device_type', 'publisher', 'version', 'file_url', 'file_size', 'os_support', 'arch_support'] as $field) {
             $val = input($field);
             if ($val !== null) {
                 $data[$field] = $val;
             }
+        }
+        $statusVal = input('status');
+        if ($statusVal !== null) {
+            $data['status'] = self::parseStatus($statusVal);
         }
 
         $driver->save($data);

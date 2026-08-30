@@ -1,4 +1,4 @@
-# ZS 装机助手
+﻿# ZS 装机助手
 
 > 全栈 Windows 装机解决方案 —— Web 管理后台 + WinPE/Windows 客户端
 
@@ -43,7 +43,7 @@ ZS 装机助手是一套完整的 Windows 系统安装与维护解决方案，�
 
 ## 项目状态
 
-当前版本：v2.1.0（管理后台前端开发完成）
+当前版本：v1.7.0（核心业务逻辑开发完成）
 
 | 阶段 | 状态 |
 |------|------|
@@ -52,7 +52,7 @@ ZS 装机助手是一套完整的 Windows 系统安装与维护解决方案，�
 | 数据库 | ✅ 已完成 |
 | API 认证 | ✅ 已验证 |
 | 后台前端 | ✅ 已完成（29个管理页面） |
-| 核心业务逻辑 | ⏳ 待开发 |
+| 核心业务逻辑 | ✅ 已完成（浏览器全量测试验证） |
 | WinPE 客户端 | ⏳ 待开发 |
 | Windows 客户端 | ⏳ 待开发 |
 | 联调部署 | ⏳ 待开发 |
@@ -70,7 +70,7 @@ ZS 装机助手是一套完整的 Windows 系统安装与维护解决方案，�
 
 ## 目录结构
 
-```
+`
 Windows-ZS/
 ├── .gitignore
 ├── README.md
@@ -87,7 +87,7 @@ Windows-ZS/
 │   └── install.sql                  ← 35张表建表SQL
 ├── server/                          ← PHP 后端项目
 │   ├── app/
-│   │   ├── controller/admin/        ← 30个后台控制器
+│   │   ├── controller/admin/        ← 31个后台控制器
 │   │   ├── model/                   ← 36个数据模型
 │   │   ├── service/                 ← 8个服务层
 │   │   ├── middleware/              ← 3个中间件
@@ -112,7 +112,7 @@ Windows-ZS/
 │   ├── composer.json
 │   └── thinkphp.nginx.rewrite.conf  ← 独立伪静态规则
 └── 360截图20260830185410947.jpg
-```
+`
 
 ## 快速开始
 
@@ -126,33 +126,34 @@ Windows-ZS/
 ### 2. 配置伪静态（宝塔面板）
 进入 宝塔面板 → 网站 → 设置 → 伪静态 → 选择"自定义规则"，粘贴以下内容：
 
-```nginx
+`
+ginx
 location / {
     if (!-e $request_filename) {
         rewrite ^(.*)$ /index.php?s=$1 last;
         break;
     }
 }
-```
+`
 
-或者直接使用项目中的 `server/thinkphp.nginx.rewrite.conf` 文件内容。
+或者直接使用项目中的 server/thinkphp.nginx.rewrite.conf 文件内容。
 
 ### 3. 导入数据库
-```sql
+`sql
 source /path/to/database/install.sql;
-```
+`
 
 ### 4. 配置环境
-复制 `.env.example` 为 `.env`，修改数据库连接信息。
+复制 .env.example 为 .env，修改数据库连接信息。
 
 ### 5. 安装依赖
-```bash
+`ash
 cd server
 composer install
-```
+`
 
 ### 6. 访问后台
-浏览器访问 `http://你的域名/admin/login.html`
+浏览器访问 http://你的域名/admin/login.html
 
 ## 默认管理员
 - 用户名：admin

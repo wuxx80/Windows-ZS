@@ -24,7 +24,7 @@ class PeVersionController extends BaseController
             'file_url' => input('file_url'),
             'file_size' => input('file_size', 0),
             'md5' => input('md5'),
-            'status' => input('status', 0),
+            'status' => self::parseStatus(input('status', 'enabled')),
             'created_by' => $this->userId,
         ];
 
@@ -44,11 +44,15 @@ class PeVersionController extends BaseController
         }
 
         $data = [];
-        foreach (['name', 'version', 'description', 'file_url', 'file_size', 'md5', 'status'] as $field) {
+        foreach (['name', 'version', 'description', 'file_url', 'file_size', 'md5'] as $field) {
             $val = input($field);
             if ($val !== null) {
                 $data[$field] = $val;
             }
+        }
+        $statusVal = input('status');
+        if ($statusVal !== null) {
+            $data['status'] = self::parseStatus($statusVal);
         }
 
         $pe->save($data);

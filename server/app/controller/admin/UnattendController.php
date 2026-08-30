@@ -31,7 +31,7 @@ class UnattendController extends BaseController
             'os_version' => input('os_version'),
             'content' => input('content'),
             'params' => input('params/a', []),
-            'status' => input('status', 1),
+            'status' => self::parseStatus(input('status', 'enabled')),
             'created_by' => $this->userId,
         ];
 
@@ -51,11 +51,15 @@ class UnattendController extends BaseController
         }
 
         $data = [];
-        foreach (['name', 'description', 'os_type', 'os_version', 'content', 'params', 'status'] as $field) {
+        foreach (['name', 'description', 'os_type', 'os_version', 'content', 'params'] as $field) {
             $val = input($field);
             if ($val !== null) {
                 $data[$field] = $val;
             }
+        }
+        $statusVal = input('status');
+        if ($statusVal !== null) {
+            $data['status'] = self::parseStatus($statusVal);
         }
 
         $template->save($data);

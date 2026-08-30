@@ -32,7 +32,7 @@ class ScriptController extends BaseController
             'params' => input('params/a', []),
             'timeout' => input('timeout', 300),
             'run_as' => input('run_as', 'system'),
-            'status' => input('status', 1),
+            'status' => self::parseStatus(input('status', 'enabled')),
             'created_by' => $this->userId,
         ];
 
@@ -52,11 +52,15 @@ class ScriptController extends BaseController
         }
 
         $data = [];
-        foreach (['name', 'description', 'type', 'content', 'params', 'timeout', 'run_as', 'status'] as $field) {
+        foreach (['name', 'description', 'type', 'content', 'params', 'timeout', 'run_as'] as $field) {
             $val = input($field);
             if ($val !== null) {
                 $data[$field] = $val;
             }
+        }
+        $statusVal = input('status');
+        if ($statusVal !== null) {
+            $data['status'] = self::parseStatus($statusVal);
         }
 
         $script->save($data);

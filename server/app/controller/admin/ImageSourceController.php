@@ -20,7 +20,7 @@ class ImageSourceController extends BaseController
             'username' => input('username'),
             'password' => input('password'),
             'path' => input('path'),
-            'status' => input('status', 1),
+            'status' => self::parseStatus(input('status', 'enabled')),
             'sort' => input('sort', 0),
             'description' => input('description'),
         ];
@@ -41,11 +41,15 @@ class ImageSourceController extends BaseController
         }
 
         $data = [];
-        foreach (['name', 'type', 'url', 'username', 'password', 'path', 'status', 'sort', 'description'] as $field) {
+        foreach (['name', 'type', 'url', 'username', 'password', 'path', 'sort', 'description'] as $field) {
             $val = input($field);
             if ($val !== null) {
                 $data[$field] = $val;
             }
+        }
+        $statusVal = input('status');
+        if ($statusVal !== null) {
+            $data['status'] = self::parseStatus($statusVal);
         }
 
         $source->save($data);

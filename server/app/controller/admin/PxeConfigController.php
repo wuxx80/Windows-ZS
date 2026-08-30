@@ -30,7 +30,7 @@ class PxeConfigController extends BaseController
             'image_id' => input('image_id', 0),
             'unattend_id' => input('unattend_id', 0),
             'is_active' => input('is_active', 0),
-            'status' => input('status', 1),
+            'status' => self::parseStatus(input('status', 'enabled')),
             'created_by' => $this->userId,
         ];
 
@@ -50,11 +50,15 @@ class PxeConfigController extends BaseController
         }
 
         $data = [];
-        foreach (['name', 'description', 'boot_file', 'config_file', 'next_server', 'dhcp_range', 'subnet_mask', 'gateway', 'dns_servers', 'image_id', 'unattend_id', 'is_active', 'status'] as $field) {
+        foreach (['name', 'description', 'boot_file', 'config_file', 'next_server', 'dhcp_range', 'subnet_mask', 'gateway', 'dns_servers', 'image_id', 'unattend_id', 'is_active'] as $field) {
             $val = input($field);
             if ($val !== null) {
                 $data[$field] = $val;
             }
+        }
+        $statusVal = input('status');
+        if ($statusVal !== null) {
+            $data['status'] = self::parseStatus($statusVal);
         }
 
         $config->save($data);
