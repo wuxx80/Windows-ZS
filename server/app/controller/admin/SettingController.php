@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 namespace app\controller\admin;
 
 use think\facade\Db;
@@ -9,7 +9,7 @@ class SettingController extends BaseController
     {
         $group = input('group');
 
-        $query = Db::name('settings')->order('group', 'asc')->order('sort', 'asc');
+        $query = Db::name('settings')->order('group', 'asc')->order('id', 'asc');
 
         if ($group) {
             $query->where('group', $group);

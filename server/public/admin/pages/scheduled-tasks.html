@@ -1,0 +1,338 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>定时任务 - ZS 装机助手</title>
+<link rel="stylesheet" href="../../assets/css/admin.css">
+<style>
+body{padding:24px;background:transparent;}
+h2{margin-bottom:20px;font-size:20px;font-weight:600;color:#334155;}
+.data-table th{background:#f8fafc;white-space:nowrap;}
+.data-table td{vertical-align:middle;}
+.actions-cell{display:flex;gap:4px;flex-wrap:wrap;}
+.cron-badge{font-family:Consolas,monospace;font-size:12px;background:#f1f5f9;padding:2px 6px;border-radius:4px;color:var(--text-light);}
+.logs-container{max-height:300px;overflow-y:auto;background:#1e293b;color:#e2e8f0;border-radius:6px;padding:12px;font-family:Consolas,monospace;font-size:12px;line-height:1.6;}
+.logs-container .log-entry{padding:2px 0;}
+.logs-container .log-entry .log-time{color:#94a3b8;}
+.logs-container .log-entry .log-msg{color:#e2e8f0;}
+</style>
+</head>
+<body>
+<h2>定时任务</h2>
+<div class="search-bar">
+  <button class="btn-create" onclick="showAddModal()">+ 新增定时任务</button>
+  <button class="btn-reset" onclick="refreshList()" style="border-color:var(--primary);color:var(--primary);">刷新</button>
+</div>
+<div class="panel">
+  <div class="panel-body" style="padding:0;">
+    <table class="data-table" id="dataTable">
+      <thead>
+        <tr>
+          <th style="width:50px;">ID</th>
+          <th>任务名称</th>
+          <th style="width:80px;">类型</th>
+          <th style="width:130px;">Cron表达式</th>
+          <th style="width:60px;">启用</th>
+          <th style="width:80px;">上次状态</th>
+          <th style="width:140px;">上次运行</th>
+          <th style="width:140px;">下次运行</th>
+          <th style="width:200px;">操作</th>
+        </tr>
+      </thead>
+      <tbody id="tableBody">
+        <tr><td colspan="9"><div class="empty-state"><div class="empty-icon">⏰</div><p>加载中...</p></div></td></tr>
+      </tbody>
+    </table>
+    <div id="emptyState" class="empty-state" style="display:none;">
+      <div class="empty-icon">⏰</div>
+      <p>暂无定时任务</p>
+    </div>
+  </div>
+</div>
+<div id="paginationContainer"></div>
+<script src="../../assets/js/admin-common.js"></script>
+
+<script>
+(function() {
+  var currentPage = 1;
+  var pageSize = 15;
+  var totalCount = 0;
+  var currentList = [];
+
+  var TASK_TYPE_MAP = { "cleanup": "清理任务", "backup": "备份任务", "sync": "同步任务", "report": "报表生成", "notification": "通知推送", "other": "其他" };
+
+  function getTypeLabel(t) { return TASK_TYPE_MAP[t] || t || "-"; }
+
+  function loadData() {
+    var params = "page=" + currentPage + "&pageSize=" + pageSize;
+
+    var tableBody = document.getElementById("tableBody");
+    tableBody.innerHTML = "<tr><td colspan=\"9\" style=\"text-align:center;padding:40px;color:#94a3b8;\">加载中...</td></tr>";
+
+    api("/scheduledTasks?" + params).then(function(res) {
+      if (res.code === 0) {
+        totalCount = res.data.total || 0;
+        currentList = res.data.list || [];
+        renderTable(currentList);
+        renderPagination();
+      } else {
+        tableBody.innerHTML = "<tr><td colspan=\"9\"><div class=\"empty-state\"><div class=\"empty-icon\">&#x274C;</div><p>" + esc(res.message || "加载失败") + "</p></div></td></tr>";
+      }
+    }).catch(function(err) {
+      tableBody.innerHTML = "<tr><td colspan=\"9\"><div class=\"empty-state\"><div class=\"empty-icon\">&#x274C;</div><p>网络错误：" + esc(err.message) + "</p></div></td></tr>";
+    });
+  }
+
+  function renderTable(list) {
+    var tableBody = document.getElementById("tableBody");
+    var emptyState = document.getElementById("emptyState");
+
+    if (!list || list.length === 0) {
+      tableBody.innerHTML = "";
+      emptyState.style.display = "block";
+      return;
+    }
+    emptyState.style.display = "none";
+
+    var html = "";
+    for (var i = 0; i < list.length; i++) {
+      var item = list[i];
+      var enabledHtml = item.is_enabled
+        ? "<span style=\"color:#16a34a;font-weight:600;\">&#x2713; 启用</span>"
+        : "<span style=\"color:var(--text-light);\">&#x2717; 禁用</span>";
+      var lastStatus = item.last_run_status
+        ? statusBadge(item.last_run_status, item.last_run_status === "success" ? "成功" : (item.last_run_status === "failed" ? "失败" : item.last_run_status))
+        : "<span style=\"color:var(--text-light);\">-</span>";
+
+      html += "<tr>";
+      html += "<td>" + esc(item.id) + "</td>";
+      html += "<td><strong>" + esc(item.name) + "</strong></td>";
+      html += "<td>" + esc(getTypeLabel(item.task_type)) + "</td>";
+      html += "<td><span class=\"cron-badge\">" + esc(item.cron_expression || "-") + "</span></td>";
+      html += "<td>" + enabledHtml + "</td>";
+      html += "<td>" + lastStatus + "</td>";
+      html += "<td style=\"font-size:12px;color:var(--text-light);\">" + fmtDate(item.last_run_time) + "</td>";
+      html += "<td style=\"font-size:12px;color:var(--text-light);\">" + fmtDate(item.next_run_time) + "</td>";
+      html += "<td><div class=\"actions-cell\">";
+      html += "<button class=\"action-btn edit\" onclick=\"editTask(" + item.id + ")\">编辑</button>";
+      html += "<button class=\"action-btn delete\" onclick=\"deleteTask(" + item.id + ")\">删除</button>";
+      html += "<button class=\"action-btn run\" onclick=\"triggerTask(" + item.id + ")\">触发</button>";
+      html += "<button class=\"action-btn more\" onclick=\"viewLogs(" + item.id + ")\">日志</button>";
+      html += "</div></td>";
+      html += "</tr>";
+    }
+    tableBody.innerHTML = html;
+  }
+
+  function renderPagination() {
+    var container = document.getElementById("paginationContainer");
+    var totalPages = Math.ceil(totalCount / pageSize);
+    if (totalPages <= 1) {
+      container.innerHTML = "";
+      return;
+    }
+    var html = "<div class=\"pagination\">";
+    html += "<span class=\"page-info\">共 " + totalCount + " 条，第 " + currentPage + "/" + totalPages + " 页</span>";
+    html += "<div class=\"page-btns\">";
+    if (currentPage > 1) {
+      html += "<button class=\"page-btn\" onclick=\"goToPage(1)\">首页</button>";
+      html += "<button class=\"page-btn\" onclick=\"goToPage(" + (currentPage - 1) + ")\">上一页</button>";
+    }
+    var startPage = Math.max(1, currentPage - 2);
+    var endPage = Math.min(totalPages, currentPage + 2);
+    for (var i = startPage; i <= endPage; i++) {
+      html += "<button class=\"page-btn" + (i === currentPage ? " active" : "") + "\" onclick=\"goToPage(" + i + ")\">" + i + "</button>";
+    }
+    if (currentPage < totalPages) {
+      html += "<button class=\"page-btn\" onclick=\"goToPage(" + (currentPage + 1) + ")\">下一页</button>";
+      html += "<button class=\"page-btn\" onclick=\"goToPage(" + totalPages + ")\">末页</button>";
+    }
+    html += "</div></div>";
+    container.innerHTML = html;
+  }
+
+  window.goToPage = function(page) {
+    currentPage = page;
+    loadData();
+  };
+
+  window.refreshList = function() {
+    currentPage = 1;
+    loadData();
+  };
+
+  function getFormContent(data) {
+    var name = data ? data.name : "";
+    var taskType = data ? data.task_type : "cleanup";
+    var cron = data ? data.cron_expression : "";
+    var config = data ? (typeof data.config === "object" ? JSON.stringify(data.config, null, 2) : data.config) : "";
+    var enabled = data ? data.is_enabled : true;
+
+    var content = "";
+    content += "<div class=\"form-row\">";
+    content += "<div class=\"form-group\"><label>任务名称 <span style=\"color:#dc2626;\">*</span></label><input type=\"text\" id=\"formName\" placeholder=\"任务名称\" value=\"" + esc(name) + "\"></div>";
+    content += "<div class=\"form-group\"><label>任务类型</label><select id=\"formType\">";
+    var types = ["cleanup", "backup", "sync", "report", "notification", "other"];
+    for (var ti = 0; ti < types.length; ti++) {
+      content += "<option value=\"" + types[ti] + "\"" + (taskType === types[ti] ? " selected" : "") + ">" + getTypeLabel(types[ti]) + "</option>";
+    }
+    content += "</select></div>";
+    content += "</div>";
+    content += "<div class=\"form-group\"><label>Cron表达式 <span style=\"color:#dc2626;\">*</span></label><input type=\"text\" id=\"formCron\" placeholder=\"例如：0 2 * * *（每天凌晨2点）\" value=\"" + esc(cron) + "\"></div>";
+    content += "<div class=\"form-group\"><label>配置（JSON格式）</label><textarea id=\"formConfig\" placeholder=\"{\"key\": \"value\"}\" style=\"min-height:80px;\">" + esc(config) + "</textarea></div>";
+    content += "<div class=\"form-group\"><label><input type=\"checkbox\" id=\"formEnabled\"" + (enabled ? " checked" : "") + "> 启用</label></div>";
+    content += "<div class=\"form-actions\">";
+    content += "<button class=\"btn-cancel\" onclick=\"closeModal()\">取消</button>";
+    content += "<button class=\"btn-submit\" onclick=\"saveTask()\">保存</button>";
+    content += "</div>";
+    return content;
+  }
+
+  window.showAddModal = function() {
+    var content = getFormContent(null);
+    var modal = showModal("新增定时任务", content);
+    modal.setAttribute("data-mode", "add");
+    modal.setAttribute("data-id", "");
+  };
+
+  window.editTask = function(id) {
+    api("/scheduledTasks/" + id).then(function(res) {
+      if (res.code === 0) {
+        var item = res.data;
+        var content = getFormContent(item);
+        var modal = showModal("编辑定时任务 - " + esc(item.name), content);
+        modal.setAttribute("data-mode", "edit");
+        modal.setAttribute("data-id", id);
+      } else {
+        toast(res.message || "获取任务信息失败", "error");
+      }
+    }).catch(function(err) {
+      toast("网络错误：" + err.message, "error");
+    });
+  };
+
+  window.saveTask = function() {
+    var modal = document.getElementById("modalOverlay");
+    var mode = modal ? modal.getAttribute("data-mode") : "add";
+    var id = modal ? parseInt(modal.getAttribute("data-id"), 10) : 0;
+
+    var name = document.getElementById("formName").value.trim();
+    if (!name) {
+      toast("请输入任务名称", "error");
+      return;
+    }
+    var cron = document.getElementById("formCron").value.trim();
+    if (!cron) {
+      toast("请输入Cron表达式", "error");
+      return;
+    }
+
+    var configStr = document.getElementById("formConfig").value.trim();
+    var config = {};
+    if (configStr) {
+      try { config = JSON.parse(configStr); } catch (e) {
+        toast("配置格式错误，请输入合法的JSON", "error");
+        return;
+      }
+    }
+
+    var data = {
+      name: name,
+      task_type: document.getElementById("formType").value,
+      cron_expression: cron,
+      config: config,
+      is_enabled: document.getElementById("formEnabled").checked
+    };
+
+    var url = "/scheduledTasks";
+    var method = "POST";
+    if (mode === "edit") {
+      url = "/scheduledTasks/" + id;
+      method = "PUT";
+    }
+
+    api(url, { method: method, body: data }).then(function(res) {
+      if (res.code === 0) {
+        toast(mode === "add" ? "任务创建成功" : "任务更新成功", "success");
+        closeModal();
+        loadData();
+      } else {
+        toast(res.message || "操作失败", "error");
+      }
+    }).catch(function(err) {
+      toast("网络错误：" + err.message, "error");
+    });
+  };
+
+  window.deleteTask = function(id) {
+    if (!confirm("确定要删除该定时任务吗？")) return;
+    api("/scheduledTasks/" + id, { method: "DELETE" }).then(function(res) {
+      if (res.code === 0) {
+        toast("任务删除成功", "success");
+        loadData();
+      } else {
+        toast(res.message || "删除失败", "error");
+      }
+    }).catch(function(err) {
+      toast("网络错误：" + err.message, "error");
+    });
+  };
+
+  window.triggerTask = function(id) {
+    if (!confirm("确定要立即触发该任务吗？")) return;
+    api("/scheduledTasks/" + id + "/trigger", { method: "POST" }).then(function(res) {
+      if (res.code === 0) {
+        toast("任务已触发", "success");
+        loadData();
+      } else {
+        toast(res.message || "触发失败", "error");
+      }
+    }).catch(function(err) {
+      toast("网络错误：" + err.message, "error");
+    });
+  };
+
+  window.viewLogs = function(id) {
+    var content = "";
+    content += "<div id=\"logsContainer\" class=\"logs-container\">";
+    content += "<div style=\"text-align:center;color:#94a3b8;padding:20px;\">加载中...</div>";
+    content += "</div>";
+    content += "<div class=\"form-actions\" style=\"border-top:none;margin-top:12px;\"><button class=\"btn-cancel\" onclick=\"closeModal()\">关闭</button></div>";
+    var modal = showModal("任务执行日志", content);
+
+    api("/scheduledTasks/" + id + "/logs").then(function(res) {
+      var container = document.getElementById("logsContainer");
+      if (res.code === 0) {
+        var logs = res.data;
+        if (!Array.isArray(logs)) {
+          if (logs && logs.list) logs = logs.list;
+          else logs = [];
+        }
+        if (logs.length === 0) {
+          container.innerHTML = "<div style=\"text-align:center;color:#94a3b8;padding:20px;\">暂无执行日志</div>";
+          return;
+        }
+        var html = "";
+        for (var i = 0; i < logs.length; i++) {
+          var log = logs[i];
+          var time = log.created_at || log.time || log.timestamp || "";
+          var msg = log.message || log.msg || "";
+          html += "<div class=\"log-entry\"><span class=\"log-time\">[" + fmtDate(time) + "]</span> <span class=\"log-msg\">" + esc(msg) + "</span></div>";
+        }
+        container.innerHTML = html;
+        container.scrollTop = container.scrollHeight;
+      } else {
+        container.innerHTML = "<div style=\"text-align:center;color:#f87171;padding:20px;\">" + esc(res.message || "加载失败") + "</div>";
+      }
+    }).catch(function(err) {
+      var container = document.getElementById("logsContainer");
+      if (container) container.innerHTML = "<div style=\"text-align:center;color:#f87171;padding:20px;\">网络错误：" + esc(err.message) + "</div>";
+    });
+  };
+
+  loadData();
+})();
+</script>
+</body>
+</html>

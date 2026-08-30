@@ -1,0 +1,177 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>报表统计 - ZS 装机助手</title>
+<link rel="stylesheet" href="../../assets/css/admin.css">
+<style>
+body{padding:24px;background:transparent;}
+h2{margin-bottom:20px;font-size:20px;font-weight:600;color:#334155;}
+.stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px;}
+.stat-card{background:var(--white);border-radius:var(--radius);padding:20px;box-shadow:var(--shadow);}
+.stat-card .stat-number{font-size:32px;font-weight:700;color:var(--text);line-height:1.2;}
+.stat-card .stat-label{font-size:13px;color:var(--text-light);margin-top:4px;}
+.stat-card .stat-sub{font-size:12px;color:#16a34a;margin-top:4px;}
+.report-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px;}
+.report-card{background:var(--white);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden;}
+.report-card .card-header{padding:16px 20px;border-bottom:1px solid var(--border);font-size:15px;font-weight:600;display:flex;align-items:center;justify-content:space-between;}
+.report-card .card-body{padding:16px 20px;}
+.ranking-list{list-style:none;padding:0;margin:0;}
+.ranking-list li{display:flex;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);font-size:14px;}
+.ranking-list li:last-child{border-bottom:none;}
+.ranking-list .rank{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;margin-right:12px;flex-shrink:0;}
+.ranking-list .rank.r1{background:#fef2f2;color:#dc2626;}
+.ranking-list .rank.r2{background:#fff7ed;color:#ea580c;}
+.ranking-list .rank.r3{background:#fef9c3;color:#a16207;}
+.ranking-list .rank.rn{background:#f1f5f9;color:#64748b;}
+.ranking-list .rank-name{flex:1;}
+.ranking-list .rank-count{font-weight:600;color:var(--text);}
+.order-stats{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+.order-stat-item{text-align:center;padding:12px;background:#f8fafc;border-radius:6px;}
+.order-stat-item .num{font-size:22px;font-weight:700;color:var(--text);}
+.order-stat-item .lbl{font-size:12px;color:var(--text-light);margin-top:2px;}
+</style>
+</head>
+<body>
+<h2>报表统计</h2>
+<div class="stats-grid" id="statsGrid">
+  <div class="stat-card"><div class="stat-number" id="installTotal">-</div><div class="stat-label">总安装次数</div><div class="stat-sub" id="installToday"></div></div>
+  <div class="stat-card"><div class="stat-number" id="clientTotal">-</div><div class="stat-label">客户端总数</div><div class="stat-sub" id="clientOnline"></div></div>
+  <div class="stat-card"><div class="stat-number" id="orderTotal">-</div><div class="stat-label">订单总数</div><div class="stat-sub" id="orderPending"></div></div>
+  <div class="stat-card"><div class="stat-number" id="workOrderTotal">-</div><div class="stat-label">工单总数</div><div class="stat-sub" id="workOrderPending"></div></div>
+</div>
+<div class="report-grid">
+  <div class="report-card">
+    <div class="card-header">镜像排行 TOP10</div>
+    <div class="card-body"><ul class="ranking-list" id="imageRanking"><li style="justify-content:center;color:var(--text-light);padding:20px;">加载中...</li></ul></div>
+  </div>
+  <div class="report-card">
+    <div class="card-header">订单统计</div>
+    <div class="card-body"><div class="order-stats" id="orderStats"><div style="grid-column:1/-1;text-align:center;color:var(--text-light);padding:20px;">加载中...</div></div></div>
+  </div>
+</div>
+<div class="report-grid">
+  <div class="report-card">
+    <div class="card-header">安装统计（近7天）</div>
+    <div class="card-body" id="installStatsBody"><div style="text-align:center;color:var(--text-light);padding:20px;">加载中...</div></div>
+  </div>
+  <div class="report-card">
+    <div class="card-header">客户端版本分布</div>
+    <div class="card-body" id="clientStatsBody"><div style="text-align:center;color:var(--text-light);padding:20px;">加载中...</div></div>
+  </div>
+</div>
+<script src="../../assets/js/admin-common.js"></script>
+
+<script>
+(function() {
+  function loadReports() {
+    loadInstallStats();
+    loadClientStats();
+    loadImageRanking();
+    loadOrderStats();
+    loadWorkOrderStats();
+  }
+
+  function loadInstallStats() {
+    api("/reports/install").then(function(res) {
+      if (res.code === 0) {
+        var data = res.data || {};
+        document.getElementById("installTotal").textContent = data.total || 0;
+        document.getElementById("installToday").textContent = "今日：" + (data.today || 0) + " 次";
+
+        var body = document.getElementById("installStatsBody");
+        var list = data.daily || [];
+        if (list.length === 0) {
+          body.innerHTML = "<div style=\"text-align:center;color:var(--text-light);padding:20px;\">暂无数据</div>";
+          return;
+        }
+        var html = "<table class=\"data-table\"><thead><tr><th>日期</th><th>安装次数</th></tr></thead><tbody>";
+        for (var i = 0; i < list.length; i++) {
+          html += "<tr><td>" + esc(list[i].date || list[i].day || "-") + "</td><td><strong>" + (list[i].count || 0) + "</strong></td></tr>";
+        }
+        html += "</tbody></table>";
+        body.innerHTML = html;
+      }
+    }).catch(function() {});
+  }
+
+  function loadClientStats() {
+    api("/reports/client").then(function(res) {
+      if (res.code === 0) {
+        var data = res.data || {};
+        document.getElementById("clientTotal").textContent = data.total || 0;
+        document.getElementById("clientOnline").textContent = "在线：" + (data.online || 0);
+
+        var body = document.getElementById("clientStatsBody");
+        var list = data.versions || [];
+        if (list.length === 0) {
+          body.innerHTML = "<div style=\"text-align:center;color:var(--text-light);padding:20px;\">暂无数据</div>";
+          return;
+        }
+        var html = "<table class=\"data-table\"><thead><tr><th>版本</th><th>数量</th></tr></thead><tbody>";
+        for (var i = 0; i < list.length; i++) {
+          html += "<tr><td>" + esc(list[i].version || list[i].name || "-") + "</td><td><strong>" + (list[i].count || 0) + "</strong></td></tr>";
+        }
+        html += "</tbody></table>";
+        body.innerHTML = html;
+      }
+    }).catch(function() {});
+  }
+
+  function loadImageRanking() {
+    api("/reports/imageRanking").then(function(res) {
+      if (res.code === 0) {
+        var list = res.data || (res.data && res.data.list ? res.data.list : []);
+        if (!Array.isArray(list)) {
+          if (res.data && res.data.ranking) list = res.data.ranking;
+        }
+        var ul = document.getElementById("imageRanking");
+        if (!list || list.length === 0) {
+          ul.innerHTML = "<li style=\"justify-content:center;color:var(--text-light);padding:20px;\">暂无数据</li>";
+          return;
+        }
+        var html = "";
+        for (var i = 0; i < Math.min(list.length, 10); i++) {
+          var item = list[i];
+          var rank = i + 1;
+          var rankClass = rank <= 3 ? "r" + rank : "rn";
+          html += "<li><span class=\"rank " + rankClass + "\">" + rank + "</span><span class=\"rank-name\">" + esc(item.name || item.image_name || item.title || "-") + "</span><span class=\"rank-count\">" + (item.count || 0) + " 次</span></li>";
+        }
+        ul.innerHTML = html;
+      }
+    }).catch(function() {});
+  }
+
+  function loadOrderStats() {
+    api("/reports/order").then(function(res) {
+      if (res.code === 0) {
+        var data = res.data || {};
+        var container = document.getElementById("orderStats");
+        var html = "";
+        html += "<div class=\"order-stat-item\"><div class=\"num\">" + (data.total || 0) + "</div><div class=\"lbl\">总订单</div></div>";
+        html += "<div class=\"order-stat-item\"><div class=\"num\">" + (data.pending || 0) + "</div><div class=\"lbl\">待处理</div></div>";
+        html += "<div class=\"order-stat-item\"><div class=\"num\">" + (data.completed || 0) + "</div><div class=\"lbl\">已完成</div></div>";
+        html += "<div class=\"order-stat-item\"><div class=\"num\">" + (data.cancelled || 0) + "</div><div class=\"lbl\">已取消</div></div>";
+        html += "<div class=\"order-stat-item\"><div class=\"num\">" + (data.today || 0) + "</div><div class=\"lbl\">今日新增</div></div>";
+        html += "<div class=\"order-stat-item\"><div class=\"num\">" + (data.amount ? data.amount.toFixed(2) : "0.00") + "</div><div class=\"lbl\">总金额</div></div>";
+        container.innerHTML = html;
+      }
+    }).catch(function() {});
+  }
+
+  function loadWorkOrderStats() {
+    api("/reports/workOrder").then(function(res) {
+      if (res.code === 0) {
+        var data = res.data || {};
+        document.getElementById("workOrderTotal").textContent = data.total || 0;
+        document.getElementById("workOrderPending").textContent = "待处理：" + (data.pending || 0);
+      }
+    }).catch(function() {});
+  }
+
+  loadReports();
+})();
+</script>
+</body>
+</html>

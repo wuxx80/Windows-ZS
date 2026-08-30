@@ -1,4 +1,4 @@
-﻿## 项目结构
+## 项目结构
 
 ```
 D:\Users\Desktop\Windows-ZS\
@@ -9,16 +9,166 @@ D:\Users\Desktop\Windows-ZS\
 ├── 项目结构.txt                        # 项目目录结构
 ├── 操作指南.md                         # 安装/配置/启动/部署
 ├── 版本更新记录.md                     # 版本历史与变更记录
+├── 开发计划表.md                       # 详细开发计划（第六件套）
 │
 ├── 设计文档\                           # 设计文档目录
 │   ├── 详细设计文档.md                 # 系统架构/数据库/API/目录结构
 │   ├── Web后台详细设计.md              # 后台各模块详细设计（21章）
 │   └── 一键装机交互设计.md             # 客户端一键装机交互设计（18章）
 │
+├── database\                           # 数据库脚本
+│   └── install.sql                     # 35 张表建表 SQL + 种子数据
+│
+├── server\                             # PHP 后端项目（ThinkPHP 6）
+│   ├── .env                            # 环境配置（数据库连接等）
+│   ├── composer.json                   # Composer 依赖配置
+│   ├── thinkphp.nginx.rewrite.conf     # 独立伪静态规则文件
+│   │
+│   ├── app\                            # 应用目录
+│   │   ├── common.php                  # 公共函数
+│   │   ├── BaseController.php          # 基础控制器
+│   │   │
+│   │   ├── controller\admin\           # 后台控制器（30个）
+│   │   │   ├── AuthController.php      # 认证（登录/退出/改密）
+│   │   │   ├── IndexController.php     # 控制台仪表盘
+│   │   │   ├── ImageController.php     # 镜像管理
+│   │   │   ├── ImageSourceController.php # 镜像源管理
+│   │   │   ├── ImageTagController.php  # 镜像标签
+│   │   │   ├── TaskController.php      # 任务管理
+│   │   │   ├── TaskTemplateController.php # 任务模板
+│   │   │   ├── UnattendController.php  # 无人值守模板
+│   │   │   ├── ClientController.php    # 客户端管理
+│   │   │   ├── ClientGroupController.php # 客户端分组
+│   │   │   ├── ClientVersionController.php # 客户端版本
+│   │   │   ├── SoftwareController.php  # 软件管理
+│   │   │   ├── SoftwareCategoryController.php # 软件分类
+│   │   │   ├── SoftwareTemplateController.php # 软件模板
+│   │   │   ├── DriverController.php    # 驱动管理
+│   │   │   ├── ScriptController.php    # 脚本管理
+│   │   │   ├── PeVersionController.php # PE 版本管理
+│   │   │   ├── PeCustomizeController.php # PE 定制
+│   │   │   ├── PxeConfigController.php # PXE 配置
+│   │   │   ├── NetworkDeployController.php # 网络部署
+│   │   │   ├── CustomerController.php  # 客户管理
+│   │   │   ├── WorkOrderController.php # 工单管理
+│   │   │   ├── UserController.php      # 用户管理
+│   │   │   ├── RoleController.php      # 角色权限
+│   │   │   ├── SettingController.php   # 系统设置
+│   │   │   ├── LogController.php       # 操作日志
+│   │   │   ├── NotificationController.php # 通知消息
+│   │   │   ├── ScheduledTaskController.php # 定时任务
+│   │   │   ├── ReportController.php    # 报表统计
+│   │   │   ├── WebhookController.php   # Webhook 日志
+│   │   │   ├── RecycleBinController.php # 回收站
+│   │   │   └── BaseController.php      # 后台基础控制器
+│   │   │
+│   │   ├── model\                      # 数据模型（36个）
+│   │   │   ├── BaseModel.php           # 基础模型
+│   │   │   ├── User.php, Role.php      # 用户/角色
+│   │   │   ├── Image.php, ImageSource.php, ImageVersion.php,
+│   │   │   │   ImageTag.php, ImageTagRelation.php  # 镜像相关
+│   │   │   ├── DownloadLink.php, DownloadLog.php, DownloadQueue.php
+│   │   │   ├── Client.php, ClientGroup.php, ClientVersion.php
+│   │   │   ├── Task.php, TaskRecord.php, TaskTemplate.php
+│   │   │   ├── UnattendTemplate.php
+│   │   │   ├── Software.php, SoftwareCategory.php, SoftwareTemplate.php
+│   │   │   ├── Driver.php, Script.php
+│   │   │   ├── PeVersion.php, PeCustomize.php
+│   │   │   ├── PxeConfig.php, NetworkDeploy.php
+│   │   │   ├── Customer.php, WorkOrder.php
+│   │   │   ├── Log.php, Notification.php, WebhookLog.php
+│   │   │   ├── Setting.php, ScheduledTask.php, ScheduledTaskLog.php
+│   │   │   └── RecycleBin.php
+│   │   │
+│   │   ├── service\                    # 服务层（8个）
+│   │   │   ├── AuthService.php         # 认证服务
+│   │   │   ├── ImageService.php        # 镜像服务
+│   │   │   ├── TaskService.php         # 任务服务
+│   │   │   ├── FileService.php         # 文件服务
+│   │   │   ├── CacheService.php        # 缓存服务
+│   │   │   ├── NotificationService.php # 通知服务
+│   │   │   ├── BackupService.php       # 备份服务
+│   │   │   └── WebSocketService.php    # WebSocket 服务
+│   │   │
+│   │   ├── middleware\                 # 中间件（3个）
+│   │   │   ├── AuthMiddleware.php      # 认证中间件
+│   │   │   ├── CorsMiddleware.php      # 跨域中间件
+│   │   │   └── LogMiddleware.php       # 日志中间件
+│   │   │
+│   │   └── exception\                  # 异常处理
+│   │       └── HttpExceptionHandler.php
+│   │
+│   ├── config\                         # 配置文件（11个）
+│   │   ├── app.php                     # 应用配置
+│   │   ├── database.php                # 数据库配置
+│   │   ├── route.php                   # 路由配置
+│   │   ├── middleware.php              # 中间件配置
+│   │   ├── cache.php                   # 缓存配置
+│   │   ├── log.php                     # 日志配置
+│   │   ├── jwt.php                     # JWT 认证配置
+│   │   ├── upload.php                  # 上传配置
+│   │   ├── status.php                  # 业务状态码（36个）
+│   │   ├── websocket.php               # WebSocket 配置
+│   │   └── backup.php                  # 备份配置
+│   │
+│   ├── route\                          # 路由定义
+│   │   └── admin.php                   # 后台 API 路由
+│   │
+│   ├── public\                         # 入口目录（网站根目录）
+│   │   ├── index.php                   # ThinkPHP 入口
+│   │   ├── admin.php                   # 管理后台入口
+│   │   ├── index.html                  # 首页（介绍下载网站）
+│   │   ├── 404.html                    # 404 页面
+│   │   │
+│   │   ├── admin\                      # 管理后台前端页面
+│   │   │   ├── login.html             # 登录页
+│   │   │   ├── index.html             # 主布局（侧边栏+顶部栏+iframe）
+│   │   │   └── pages\                  # 29 个功能页面
+│   │   │       ├── dashboard.html      # 控制台
+│   │   │       ├── images.html         # 镜像列表
+│   │   │       ├── image-sources.html  # 镜像源
+│   │   │       ├── image-tags.html     # 镜像标签
+│   │   │       ├── tasks.html          # 任务列表
+│   │   │       ├── task-templates.html # 任务模板
+│   │   │       ├── unattend.html       # 无人值守模板
+│   │   │       ├── clients.html        # 客户端管理
+│   │   │       ├── client-groups.html  # 客户端分组
+│   │   │       ├── client-versions.html # 版本管理
+│   │   │       ├── software.html       # 软件管理
+│   │   │       ├── software-categories.html # 软件分类
+│   │   │       ├── software-templates.html # 软件模板
+│   │   │       ├── drivers.html        # 驱动管理
+│   │   │       ├── scripts.html        # 脚本管理
+│   │   │       ├── pe-versions.html    # PE 版本
+│   │   │       ├── pe-customize.html   # PE 定制
+│   │   │       ├── pxe-configs.html    # PXE 配置
+│   │   │       ├── network-deploys.html # 网络部署
+│   │   │       ├── customers.html      # 客户管理
+│   │   │       ├── work-orders.html    # 工单管理
+│   │   │       ├── users.html          # 用户管理
+│   │   │       ├── settings.html       # 系统设置
+│   │   │       ├── logs.html           # 操作日志
+│   │   │       ├── notifications.html  # 通知消息
+│   │   │       ├── scheduled-tasks.html # 定时任务
+│   │   │       ├── reports.html        # 报表统计
+│   │   │       ├── webhook-logs.html   # Webhook 日志
+│   │   │       └── recycle-bin.html    # 回收站
+│   │   │
+│   │   └── assets\                     # 前端静态资源
+│   │       ├── css\
+│   │       │   ├── admin.css           # 后台管理样式
+│   │       │   └── style.css           # 首页样式
+│   │       └── js\
+│   │           └── admin-common.js     # 后台通用工具库
+│   │
+│   └── runtime\                        # 运行时目录
+│       ├── log\                        # 日志文件
+│       └── cache\                      # 缓存文件
+│
 └── 360截图20260830185410947.jpg        # 界面参考截图
 ```
 
-## 数据库表结构（设计阶段，共 35+ 表）
+## 数据库表结构（35 张表）
 
 ### 核心模块
 - zs_users              # 管理后台用户

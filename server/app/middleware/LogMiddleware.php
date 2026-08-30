@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 namespace app\middleware;
 
 use think\facade\Db;

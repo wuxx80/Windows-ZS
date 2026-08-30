@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ZS 装机助手 - 管理后台登录</title>
+<link rel="stylesheet" href="../assets/css/admin.css">
+</head>
+<body>
+<div class="login-page">
+  <div class="login-box">
+    <div class="logo">
+      <div class="logo-icon">ZS</div>
+      <h1>ZS 装机助手</h1>
+      <p>管理后台</p>
+    </div>
+    <form id="loginForm" onsubmit="return handleLogin(event)">
+      <div class="form-group">
+        <label for="username">用户名</label>
+        <input type="text" id="username" placeholder="请输入用户名" autocomplete="username" required>
+        <div class="error" id="usernameError">请输入用户名</div>
+      </div>
+      <div class="form-group">
+        <label for="password">密码</label>
+        <input type="password" id="password" placeholder="请输入密码" autocomplete="current-password" required>
+        <div class="error" id="passwordError">请输入密码</div>
+      </div>
+      <div class="form-group" style="display:none;" id="loginError">
+        <div class="error" style="display:block;text-align:center;" id="loginErrorMessage"></div>
+      </div>
+      <button type="submit" class="btn-login" id="loginBtn">登 录</button>
+    </form>
+    <div class="footer-text">&copy; 2026 ZS Studio. All rights reserved.</div>
+  </div>
+</div>
+
+<script>
+var TOKEN_KEY = 'zs_admin_token';
+var USER_KEY = 'zs_admin_user';
+
+function handleLogin(e) {
+  e.preventDefault();
+  var username = document.getElementById('username').value.trim();
+  var password = document.getElementById('password').value.trim();
+  var hasError = false;
+
+  document.getElementById('usernameError').style.display = username ? 'none' : 'block';
+  document.getElementById('passwordError').style.display = password ? 'none' : 'block';
+  document.getElementById('loginError').style.display = 'none';
+
+  if (!username || !password) return false;
+
+  var btn = document.getElementById('loginBtn');
+  btn.disabled = true;
+  btn.textContent = '登录中...';
+
+  fetch('/api/v1/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: username, password: password })
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(data) {
+    if (data.code === 0 && data.data && data.data.token) {
+      localStorage.setItem(TOKEN_KEY, data.data.token);
+      localStorage.setItem(USER_KEY, JSON.stringify(data.data.user || { username: username }));
+      window.location.href = '/admin/index.html';
+    } else {
+      showError(data.msg || '登录失败，请检查用户名和密码');
+    }
+  })
+  .catch(function(err) {
+    showError('网络错误，请检查服务器连接');
+  })
+  .finally(function() {
+    btn.disabled = false;
+    btn.textContent = '登 录';
+  });
+
+  return false;
+}
+
+function showError(msg) {
+  document.getElementById('loginErrorMessage').textContent = msg;
+  document.getElementById('loginError').style.display = 'block';
+}
+</script>
+</body>
+</html>

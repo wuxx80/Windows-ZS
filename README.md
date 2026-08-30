@@ -1,4 +1,4 @@
-﻿# ZS 装机助手
+# ZS 装机助手
 
 > 全栈 Windows 装机解决方案 —— Web 管理后台 + WinPE/Windows 客户端
 
@@ -15,6 +15,7 @@ ZS 装机助手是一套完整的 Windows 系统安装与维护解决方案，�
 - 绿色软件：软件分类、在线安装、静默安装
 
 ### 后台管理
+- 控制台仪表盘：统计卡片、装机趋势、镜像排行、快捷操作
 - 镜像管理：上传/下载/格式转换/校验/版本历史/标签系统
 - 客户端管理：注册审核/分组管理/版本管理/远程命令
 - 装机任务：创建/调度/监控/日志/模板
@@ -32,25 +33,44 @@ ZS 装机助手是一套完整的 Windows 系统安装与维护解决方案，�
 | 层级 | 技术 | 版本 |
 |------|------|------|
 | 后端语言 | PHP | 8.0+ |
-| 后端框架 | ThinkPHP 6 / Laravel | 8+ |
+| 后端框架 | ThinkPHP 6 | 6.1.4 |
 | 数据库 | MySQL | 5.7+ |
-| 缓存 | Redis | 6+ |
+| 缓存 | 文件缓存 | 默认 |
 | Web 服务器 | Nginx | 1.20+ |
-| 后台前端 | Layui + jQuery | - |
-| 客户端 | C# WPF (.NET 6/8) | - |
-| API 协议 | RESTful JSON + WebSocket | - |
-| PXE 服务 | dnsmasq + tftp-hpa | - |
+| 后台前端 | Layui 2.9+ 风格 | 原生 HTML/CSS/JS |
+| 客户端 | 待开发 | C# WPF (.NET 8) |
+| API 协议 | RESTful JSON | - |
 
 ## 项目状态
 
-当前版本：v2.1.0（开发阶段）
-- 设计文档：已完成（Web后台详细设计.md、一键装机交互设计.md、详细设计文档.md）
-- 后端开发：待开始
-- 客户端开发：待开始
+当前版本：v2.1.0（管理后台前端开发完成）
+
+| 阶段 | 状态 |
+|------|------|
+| 设计文档 | ✅ 已完成 |
+| 后端骨架 | ✅ 已完成 |
+| 数据库 | ✅ 已完成 |
+| API 认证 | ✅ 已验证 |
+| 后台前端 | ✅ 已完成（29个管理页面） |
+| 核心业务逻辑 | ⏳ 待开发 |
+| WinPE 客户端 | ⏳ 待开发 |
+| Windows 客户端 | ⏳ 待开发 |
+| 联调部署 | ⏳ 待开发 |
+
+## 文档列表（六件套）
+
+| 文档 | 说明 |
+|------|------|
+| [README.md](README.md) | 项目说明（本文档） |
+| [项目理解报告.md](项目理解报告.md) | 项目架构与技术方案 |
+| [项目结构.txt](项目结构.txt) | 目录结构说明 |
+| [操作指南.md](操作指南.md) | 安装/配置/启动/使用 |
+| [版本更新记录.md](版本更新记录.md) | 版本变更历史 |
+| [开发计划表.md](开发计划表.md) | 详细开发任务清单与里程碑 |
 
 ## 目录结构
 
-`
+```
 Windows-ZS/
 ├── .gitignore
 ├── README.md
@@ -58,28 +78,85 @@ Windows-ZS/
 ├── 项目结构.txt
 ├── 操作指南.md
 ├── 版本更新记录.md
+├── 开发计划表.md                    ← 第六件套
 ├── 设计文档/
 │   ├── 详细设计文档.md
 │   ├── Web后台详细设计.md
 │   └── 一键装机交互设计.md
+├── database/
+│   └── install.sql                  ← 35张表建表SQL
+├── server/                          ← PHP 后端项目
+│   ├── app/
+│   │   ├── controller/admin/        ← 30个后台控制器
+│   │   ├── model/                   ← 36个数据模型
+│   │   ├── service/                 ← 8个服务层
+│   │   ├── middleware/              ← 3个中间件
+│   │   └── exception/              ← 异常处理
+│   ├── config/                      ← 11个配置文件
+│   ├── route/
+│   ├── public/
+│   │   ├── index.php                ← ThinkPHP 入口
+│   │   ├── admin.php                ← 管理后台入口
+│   │   ├── index.html               ← 首页（介绍下载网站）
+│   │   ├── admin/                   ← 管理后台前端页面
+│   │   │   ├── login.html           ← 登录页
+│   │   │   ├── index.html           ← 主布局（侧边栏+顶部栏+iframe）
+│   │   │   └── pages/               ← 29个功能页面
+│   │   └── assets/                  ← 前端静态资源
+│   │       ├── css/
+│   │       │   ├── admin.css        ← 后台样式
+│   │       │   └── style.css        ← 首页样式
+│   │       └── js/
+│   │           └── admin-common.js  ← 后台通用工具库
+│   ├── .env
+│   ├── composer.json
+│   └── thinkphp.nginx.rewrite.conf  ← 独立伪静态规则
 └── 360截图20260830185410947.jpg
-`
+```
 
-## 开发计划
+## 快速开始
 
-1. 数据库设计与建表
-2. Web 后台用户认证 + 控制台
-3. 镜像管理模块（含远程 URL 添加）
-4. 客户端管理模块
-5. 装机任务模块
-6. 无人值守模板模块
-7. 软件/驱动管理模块
-8. 网络部署 / PE 定制模块
-9. 客户工单 / 系统管理模块
-10. WinPE 客户端开发
-11. Windows 客户端开发
-12. 联调测试与部署
+### 1. 环境要求
+- PHP 8.0+
+- MySQL 5.7+
+- Nginx
+- Composer
+- 宝塔面板（推荐）
+
+### 2. 配置伪静态（宝塔面板）
+进入 宝塔面板 → 网站 → 设置 → 伪静态 → 选择"自定义规则"，粘贴以下内容：
+
+```nginx
+location / {
+    if (!-e $request_filename) {
+        rewrite ^(.*)$ /index.php?s=$1 last;
+        break;
+    }
+}
+```
+
+或者直接使用项目中的 `server/thinkphp.nginx.rewrite.conf` 文件内容。
+
+### 3. 导入数据库
+```sql
+source /path/to/database/install.sql;
+```
+
+### 4. 配置环境
+复制 `.env.example` 为 `.env`，修改数据库连接信息。
+
+### 5. 安装依赖
+```bash
+cd server
+composer install
+```
+
+### 6. 访问后台
+浏览器访问 `http://你的域名/admin/login.html`
+
+## 默认管理员
+- 用户名：admin
+- 密码：admin123
 
 ## 许可证
-
 Copyright © 2026 ZS Studio. All rights reserved.

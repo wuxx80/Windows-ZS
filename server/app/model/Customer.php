@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 namespace app\model;
 
 class Customer extends BaseModel

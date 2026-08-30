@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 namespace app\controller\admin;
 
 use app\model\Notification;
@@ -10,7 +10,7 @@ class NotificationController extends BaseController
         $type = input('type');
         $isRead = input('is_read');
 
-        $query = Notification::where('user_id', $this->userId)
+        $query = Notification::where('recipient_id', $this->userId)
             ->order('id', 'desc');
 
         if ($type) {
@@ -26,7 +26,7 @@ class NotificationController extends BaseController
     public function read($id)
     {
         $notification = Notification::where('id', $id)
-            ->where('user_id', $this->userId)
+            ->where('recipient_id', $this->userId)
             ->find();
 
         if (!$notification) {
@@ -48,7 +48,7 @@ class NotificationController extends BaseController
         }
 
         Notification::whereIn('id', $ids)
-            ->where('user_id', $this->userId)
+            ->where('recipient_id', $this->userId)
             ->update([
                 'is_read' => 1,
                 'read_at' => date('Y-m-d H:i:s'),
@@ -59,7 +59,7 @@ class NotificationController extends BaseController
 
     public function unreadCount()
     {
-        $count = Notification::where('user_id', $this->userId)
+        $count = Notification::where('recipient_id', $this->userId)
             ->where('is_read', 0)
             ->count();
 

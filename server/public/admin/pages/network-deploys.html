@@ -1,0 +1,413 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>网络部署 - ZS 装机助手</title>
+<link rel="stylesheet" href="../../assets/css/admin.css">
+<style>
+body{padding:24px;background:transparent;font-family:-apple-system,"Microsoft YaHei","PingFang SC",sans-serif;}
+h2{margin-bottom:16px;font-size:20px;font-weight:600;color:#334155;}
+.search-bar{margin-bottom:16px;}
+.data-table th{background:#f8fafc;white-space:nowrap;}
+.data-table td{vertical-align:middle;}
+.data-table .client-cell{max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.progress-col{min-width:120px;}
+.progress-bar-small{height:6px;background:#e2e8f0;border-radius:3px;overflow:hidden;margin-top:4px;}
+.progress-bar-small .fill{height:100%;background:#1a73e8;border-radius:3px;transition:width 0.3s;}
+.detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+.detail-item{padding:10px 14px;background:#f8fafc;border-radius:6px;}
+.detail-item .dt-label{font-size:12px;color:#64748b;margin-bottom:2px;}
+.detail-item .dt-value{font-size:14px;color:#1e293b;font-weight:500;word-break:break-all;}
+.detail-full{grid-column:1 / -1;}
+</style>
+</head>
+<body>
+
+<h2>网络部署</h2>
+
+<div class="search-bar">
+  <input type="text" id="searchKeyword" placeholder="关键词搜索（名称/镜像ID）" style="min-width:200px;">
+  <select id="searchStatus">
+    <option value="">全部状态</option>
+    <option value="pending">待处理</option>
+    <option value="running">运行中</option>
+    <option value="completed">已完成</option>
+    <option value="failed">失败</option>
+    <option value="cancelled">已取消</option>
+  </select>
+  <button class="btn-search" onclick="searchDeploy()">搜索</button>
+  <button class="btn-reset" onclick="resetSearch()">重置</button>
+  <button class="btn-create" onclick="showAddModal()">新建部署</button>
+</div>
+
+<div class="panel">
+  <div class="panel-body" style="padding:0;">
+    <table class="data-table" id="dataTable">
+      <thead>
+        <tr>
+          <th style="width:60px;">ID</th>
+          <th>名称</th>
+          <th style="width:80px;">镜像ID</th>
+          <th>客户端</th>
+          <th style="width:70px;">状态</th>
+          <th style="width:100px;">进度</th>
+          <th style="width:140px;">开始时间</th>
+          <th style="width:140px;">完成时间</th>
+          <th style="width:140px;">创建时间</th>
+          <th style="width:220px;">操作</th>
+        </tr>
+      </thead>
+      <tbody id="tableBody"></tbody>
+    </table>
+    <div id="emptyState" class="empty-state" style="display:none;">
+      <div class="empty-icon">📡</div>
+      <p>暂无网络部署数据</p>
+    </div>
+  </div>
+</div>
+
+<div id="paginationContainer"></div>
+
+<script src="../../assets/js/admin-common.js"></script>
+<script>
+(function() {
+  var currentPage = 1;
+  var pageSize = 15;
+  var totalItems = 0;
+  var currentList = [];
+
+  function loadList() {
+    var keyword = document.getElementById('searchKeyword').value.trim();
+    var status = document.getElementById('searchStatus').value;
+
+    var params = 'page=' + currentPage + '&pageSize=' + pageSize;
+    if (keyword) params += '&keyword=' + encodeURIComponent(keyword);
+    if (status) params += '&status=' + encodeURIComponent(status);
+
+    var tableBody = document.getElementById('tableBody');
+    tableBody.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:40px;color:#94a3b8;">加载中...</td></tr>';
+
+    api('/networkDeploys?' + params).then(function(res) {
+      if (res.code === 0) {
+        totalItems = res.data.total || 0;
+        currentList = res.data.list || [];
+        renderTable(currentList);
+        renderPagination();
+      } else {
+        toast(res.message || '加载失败', 'error');
+        tableBody.innerHTML = '';
+        document.getElementById('emptyState').style.display = 'block';
+      }
+    }).catch(function(err) {
+      toast('网络请求失败: ' + (err.message || '未知错误'), 'error');
+      tableBody.innerHTML = '';
+      document.getElementById('emptyState').style.display = 'block';
+    });
+  }
+
+  function renderTable(list) {
+    var tableBody = document.getElementById('tableBody');
+    var emptyState = document.getElementById('emptyState');
+
+    if (!list || list.length === 0) {
+      tableBody.innerHTML = '';
+      emptyState.style.display = 'block';
+      return;
+    }
+    emptyState.style.display = 'none';
+
+    var html = '';
+    for (var i = 0; i < list.length; i++) {
+      var item = list[i];
+      var statusMap = { pending: '待处理', running: '运行中', completed: '已完成', failed: '失败', cancelled: '已取消' };
+      var statusText = statusMap[item.status] || item.status;
+      var progress = parseInt(item.progress, 10) || 0;
+
+      var clients = '';
+      if (item.client_ids) {
+        if (typeof item.client_ids === 'string') {
+          try { clients = JSON.parse(item.client_ids).join(', '); } catch(e) { clients = item.client_ids; }
+        } else if (Array.isArray(item.client_ids)) {
+          clients = item.client_ids.join(', ');
+        }
+      }
+
+      html += '<tr>';
+      html += '<td>' + esc(item.id) + '</td>';
+      html += '<td><strong>' + esc(item.name) + '</strong></td>';
+      html += '<td>' + esc(item.image_id || '-') + '</td>';
+      html += '<td><div class="client-cell" title="' + esc(clients) + '">' + esc(clients || '-') + '</div></td>';
+      html += '<td>' + statusBadge(item.status, statusText) + '</td>';
+      html += '<td class="progress-col">' + progress + '%<div class="progress-bar-small"><div class="fill" style="width:' + progress + '%;"></div></div></td>';
+      html += '<td>' + fmtDate(item.started_at) + '</td>';
+      html += '<td>' + fmtDate(item.completed_at) + '</td>';
+      html += '<td>' + fmtDate(item.created_at) + '</td>';
+      html += '<td>';
+      html += '<button class="action-btn edit" onclick="showEditModal(' + item.id + ')">编辑</button>';
+      html += '<button class="action-btn delete" onclick="deleteItem(' + item.id + ')">删除</button>';
+      if (item.status === 'pending') {
+        html += '<button class="action-btn run" onclick="startItem(' + item.id + ')">启动</button>';
+      }
+      html += '<button class="action-btn more" onclick="showReport(' + item.id + ')">报告</button>';
+      html += '</td>';
+      html += '</tr>';
+    }
+    tableBody.innerHTML = html;
+  }
+
+  function renderPagination() {
+    var container = document.getElementById('paginationContainer');
+    var totalPages = Math.ceil(totalItems / pageSize);
+    if (totalPages <= 1) {
+      container.innerHTML = '';
+      return;
+    }
+    var html = '<div class="pagination">';
+    html += '<span class="page-info">共 ' + totalItems + ' 条，第 ' + currentPage + '/' + totalPages + ' 页</span>';
+    html += '<div class="page-btns">';
+    if (currentPage > 1) {
+      html += '<button class="page-btn" onclick="goToPage(1)">首页</button>';
+      html += '<button class="page-btn" onclick="goToPage(' + (currentPage - 1) + ')">上一页</button>';
+    }
+    var startPage = Math.max(1, currentPage - 2);
+    var endPage = Math.min(totalPages, currentPage + 2);
+    for (var i = startPage; i <= endPage; i++) {
+      html += '<button class="page-btn' + (i === currentPage ? ' active' : '') + '" onclick="goToPage(' + i + ')">' + i + '</button>';
+    }
+    if (currentPage < totalPages) {
+      html += '<button class="page-btn" onclick="goToPage(' + (currentPage + 1) + ')">下一页</button>';
+      html += '<button class="page-btn" onclick="goToPage(' + totalPages + ')">末页</button>';
+    }
+    html += '</div></div>';
+    container.innerHTML = html;
+  }
+
+  window.goToPage = function(page) {
+    currentPage = page;
+    loadList();
+  };
+
+  window.searchDeploy = function() {
+    currentPage = 1;
+    loadList();
+  };
+
+  window.resetSearch = function() {
+    document.getElementById('searchKeyword').value = '';
+    document.getElementById('searchStatus').value = '';
+    currentPage = 1;
+    loadList();
+  };
+
+  function getFormData() {
+    var clientsVal = document.getElementById('formClientIds').value.trim();
+    var clientIds = [];
+    if (clientsVal) {
+      clientIds = clientsVal.split(',').map(function(c) { return c.trim(); }).filter(function(c) { return c; });
+    }
+    var configVal = document.getElementById('formConfig').value.trim();
+    var config = null;
+    if (configVal) {
+      try { config = JSON.parse(configVal); } catch(e) { config = configVal; }
+    }
+    return {
+      name: document.getElementById('formName').value.trim(),
+      image_id: document.getElementById('formImageId').value ? parseInt(document.getElementById('formImageId').value, 10) : null,
+      client_ids: clientIds,
+      config: config,
+      status: document.getElementById('formStatus').value
+    };
+  }
+
+  function buildFormContent(data) {
+    var name = data ? esc(data.name) : '';
+    var imageId = data ? (data.image_id || '') : '';
+    var status = data ? (data.status || 'pending') : 'pending';
+
+    var clientsStr = '';
+    if (data) {
+      if (data.client_ids) {
+        if (typeof data.client_ids === 'string') {
+          try { clientsStr = JSON.parse(data.client_ids).join(', '); } catch(e) { clientsStr = data.client_ids; }
+        } else if (Array.isArray(data.client_ids)) {
+          clientsStr = data.client_ids.join(', ');
+        }
+      }
+    }
+
+    var configStr = '';
+    if (data && data.config) {
+      if (typeof data.config === 'object') {
+        try { configStr = JSON.stringify(data.config, null, 2); } catch(e) { configStr = String(data.config); }
+      } else {
+        configStr = data.config;
+      }
+    }
+
+    var content = '';
+    content += '<div class="form-row">';
+    content += '<div class="form-group"><label>名称 <span style="color:#dc2626;">*</span></label><input type="text" id="formName" value="' + name + '" placeholder="部署名称"></div>';
+    content += '<div class="form-group"><label>镜像ID</label><input type="number" id="formImageId" value="' + imageId + '" min="0" placeholder="镜像ID"></div>';
+    content += '</div>';
+    content += '<div class="form-group"><label>客户端ID列表 (逗号分隔)</label><input type="text" id="formClientIds" value="' + esc(clientsStr) + '" placeholder="如: 1, 2, 3"></div>';
+    content += '<div class="form-group"><label>配置 (JSON格式)</label><textarea id="formConfig" rows="4" placeholder="可选的JSON配置">' + configStr + '</textarea></div>';
+    content += '<div class="form-group"><label>状态</label><select id="formStatus"><option value="pending"' + (status === 'pending' ? ' selected' : '') + '>待处理</option><option value="running"' + (status === 'running' ? ' selected' : '') + '>运行中</option><option value="completed"' + (status === 'completed' ? ' selected' : '') + '>已完成</option><option value="failed"' + (status === 'failed' ? ' selected' : '') + '>失败</option><option value="cancelled"' + (status === 'cancelled' ? ' selected' : '') + '>已取消</option></select></div>';
+    content += '<div class="form-actions">';
+    content += '<button class="btn-cancel" onclick="closeModal()">取消</button>';
+    content += '<button class="btn-submit" onclick="saveItem()">保存</button>';
+    content += '</div>';
+    return content;
+  }
+
+  window.showAddModal = function() {
+    var content = buildFormContent(null);
+    var modal = showModal('新建网络部署', content);
+    modal.setAttribute('data-mode', 'add');
+    modal.setAttribute('data-id', '');
+  };
+
+  window.showEditModal = function(id) {
+    api('/networkDeploys/' + id).then(function(res) {
+      if (res.code !== 0) {
+        toast(res.message || '获取详情失败', 'error');
+        return;
+      }
+      var item = res.data;
+      var content = buildFormContent(item);
+      var modal = showModal('编辑网络部署', content);
+      modal.setAttribute('data-mode', 'edit');
+      modal.setAttribute('data-id', id);
+    }).catch(function(err) {
+      toast('获取详情失败: ' + (err.message || '未知错误'), 'error');
+    });
+  };
+
+  window.saveItem = function() {
+    var modal = document.getElementById('modalOverlay');
+    var mode = modal ? modal.getAttribute('data-mode') : 'add';
+    var id = modal ? modal.getAttribute('data-id') : '';
+
+    var data = getFormData();
+    if (!data.name) {
+      toast('请输入部署名称', 'error');
+      return;
+    }
+
+    var request;
+    if (mode === 'edit' && id) {
+      request = api('/networkDeploys/' + id, { method: 'PUT', body: data });
+    } else {
+      request = api('/networkDeploys', { method: 'POST', body: data });
+    }
+
+    request.then(function(res) {
+      if (res.code === 0) {
+        toast(mode === 'edit' ? '更新成功' : '创建成功', 'success');
+        closeModal();
+        loadList();
+      } else {
+        toast(res.message || (mode === 'edit' ? '更新失败' : '创建失败'), 'error');
+      }
+    }).catch(function(err) {
+      toast('网络请求失败: ' + (err.message || '未知错误'), 'error');
+    });
+  };
+
+  window.deleteItem = function(id) {
+    if (!confirm('确定要删除该网络部署记录吗？此操作不可恢复。')) return;
+    api('/networkDeploys/' + id, { method: 'DELETE' }).then(function(res) {
+      if (res.code === 0) {
+        toast('删除成功', 'success');
+        loadList();
+      } else {
+        toast(res.message || '删除失败', 'error');
+      }
+    }).catch(function(err) {
+      toast('网络请求失败: ' + (err.message || '未知错误'), 'error');
+    });
+  };
+
+  window.startItem = function(id) {
+    if (!confirm('确定要启动该网络部署任务吗？')) return;
+    toast('正在启动部署...', 'info');
+    api('/networkDeploys/' + id + '/start', { method: 'POST' }).then(function(res) {
+      if (res.code === 0) {
+        toast('部署已启动', 'success');
+        loadList();
+      } else {
+        toast(res.message || '启动失败', 'error');
+      }
+    }).catch(function(err) {
+      toast('启动请求失败: ' + (err.message || '未知错误'), 'error');
+    });
+  };
+
+  window.showReport = function(id) {
+    toast('正在加载部署报告...', 'info');
+    api('/networkDeploys/' + id + '/report').then(function(res) {
+      if (res.code !== 0) {
+        toast(res.message || '获取报告失败', 'error');
+        return;
+      }
+      var report = res.data;
+      var content = '';
+
+      content += '<div style="margin-bottom:16px;">';
+      if (report.name) content += '<div class="detail-item"><div class="dt-label">部署名称</div><div class="dt-value">' + esc(report.name) + '</div></div>';
+      content += '</div>';
+
+      if (report.clients && report.clients.length > 0) {
+        content += '<div style="margin-bottom:12px;font-size:14px;font-weight:600;color:#334155;">客户端状态</div>';
+        content += '<table class="data-table" style="margin-bottom:16px;">';
+        content += '<thead><tr><th>客户端ID</th><th>状态</th><th>进度</th><th>消息</th></tr></thead>';
+        content += '<tbody>';
+        for (var i = 0; i < report.clients.length; i++) {
+          var c = report.clients[i];
+          var cStatusMap = { pending: '待处理', running: '运行中', completed: '已完成', failed: '失败', cancelled: '已取消' };
+          var cStatusText = cStatusMap[c.status] || c.status || '-';
+          var cProgress = parseInt(c.progress, 10) || 0;
+          content += '<tr>';
+          content += '<td>' + esc(c.client_id || c.id || '-') + '</td>';
+          content += '<td>' + statusBadge(c.status, cStatusText) + '</td>';
+          content += '<td>' + cProgress + '%</td>';
+          content += '<td>' + esc(c.message || '-') + '</td>';
+          content += '</tr>';
+        }
+        content += '</tbody></table>';
+      } else {
+        content += '<div class="empty-state"><div class="empty-icon">📋</div><p>暂无客户端报告数据</p></div>';
+      }
+
+      if (report.summary) {
+        content += '<div class="detail-grid">';
+        if (report.summary.total !== undefined) {
+          content += '<div class="detail-item"><div class="dt-label">总客户端数</div><div class="dt-value">' + report.summary.total + '</div></div>';
+        }
+        if (report.summary.completed !== undefined) {
+          content += '<div class="detail-item"><div class="dt-label">已完成</div><div class="dt-value">' + report.summary.completed + '</div></div>';
+        }
+        if (report.summary.failed !== undefined) {
+          content += '<div class="detail-item"><div class="dt-label">失败</div><div class="dt-value">' + report.summary.failed + '</div></div>';
+        }
+        if (report.summary.running !== undefined) {
+          content += '<div class="detail-item"><div class="dt-label">运行中</div><div class="dt-value">' + report.summary.running + '</div></div>';
+        }
+        content += '</div>';
+      }
+
+      content += '<div class="form-actions" style="margin-top:16px;">';
+      content += '<button class="btn-cancel" onclick="closeModal()">关闭</button>';
+      content += '</div>';
+
+      showModal('部署报告 - ' + esc(report.name || id), content);
+    }).catch(function(err) {
+      toast('获取报告失败: ' + (err.message || '未知错误'), 'error');
+    });
+  };
+
+  loadList();
+
+})();
+</script>
+</body>
+</html>

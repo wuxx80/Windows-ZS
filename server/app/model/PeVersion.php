@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 namespace app\model;
 
 class PeVersion extends BaseModel

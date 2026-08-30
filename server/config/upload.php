@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 return [
     "max_size"      => env("UPLOAD.MAX_SIZE", 21474836480),
     "extensions"    => explode(",", env("UPLOAD.EXTENSIONS", "wim,iso,esd,swm,gho,zip,rar,7z")),

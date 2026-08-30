@@ -1,9 +1,8 @@
-﻿<?php
+<?php
 namespace app\controller\admin;
 
 use app\model\User;
 use think\facade\Cache;
-use think\facade\Hash;
 
 class AuthController extends BaseController
 {
@@ -27,7 +26,7 @@ class AuthController extends BaseController
             return $this->error('auth_account_blocked');
         }
 
-        if (!Hash::check($password, $user->password)) {
+        if (!password_verify($password, $user->password)) {
             return $this->error('auth_failed', '用户名或密码错误');
         }
 
@@ -81,11 +80,11 @@ class AuthController extends BaseController
             return $this->error('not_found', '用户不存在');
         }
 
-        if (!Hash::check($oldPassword, $user->password)) {
+        if (!password_verify($oldPassword, $user->password)) {
             return $this->error('auth_failed', '旧密码错误');
         }
 
-        $user->password = $newPassword;
+        $user->password = password_hash($newPassword, PASSWORD_BCRYPT);
         $user->save();
 
         Cache::delete('auth_token_' . request()->header('Authorization'));

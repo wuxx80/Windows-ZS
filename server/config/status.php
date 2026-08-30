@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 return [
     "success"               => ["code" => 0,     "message" => "操作成功"],
     "error"                 => ["code" => 1000,  "message" => "系统错误"],

@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 namespace app\controller\admin;
 
 use app\model\SoftwareCategory;
@@ -7,7 +7,7 @@ class SoftwareCategoryController extends BaseController
 {
     public function index()
     {
-        $query = SoftwareCategory::order('sort', 'asc')->order('id', 'desc');
+        $query = SoftwareCategory::order('sort_order', 'asc')->order('id', 'desc');
         return $this->paginate($query);
     }
 
@@ -18,7 +18,7 @@ class SoftwareCategoryController extends BaseController
             'parent_id' => input('parent_id', 0),
             'description' => input('description'),
             'icon' => input('icon'),
-            'sort' => input('sort', 0),
+            'sort_order' => input('sort_order', 0),
             'status' => input('status', 1),
         ];
 
@@ -38,7 +38,7 @@ class SoftwareCategoryController extends BaseController
         }
 
         $data = [];
-        foreach (['name', 'parent_id', 'description', 'icon', 'sort', 'status'] as $field) {
+        foreach (['name', 'parent_id', 'description', 'icon', 'sort_order', 'status'] as $field) {
             $val = input($field);
             if ($val !== null) {
                 $data[$field] = $val;

@@ -1,0 +1,324 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>PE版本 - ZS 装机助手</title>
+<link rel="stylesheet" href="../../assets/css/admin.css">
+<style>
+body{padding:24px;background:transparent;font-family:-apple-system,"Microsoft YaHei","PingFang SC",sans-serif;}
+h2{margin-bottom:16px;font-size:20px;font-weight:600;color:#334155;}
+.search-bar{margin-bottom:16px;}
+.data-table th{background:#f8fafc;white-space:nowrap;}
+.data-table td{vertical-align:middle;}
+.data-table .url-cell{max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+.detail-item{padding:10px 14px;background:#f8fafc;border-radius:6px;}
+.detail-item .dt-label{font-size:12px;color:#64748b;margin-bottom:2px;}
+.detail-item .dt-value{font-size:14px;color:#1e293b;font-weight:500;word-break:break-all;}
+.detail-full{grid-column:1 / -1;}
+</style>
+</head>
+<body>
+
+<h2>PE版本管理</h2>
+
+<div class="search-bar">
+  <input type="text" id="searchKeyword" placeholder="关键词搜索（版本号/基础OS/架构）" style="min-width:200px;">
+  <select id="searchStatus">
+    <option value="">全部状态</option>
+    <option value="draft">草稿</option>
+    <option value="published">已发布</option>
+    <option value="archived">已归档</option>
+  </select>
+  <button class="btn-search" onclick="searchPE()">搜索</button>
+  <button class="btn-reset" onclick="resetSearch()">重置</button>
+  <button class="btn-create" onclick="showAddModal()">新增PE版本</button>
+</div>
+
+<div class="panel">
+  <div class="panel-body" style="padding:0;">
+    <table class="data-table" id="dataTable">
+      <thead>
+        <tr>
+          <th style="width:60px;">ID</th>
+          <th>版本号</th>
+          <th style="width:120px;">基础OS</th>
+          <th style="width:80px;">架构</th>
+          <th style="width:100px;">文件大小</th>
+          <th>下载地址</th>
+          <th style="width:70px;">状态</th>
+          <th style="width:140px;">创建时间</th>
+          <th style="width:160px;">操作</th>
+        </tr>
+      </thead>
+      <tbody id="tableBody"></tbody>
+    </table>
+    <div id="emptyState" class="empty-state" style="display:none;">
+      <div class="empty-icon">💾</div>
+      <p>暂无PE版本数据</p>
+    </div>
+  </div>
+</div>
+
+<div id="paginationContainer"></div>
+
+<script src="../../assets/js/admin-common.js"></script>
+<script>
+(function() {
+  var currentPage = 1;
+  var pageSize = 15;
+  var totalItems = 0;
+  var currentList = [];
+
+  function loadList() {
+    var keyword = document.getElementById('searchKeyword').value.trim();
+    var status = document.getElementById('searchStatus').value;
+
+    var params = 'page=' + currentPage + '&pageSize=' + pageSize;
+    if (keyword) params += '&keyword=' + encodeURIComponent(keyword);
+    if (status) params += '&status=' + encodeURIComponent(status);
+
+    var tableBody = document.getElementById('tableBody');
+    tableBody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:40px;color:#94a3b8;">加载中...</td></tr>';
+
+    api('/peVersions?' + params).then(function(res) {
+      if (res.code === 0) {
+        totalItems = res.data.total || 0;
+        currentList = res.data.list || [];
+        renderTable(currentList);
+        renderPagination();
+      } else {
+        toast(res.message || '加载失败', 'error');
+        tableBody.innerHTML = '';
+        document.getElementById('emptyState').style.display = 'block';
+      }
+    }).catch(function(err) {
+      toast('网络请求失败: ' + (err.message || '未知错误'), 'error');
+      tableBody.innerHTML = '';
+      document.getElementById('emptyState').style.display = 'block';
+    });
+  }
+
+  function renderTable(list) {
+    var tableBody = document.getElementById('tableBody');
+    var emptyState = document.getElementById('emptyState');
+
+    if (!list || list.length === 0) {
+      tableBody.innerHTML = '';
+      emptyState.style.display = 'block';
+      return;
+    }
+    emptyState.style.display = 'none';
+
+    var html = '';
+    for (var i = 0; i < list.length; i++) {
+      var item = list[i];
+      var statusMap = { draft: '草稿', published: '已发布', archived: '已归档' };
+      var statusText = statusMap[item.status] || item.status;
+      html += '<tr>';
+      html += '<td>' + esc(item.id) + '</td>';
+      html += '<td><strong>' + esc(item.version) + '</strong></td>';
+      html += '<td>' + esc(item.base_os || '-') + '</td>';
+      html += '<td>' + esc(item.arch || '-') + '</td>';
+      html += '<td>' + fmtSize(item.file_size) + '</td>';
+      html += '<td><div class="url-cell" title="' + esc(item.download_url) + '">' + esc(item.download_url || '-') + '</div></td>';
+      html += '<td>' + statusBadge(item.status, statusText) + '</td>';
+      html += '<td>' + fmtDate(item.created_at) + '</td>';
+      html += '<td>';
+      html += '<button class="action-btn edit" onclick="showEditModal(' + item.id + ')">编辑</button>';
+      html += '<button class="action-btn delete" onclick="deleteItem(' + item.id + ')">删除</button>';
+      html += '<button class="action-btn more" onclick="viewDetail(' + item.id + ')">详情</button>';
+      html += '</td>';
+      html += '</tr>';
+    }
+    tableBody.innerHTML = html;
+  }
+
+  function renderPagination() {
+    var container = document.getElementById('paginationContainer');
+    var totalPages = Math.ceil(totalItems / pageSize);
+    if (totalPages <= 1) {
+      container.innerHTML = '';
+      return;
+    }
+    var html = '<div class="pagination">';
+    html += '<span class="page-info">共 ' + totalItems + ' 条，第 ' + currentPage + '/' + totalPages + ' 页</span>';
+    html += '<div class="page-btns">';
+    if (currentPage > 1) {
+      html += '<button class="page-btn" onclick="goToPage(1)">首页</button>';
+      html += '<button class="page-btn" onclick="goToPage(' + (currentPage - 1) + ')">上一页</button>';
+    }
+    var startPage = Math.max(1, currentPage - 2);
+    var endPage = Math.min(totalPages, currentPage + 2);
+    for (var i = startPage; i <= endPage; i++) {
+      html += '<button class="page-btn' + (i === currentPage ? ' active' : '') + '" onclick="goToPage(' + i + ')">' + i + '</button>';
+    }
+    if (currentPage < totalPages) {
+      html += '<button class="page-btn" onclick="goToPage(' + (currentPage + 1) + ')">下一页</button>';
+      html += '<button class="page-btn" onclick="goToPage(' + totalPages + ')">末页</button>';
+    }
+    html += '</div></div>';
+    container.innerHTML = html;
+  }
+
+  window.goToPage = function(page) {
+    currentPage = page;
+    loadList();
+  };
+
+  window.searchPE = function() {
+    currentPage = 1;
+    loadList();
+  };
+
+  window.resetSearch = function() {
+    document.getElementById('searchKeyword').value = '';
+    document.getElementById('searchStatus').value = '';
+    currentPage = 1;
+    loadList();
+  };
+
+  function getFormData() {
+    return {
+      version: document.getElementById('formVersion').value.trim(),
+      base_os: document.getElementById('formBaseOs').value.trim(),
+      arch: document.getElementById('formArch').value,
+      file_size: document.getElementById('formFileSize').value ? parseInt(document.getElementById('formFileSize').value, 10) : 0,
+      download_url: document.getElementById('formDownloadUrl').value.trim(),
+      status: document.getElementById('formStatus').value
+    };
+  }
+
+  function buildFormContent(data) {
+    var version = data ? esc(data.version) : '';
+    var baseOs = data ? esc(data.base_os) : '';
+    var arch = data ? esc(data.arch) : '';
+    var fileSize = data ? (data.file_size || '') : '';
+    var downloadUrl = data ? esc(data.download_url) : '';
+    var status = data ? (data.status || 'draft') : 'draft';
+
+    var content = '';
+    content += '<div class="form-row">';
+    content += '<div class="form-group"><label>版本号 <span style="color:#dc2626;">*</span></label><input type="text" id="formVersion" value="' + version + '" placeholder="如: 10.0.22000"></div>';
+    content += '<div class="form-group"><label>基础OS</label><input type="text" id="formBaseOs" value="' + baseOs + '" placeholder="如: WinPE 11"></div>';
+    content += '</div>';
+    content += '<div class="form-row">';
+    content += '<div class="form-group"><label>架构</label><select id="formArch"><option value="">请选择</option><option value="x64"' + (arch === 'x64' ? ' selected' : '') + '>x64</option><option value="x86"' + (arch === 'x86' ? ' selected' : '') + '>x86</option><option value="arm64"' + (arch === 'arm64' ? ' selected' : '') + '>arm64</option></select></div>';
+    content += '<div class="form-group"><label>文件大小 (字节)</label><input type="number" id="formFileSize" value="' + fileSize + '" min="0" placeholder="0"></div>';
+    content += '</div>';
+    content += '<div class="form-group"><label>下载地址</label><input type="url" id="formDownloadUrl" value="' + downloadUrl + '" placeholder="https://example.com/pe.iso"></div>';
+    content += '<div class="form-group"><label>状态</label><select id="formStatus"><option value="draft"' + (status === 'draft' ? ' selected' : '') + '>草稿</option><option value="published"' + (status === 'published' ? ' selected' : '') + '>已发布</option><option value="archived"' + (status === 'archived' ? ' selected' : '') + '>已归档</option></select></div>';
+    content += '<div class="form-actions">';
+    content += '<button class="btn-cancel" onclick="closeModal()">取消</button>';
+    content += '<button class="btn-submit" onclick="saveItem()">保存</button>';
+    content += '</div>';
+    return content;
+  }
+
+  window.showAddModal = function() {
+    var content = buildFormContent(null);
+    var modal = showModal('新增PE版本', content);
+    modal.setAttribute('data-mode', 'add');
+    modal.setAttribute('data-id', '');
+  };
+
+  window.showEditModal = function(id) {
+    api('/peVersions/' + id).then(function(res) {
+      if (res.code !== 0) {
+        toast(res.message || '获取详情失败', 'error');
+        return;
+      }
+      var item = res.data;
+      var content = buildFormContent(item);
+      var modal = showModal('编辑PE版本', content);
+      modal.setAttribute('data-mode', 'edit');
+      modal.setAttribute('data-id', id);
+    }).catch(function(err) {
+      toast('获取详情失败: ' + (err.message || '未知错误'), 'error');
+    });
+  };
+
+  window.saveItem = function() {
+    var modal = document.getElementById('modalOverlay');
+    var mode = modal ? modal.getAttribute('data-mode') : 'add';
+    var id = modal ? modal.getAttribute('data-id') : '';
+
+    var data = getFormData();
+    if (!data.version) {
+      toast('请输入版本号', 'error');
+      return;
+    }
+
+    var request;
+    if (mode === 'edit' && id) {
+      request = api('/peVersions/' + id, { method: 'PUT', body: data });
+    } else {
+      request = api('/peVersions', { method: 'POST', body: data });
+    }
+
+    request.then(function(res) {
+      if (res.code === 0) {
+        toast(mode === 'edit' ? '更新成功' : '创建成功', 'success');
+        closeModal();
+        loadList();
+      } else {
+        toast(res.message || (mode === 'edit' ? '更新失败' : '创建失败'), 'error');
+      }
+    }).catch(function(err) {
+      toast('网络请求失败: ' + (err.message || '未知错误'), 'error');
+    });
+  };
+
+  window.deleteItem = function(id) {
+    if (!confirm('确定要删除该PE版本吗？此操作不可恢复。')) return;
+    api('/peVersions/' + id, { method: 'DELETE' }).then(function(res) {
+      if (res.code === 0) {
+        toast('删除成功', 'success');
+        loadList();
+      } else {
+        toast(res.message || '删除失败', 'error');
+      }
+    }).catch(function(err) {
+      toast('网络请求失败: ' + (err.message || '未知错误'), 'error');
+    });
+  };
+
+  window.viewDetail = function(id) {
+    toast('正在加载详情...', 'info');
+    api('/peVersions/' + id).then(function(res) {
+      if (res.code !== 0) {
+        toast(res.message || '获取详情失败', 'error');
+        return;
+      }
+      var item = res.data;
+      var statusMap = { draft: '草稿', published: '已发布', archived: '已归档' };
+      var statusText = statusMap[item.status] || item.status;
+      var content = '';
+      content += '<div class="detail-grid">';
+      content += '<div class="detail-item"><div class="dt-label">ID</div><div class="dt-value">' + esc(item.id) + '</div></div>';
+      content += '<div class="detail-item"><div class="dt-label">版本号</div><div class="dt-value">' + esc(item.version) + '</div></div>';
+      content += '<div class="detail-item"><div class="dt-label">基础OS</div><div class="dt-value">' + esc(item.base_os || '-') + '</div></div>';
+      content += '<div class="detail-item"><div class="dt-label">架构</div><div class="dt-value">' + esc(item.arch || '-') + '</div></div>';
+      content += '<div class="detail-item"><div class="dt-label">文件大小</div><div class="dt-value">' + fmtSize(item.file_size) + '</div></div>';
+      content += '<div class="detail-item detail-full"><div class="dt-label">下载地址</div><div class="dt-value" style="font-size:12px;word-break:break-all;">' + esc(item.download_url || '-') + '</div></div>';
+      content += '<div class="detail-item"><div class="dt-label">状态</div><div class="dt-value">' + statusBadge(item.status, statusText) + '</div></div>';
+      content += '<div class="detail-item"><div class="dt-label">创建时间</div><div class="dt-value">' + fmtDate(item.created_at) + '</div></div>';
+      content += '<div class="detail-item"><div class="dt-label">更新时间</div><div class="dt-value">' + fmtDate(item.updated_at) + '</div></div>';
+      content += '</div>';
+      content += '<div class="form-actions" style="margin-top:16px;">';
+      content += '<button class="btn-cancel" onclick="closeModal()">关闭</button>';
+      content += '<button class="action-btn edit" style="padding:8px 20px;font-size:13px;" onclick="closeModal();showEditModal(' + item.id + ')">编辑</button>';
+      content += '</div>';
+
+      showModal('PE版本详情 - ' + esc(item.version), content);
+    }).catch(function(err) {
+      toast('获取详情失败: ' + (err.message || '未知错误'), 'error');
+    });
+  };
+
+  loadList();
+
+})();
+</script>
+</body>
+</html>

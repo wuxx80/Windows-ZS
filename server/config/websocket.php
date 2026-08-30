@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 return [
     "port" => env("WEBSOCKET.PORT", 2346),
     "heartbeat_interval" => 30,

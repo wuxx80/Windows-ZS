@@ -1,0 +1,352 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>工单管理 - ZS 装机助手</title>
+<link rel="stylesheet" href="../../assets/css/admin.css">
+<style>
+body{padding:24px;background:transparent;}
+h2{margin-bottom:20px;font-size:20px;font-weight:600;color:#334155;}
+.data-table th{background:#f8fafc;white-space:nowrap;}
+.data-table td{vertical-align:middle;}
+.actions-cell{display:flex;gap:4px;flex-wrap:wrap;}
+</style>
+</head>
+<body>
+<h2>工单管理</h2>
+<div class="search-bar">
+  <input type="text" id="searchKeyword" placeholder="搜索工单标题" style="min-width:200px;">
+  <select id="searchStatus">
+    <option value="">全部状态</option>
+    <option value="pending">待处理</option>
+    <option value="processing">处理中</option>
+    <option value="completed">已完成</option>
+    <option value="cancelled">已取消</option>
+  </select>
+  <button class="btn-search" onclick="searchWorkOrders()">搜索</button>
+  <button class="btn-reset" onclick="resetSearch()">重置</button>
+  <button class="btn-create" onclick="showAddModal()">添加工单</button>
+</div>
+<div class="panel">
+  <div class="panel-body" style="padding:0;">
+    <table class="data-table" id="dataTable">
+      <thead>
+        <tr>
+          <th style="width:50px;">ID</th>
+          <th>标题</th>
+          <th style="width:80px;">客户ID</th>
+          <th style="width:60px;">类型</th>
+          <th style="width:50px;">优先级</th>
+          <th style="width:70px;">状态</th>
+          <th style="width:70px;">负责人</th>
+          <th style="width:140px;">创建时间</th>
+          <th style="width:200px;">操作</th>
+        </tr>
+      </thead>
+      <tbody id="tableBody">
+        <tr><td colspan="9"><div class="empty-state"><div class="empty-icon">📋</div><p>加载中...</p></div></td></tr>
+      </tbody>
+    </table>
+    <div id="emptyState" class="empty-state" style="display:none;">
+      <div class="empty-icon">📋</div>
+      <p>暂无工单数据</p>
+    </div>
+  </div>
+</div>
+<div id="paginationContainer"></div>
+<script src="../../assets/js/admin-common.js"></script>
+
+<script>
+(function() {
+  var currentPage = 1;
+  var pageSize = 15;
+  var totalCount = 0;
+  var currentList = [];
+
+  var TYPE_MAP = { "install": "安装", "repair": "维修", "upgrade": "升级", "other": "其他" };
+  var PRIORITY_MAP = { "low": "低", "medium": "中", "high": "高", "urgent": "紧急" };
+  var STATUS_MAP = { "pending": "待处理", "processing": "处理中", "completed": "已完成", "cancelled": "已取消" };
+
+  function getTypeLabel(t) { return TYPE_MAP[t] || t || "-"; }
+  function getPriorityLabel(p) { return PRIORITY_MAP[p] || p || "-"; }
+  function getStatusLabel(s) { return STATUS_MAP[s] || s || "-"; }
+
+  function loadData() {
+    var keyword = document.getElementById("searchKeyword").value.trim();
+    var status = document.getElementById("searchStatus").value;
+    var params = "page=" + currentPage + "&pageSize=" + pageSize;
+    if (keyword) params += "&keyword=" + encodeURIComponent(keyword);
+    if (status) params += "&status=" + encodeURIComponent(status);
+
+    var tableBody = document.getElementById("tableBody");
+    tableBody.innerHTML = "<tr><td colspan=\"9\" style=\"text-align:center;padding:40px;color:#94a3b8;\">加载中...</td></tr>";
+
+    api("/workOrders?" + params).then(function(res) {
+      if (res.code === 0) {
+        totalCount = res.data.total || 0;
+        currentList = res.data.list || [];
+        renderTable(currentList);
+        renderPagination();
+      } else {
+        tableBody.innerHTML = "<tr><td colspan=\"9\"><div class=\"empty-state\"><div class=\"empty-icon\">&#x274C;</div><p>" + esc(res.message || "加载失败") + "</p></div></td></tr>";
+      }
+    }).catch(function(err) {
+      tableBody.innerHTML = "<tr><td colspan=\"9\"><div class=\"empty-state\"><div class=\"empty-icon\">&#x274C;</div><p>网络错误：" + esc(err.message) + "</p></div></td></tr>";
+    });
+  }
+
+  function renderTable(list) {
+    var tableBody = document.getElementById("tableBody");
+    var emptyState = document.getElementById("emptyState");
+
+    if (!list || list.length === 0) {
+      tableBody.innerHTML = "";
+      emptyState.style.display = "block";
+      return;
+    }
+    emptyState.style.display = "none";
+
+    var html = "";
+    for (var i = 0; i < list.length; i++) {
+      var item = list[i];
+      html += "<tr>";
+      html += "<td>" + esc(item.id) + "</td>";
+      html += "<td><strong>" + esc(item.title) + "</strong></td>";
+      html += "<td>" + esc(item.customer_id || "-") + "</td>";
+      html += "<td>" + esc(getTypeLabel(item.type)) + "</td>";
+      html += "<td>" + esc(getPriorityLabel(item.priority)) + "</td>";
+      html += "<td>" + statusBadge(item.status, getStatusLabel(item.status)) + "</td>";
+      html += "<td>" + esc(item.assignee || "-") + "</td>";
+      html += "<td style=\"font-size:12px;color:var(--text-light);\">" + fmtDate(item.created_at) + "</td>";
+      html += "<td><div class=\"actions-cell\">";
+      html += "<button class=\"action-btn edit\" onclick=\"editWorkOrder(" + item.id + ")\">编辑</button>";
+      html += "<button class=\"action-btn delete\" onclick=\"deleteWorkOrder(" + item.id + ")\">删除</button>";
+      html += "<button class=\"action-btn more\" onclick=\"viewWorkOrder(" + item.id + ")\">详情</button>";
+      html += "<button class=\"action-btn run\" onclick=\"changeStatus(" + item.id + ")\">状态</button>";
+      html += "</div></td>";
+      html += "</tr>";
+    }
+    tableBody.innerHTML = html;
+  }
+
+  function renderPagination() {
+    var container = document.getElementById("paginationContainer");
+    var totalPages = Math.ceil(totalCount / pageSize);
+    if (totalPages <= 1) {
+      container.innerHTML = "";
+      return;
+    }
+    var html = "<div class=\"pagination\">";
+    html += "<span class=\"page-info\">共 " + totalCount + " 条，第 " + currentPage + "/" + totalPages + " 页</span>";
+    html += "<div class=\"page-btns\">";
+    if (currentPage > 1) {
+      html += "<button class=\"page-btn\" onclick=\"goToPage(1)\">首页</button>";
+      html += "<button class=\"page-btn\" onclick=\"goToPage(" + (currentPage - 1) + ")\">上一页</button>";
+    }
+    var startPage = Math.max(1, currentPage - 2);
+    var endPage = Math.min(totalPages, currentPage + 2);
+    for (var i = startPage; i <= endPage; i++) {
+      html += "<button class=\"page-btn" + (i === currentPage ? " active" : "") + "\" onclick=\"goToPage(" + i + ")\">" + i + "</button>";
+    }
+    if (currentPage < totalPages) {
+      html += "<button class=\"page-btn\" onclick=\"goToPage(" + (currentPage + 1) + ")\">下一页</button>";
+      html += "<button class=\"page-btn\" onclick=\"goToPage(" + totalPages + ")\">末页</button>";
+    }
+    html += "</div></div>";
+    container.innerHTML = html;
+  }
+
+  window.goToPage = function(page) {
+    currentPage = page;
+    loadData();
+  };
+
+  window.searchWorkOrders = function() {
+    currentPage = 1;
+    loadData();
+  };
+
+  window.resetSearch = function() {
+    document.getElementById("searchKeyword").value = "";
+    document.getElementById("searchStatus").value = "";
+    currentPage = 1;
+    loadData();
+  };
+
+  function getFormData() {
+    return {
+      title: document.getElementById("formTitle").value.trim(),
+      customer_id: document.getElementById("formCustomerId").value.trim(),
+      type: document.getElementById("formType").value,
+      priority: document.getElementById("formPriority").value,
+      assignee: document.getElementById("formAssignee").value.trim(),
+      description: document.getElementById("formDescription").value.trim()
+    };
+  }
+
+  function getFormContent(data) {
+    var title = data ? data.title : "";
+    var customerId = data ? data.customer_id : "";
+    var type = data ? data.type : "install";
+    var priority = data ? data.priority : "medium";
+    var assignee = data ? data.assignee : "";
+    var description = data ? data.description : "";
+
+    var content = "";
+    content += "<div class=\"form-row\">";
+    content += "<div class=\"form-group\"><label>工单标题 <span style=\"color:#dc2626;\">*</span></label><input type=\"text\" id=\"formTitle\" placeholder=\"工单标题\" value=\"" + esc(title) + "\"></div>";
+    content += "<div class=\"form-group\"><label>客户ID</label><input type=\"text\" id=\"formCustomerId\" placeholder=\"客户ID\" value=\"" + esc(customerId) + "\"></div>";
+    content += "</div>";
+    content += "<div class=\"form-row\">";
+    content += "<div class=\"form-group\"><label>类型</label><select id=\"formType\">";
+    content += "<option value=\"install\"" + (type === "install" ? " selected" : "") + ">安装</option>";
+    content += "<option value=\"repair\"" + (type === "repair" ? " selected" : "") + ">维修</option>";
+    content += "<option value=\"upgrade\"" + (type === "upgrade" ? " selected" : "") + ">升级</option>";
+    content += "<option value=\"other\"" + (type === "other" ? " selected" : "") + ">其他</option>";
+    content += "</select></div>";
+    content += "<div class=\"form-group\"><label>优先级</label><select id=\"formPriority\">";
+    content += "<option value=\"low\"" + (priority === "low" ? " selected" : "") + ">低</option>";
+    content += "<option value=\"medium\"" + (priority === "medium" ? " selected" : "") + ">中</option>";
+    content += "<option value=\"high\"" + (priority === "high" ? " selected" : "") + ">高</option>";
+    content += "<option value=\"urgent\"" + (priority === "urgent" ? " selected" : "") + ">紧急</option>";
+    content += "</select></div>";
+    content += "</div>";
+    content += "<div class=\"form-group\"><label>负责人</label><input type=\"text\" id=\"formAssignee\" placeholder=\"负责人\" value=\"" + esc(assignee) + "\"></div>";
+    content += "<div class=\"form-group\"><label>描述</label><textarea id=\"formDescription\" placeholder=\"工单描述\">" + esc(description) + "</textarea></div>";
+    content += "<div class=\"form-actions\">";
+    content += "<button class=\"btn-cancel\" onclick=\"closeModal()\">取消</button>";
+    content += "<button class=\"btn-submit\" onclick=\"saveWorkOrder()\">保存</button>";
+    content += "</div>";
+    return content;
+  }
+
+  window.showAddModal = function() {
+    var content = getFormContent(null);
+    var modal = showModal("添加工单", content);
+    modal.setAttribute("data-mode", "add");
+    modal.setAttribute("data-id", "");
+  };
+
+  window.editWorkOrder = function(id) {
+    api("/workOrders/" + id).then(function(res) {
+      if (res.code === 0) {
+        var item = res.data;
+        var content = getFormContent(item);
+        var modal = showModal("编辑工单 - " + esc(item.title), content);
+        modal.setAttribute("data-mode", "edit");
+        modal.setAttribute("data-id", id);
+      } else {
+        toast(res.message || "获取工单信息失败", "error");
+      }
+    }).catch(function(err) {
+      toast("网络错误：" + err.message, "error");
+    });
+  };
+
+  window.viewWorkOrder = function(id) {
+    api("/workOrders/" + id).then(function(res) {
+      if (res.code === 0) {
+        var item = res.data;
+        var content = "";
+        content += "<div class=\"detail-grid\">";
+        content += "<div class=\"detail-item\"><div class=\"dt-label\">工单标题</div><div class=\"dt-value\">" + esc(item.title) + "</div></div>";
+        content += "<div class=\"detail-item\"><div class=\"dt-label\">客户ID</div><div class=\"dt-value\">" + esc(item.customer_id || "-") + "</div></div>";
+        content += "<div class=\"detail-item\"><div class=\"dt-label\">类型</div><div class=\"dt-value\">" + esc(getTypeLabel(item.type)) + "</div></div>";
+        content += "<div class=\"detail-item\"><div class=\"dt-label\">优先级</div><div class=\"dt-value\">" + esc(getPriorityLabel(item.priority)) + "</div></div>";
+        content += "<div class=\"detail-item\"><div class=\"dt-label\">状态</div><div class=\"dt-value\">" + statusBadge(item.status, getStatusLabel(item.status)) + "</div></div>";
+        content += "<div class=\"detail-item\"><div class=\"dt-label\">负责人</div><div class=\"dt-value\">" + esc(item.assignee || "-") + "</div></div>";
+        content += "<div class=\"detail-item\"><div class=\"dt-label\">描述</div><div class=\"dt-value\">" + esc(item.description || "-") + "</div></div>";
+        content += "<div class=\"detail-item\"><div class=\"dt-label\">创建时间</div><div class=\"dt-value\">" + fmtDate(item.created_at) + "</div></div>";
+        content += "<div class=\"detail-item\"><div class=\"dt-label\">更新时间</div><div class=\"dt-value\">" + fmtDate(item.updated_at) + "</div></div>";
+        content += "</div>";
+        content += "<div class=\"form-actions\"><button class=\"btn-cancel\" onclick=\"closeModal()\">关闭</button></div>";
+        showModal("工单详情 - " + esc(item.title), content);
+      } else {
+        toast(res.message || "获取工单信息失败", "error");
+      }
+    }).catch(function(err) {
+      toast("网络错误：" + err.message, "error");
+    });
+  };
+
+  window.saveWorkOrder = function() {
+    var modal = document.getElementById("modalOverlay");
+    var mode = modal ? modal.getAttribute("data-mode") : "add";
+    var id = modal ? parseInt(modal.getAttribute("data-id"), 10) : 0;
+
+    var data = getFormData();
+    if (!data.title) {
+      toast("请输入工单标题", "error");
+      return;
+    }
+
+    var url = "/workOrders";
+    var method = "POST";
+    if (mode === "edit") {
+      url = "/workOrders/" + id;
+      method = "PUT";
+    }
+
+    api(url, { method: method, body: data }).then(function(res) {
+      if (res.code === 0) {
+        toast(mode === "add" ? "工单添加成功" : "工单更新成功", "success");
+        closeModal();
+        loadData();
+      } else {
+        toast(res.message || "操作失败", "error");
+      }
+    }).catch(function(err) {
+      toast("网络错误：" + err.message, "error");
+    });
+  };
+
+  window.deleteWorkOrder = function(id) {
+    if (!confirm("确定要删除该工单吗？此操作不可恢复。")) return;
+    api("/workOrders/" + id, { method: "DELETE" }).then(function(res) {
+      if (res.code === 0) {
+        toast("工单删除成功", "success");
+        loadData();
+      } else {
+        toast(res.message || "删除失败", "error");
+      }
+    }).catch(function(err) {
+      toast("网络错误：" + err.message, "error");
+    });
+  };
+
+  window.changeStatus = function(id) {
+    var content = "";
+    content += "<div class=\"form-group\"><label>状态</label><select id=\"statusSelect\">";
+    content += "<option value=\"pending\">待处理</option>";
+    content += "<option value=\"processing\">处理中</option>";
+    content += "<option value=\"completed\">已完成</option>";
+    content += "<option value=\"cancelled\">已取消</option>";
+    content += "</select></div>";
+    content += "<div class=\"form-actions\">";
+    content += "<button class=\"btn-cancel\" onclick=\"closeModal()\">取消</button>";
+    content += "<button class=\"btn-submit\" onclick=\"submitStatusChange(" + id + ")\">确认</button>";
+    content += "</div>";
+    showModal("更新工单状态", content);
+  };
+
+  window.submitStatusChange = function(id) {
+    var status = document.getElementById("statusSelect").value;
+    api("/workOrders/" + id + "/status", { method: "PUT", body: { status: status } }).then(function(res) {
+      if (res.code === 0) {
+        toast("状态更新成功", "success");
+        closeModal();
+        loadData();
+      } else {
+        toast(res.message || "状态更新失败", "error");
+      }
+    }).catch(function(err) {
+      toast("网络错误：" + err.message, "error");
+    });
+  };
+
+  loadData();
+})();
+</script>
+</body>
+</html>

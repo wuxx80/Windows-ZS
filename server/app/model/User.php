@@ -1,7 +1,5 @@
-﻿<?php
+<?php
 namespace app\model;
-
-use think\facade\Hash;
 
 class User extends BaseModel
 {
@@ -34,7 +32,7 @@ class User extends BaseModel
 
     public function setPasswordAttr($value)
     {
-        return Hash::make($value);
+        return password_hash($value, PASSWORD_BCRYPT);
     }
 
     public function getLastLoginTimeAttr($value)
@@ -45,4 +43,3 @@ class User extends BaseModel
         return null;
     }
 }
-

@@ -1,0 +1,198 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>镜像源管理 - ZS 装机助手</title>
+<link rel="stylesheet" href="../../assets/css/admin.css">
+<style>
+body{padding:24px;background:transparent;}
+h2{margin-bottom:20px;font-size:20px;font-weight:600;color:#334155;}
+.data-table th{background:#f8fafc;white-space:nowrap;}
+.data-table td{vertical-align:middle;}
+.source-url{max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:'Consolas','Monaco',monospace;font-size:12px;color:var(--text-light);}
+.type-badge{display:inline-block;padding:2px 10px;border-radius:12px;font-size:12px;font-weight:500;}
+.type-badge.public{background:#dbeafe;color:#2563eb;}
+.type-badge.private{background:#f3e8ff;color:#9333ea;}
+.type-badge.custom{background:#fff7ed;color:#ea580c;}
+</style>
+</head>
+<body>
+<h2>镜像源管理</h2>
+<div class="search-bar">
+  <input type="text" id="searchKeyword" placeholder="搜索镜像源名称/地址" style="min-width:200px;">
+  <button class="btn-search" onclick="searchSources()">搜索</button>
+  <button class="btn-reset" onclick="resetSearch()">重置</button>
+  <button class="btn-create" onclick="showAddModal()">添加镜像源</button>
+</div>
+<div class="panel">
+  <div class="panel-body" style="padding:0;">
+    <table class="data-table" id="dataTable">
+      <thead>
+        <tr>
+          <th style="width:60px;">ID</th>
+          <th>名称</th>
+          <th style="width:280px;">地址</th>
+          <th style="width:80px;">类型</th>
+          <th style="width:70px;">状态</th>
+          <th style="width:150px;">最后同步</th>
+          <th style="width:140px;">创建时间</th>
+          <th style="width:200px;">操作</th>
+        </tr>
+      </thead>
+      <tbody id="tableBody">
+        <tr><td colspan="8"><div class="empty-state"><div class="empty-icon">🌐</div><p>加载中...</p></div></td></tr>
+      </tbody>
+    </table>
+    <div id="emptyState" class="empty-state" style="display:none;">
+      <div class="empty-icon">🌐</div>
+      <p>暂无镜像源数据</p>
+    </div>
+  </div>
+</div>
+<div id="paginationContainer"></div>
+<script src="../../assets/js/admin-common.js"></script>
+<script>
+(function() {
+  var currentPage = 1;
+  var pageSize = 15;
+  var totalCount = 0;
+  var currentList = [];
+  var TYPE_MAP = { 'public': '公开', 'private': '私有', 'custom': '自定义' };
+  function loadList() {
+    var keyword = document.getElementById('searchKeyword').value.trim();
+    var params = 'page=' + currentPage + '&pageSize=' + pageSize;
+    if (keyword) params += '&keyword=' + encodeURIComponent(keyword);
+    var tableBody = document.getElementById('tableBody');
+    tableBody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:40px;color:#94a3b8;">加载中...</td></tr>';
+    api('/imageSources?' + params).then(function(res) {
+      if (res.code === 0) {
+        totalCount = res.data.total || 0;
+        currentList = res.data.list || [];
+        renderTable(currentList);
+        renderPagination();
+      } else {
+        toast(res.message || '加载失败', 'error');
+        tableBody.innerHTML = '';
+        document.getElementById('emptyState').style.display = 'block';
+      }
+    }).catch(function(err) {
+      toast('网络请求失败: ' + (err.message || '未知错误'), 'error');
+      tableBody.innerHTML = '';
+      document.getElementById('emptyState').style.display = 'block';
+    });
+  }
+  function renderTable(list) {
+    var tableBody = document.getElementById('tableBody');
+    var emptyState = document.getElementById('emptyState');
+    if (!list || list.length === 0) { tableBody.innerHTML = ''; emptyState.style.display = 'block'; return; }
+    emptyState.style.display = 'none';
+    var html = '';
+    for (var i = 0; i < list.length; i++) {
+      var item = list[i];
+      var typeLabel = TYPE_MAP[item.type] || item.type || '-';
+      var typeClass = item.type || 'custom';
+      html += '<tr>';
+      html += '<td>' + esc(item.id) + '</td>';
+      html += '<td><strong>' + esc(item.name) + '</strong></td>';
+      html += '<td><div class="source-url" title="' + esc(item.url) + '">' + esc(item.url) + '</div></td>';
+      html += '<td><span class="type-badge ' + typeClass + '">' + esc(typeLabel) + '</span></td>';
+      html += '<td>' + statusBadge(item.status, item.status === 'enabled' ? '启用' : '禁用') + '</td>';
+      html += '<td style="font-size:12px;color:var(--text-light);">' + fmtDate(item.last_sync_time) + '</td>';
+      html += '<td style="font-size:12px;color:var(--text-light);">' + fmtDate(item.created_at) + '</td>';
+      html += '<td>';
+      html += '<button class="action-btn run" onclick="syncSource(' + item.id + ')">同步</button>';
+      html += '<button class="action-btn edit" onclick="showEditModal(' + item.id + ')">编辑</button>';
+      html += '<button class="action-btn delete" onclick="deleteSource(' + item.id + ')">删除</button>';
+      html += '</td></tr>';
+    }
+    tableBody.innerHTML = html;
+  }
+  function renderPagination() {
+    var container = document.getElementById('paginationContainer');
+    var totalPages = Math.ceil(totalCount / pageSize);
+    if (totalPages <= 1) { container.innerHTML = ''; return; }
+    var html = '<div class="pagination">';
+    html += '<span class="page-info">共 ' + totalCount + ' 条，第 ' + currentPage + '/' + totalPages + ' 页</span>';
+    html += '<div class="page-btns">';
+    if (currentPage > 1) { html += '<button class="page-btn" onclick="goToPage(1)">首页</button>'; html += '<button class="page-btn" onclick="goToPage(' + (currentPage - 1) + ')">上一页</button>'; }
+    var startPage = Math.max(1, currentPage - 2);
+    var endPage = Math.min(totalPages, currentPage + 2);
+    for (var i = startPage; i <= endPage; i++) { html += '<button class="page-btn' + (i === currentPage ? ' active' : '') + '" onclick="goToPage(' + i + ')">' + i + '</button>'; }
+    if (currentPage < totalPages) { html += '<button class="page-btn" onclick="goToPage(' + (currentPage + 1) + ')">下一页</button>'; html += '<button class="page-btn" onclick="goToPage(' + totalPages + ')">末页</button>'; }
+    html += '</div></div>';
+    container.innerHTML = html;
+  }
+  window.goToPage = function(page) { currentPage = page; loadList(); };
+  window.searchSources = function() { currentPage = 1; loadList(); };
+  window.resetSearch = function() { document.getElementById('searchKeyword').value = ''; currentPage = 1; loadList(); };
+  function buildFormHtml(item) {
+    var name = item ? esc(item.name) : '';
+    var url = item ? esc(item.url) : '';
+    var type = item ? item.type : 'public';
+    var status = item ? item.status : 'enabled';
+    var types = ['public', 'private', 'custom'];
+    var typeOpts = '';
+    for (var i = 0; i < types.length; i++) { typeOpts += '<option value="' + types[i] + '"' + (type === types[i] ? ' selected' : '') + '>' + esc(TYPE_MAP[types[i]]) + '</option>'; }
+    var content = '';
+    content += '<div class="form-group"><label>名称 <span style="color:#dc2626;">*</span></label><input type="text" id="formName" value="' + name + '" placeholder="镜像源名称"></div>';
+    content += '<div class="form-group"><label>地址 <span style="color:#dc2626;">*</span></label><input type="text" id="formUrl" value="' + url + '" placeholder="https://example.com/repo"></div>';
+    content += '<div class="form-row">';
+    content += '<div class="form-group"><label>类型</label><select id="formType">' + typeOpts + '</select></div>';
+    content += '<div class="form-group"><label>状态</label><select id="formStatus"><option value="enabled"' + (status === 'enabled' ? ' selected' : '') + '>启用</option><option value="disabled"' + (status === 'disabled' ? ' selected' : '') + '>禁用</option></select></div>';
+    content += '</div>';
+    content += '<div class="form-actions">';
+    content += '<button class="btn-cancel" onclick="closeModal()">取消</button>';
+    content += '<button class="btn-submit" onclick="saveSource()">保存</button>';
+    content += '</div>';
+    return content;
+  }
+  window.showAddModal = function() { var modal = showModal('添加镜像源', buildFormHtml(null)); modal.setAttribute('data-mode', 'add'); modal.setAttribute('data-id', ''); };
+  window.showEditModal = function(id) {
+    api('/imageSources/' + id).then(function(res) {
+      if (res.code !== 0) { toast(res.message || '获取详情失败', 'error'); return; }
+      var item = res.data;
+      var modal = showModal('编辑镜像源 - ' + esc(item.name), buildFormHtml(item));
+      modal.setAttribute('data-mode', 'edit');
+      modal.setAttribute('data-id', id);
+    }).catch(function(err) { toast('获取详情失败: ' + (err.message || '未知错误'), 'error'); });
+  };
+  window.saveSource = function() {
+    var modal = document.getElementById('modalOverlay');
+    var mode = modal ? modal.getAttribute('data-mode') : 'add';
+    var id = modal ? modal.getAttribute('data-id') : '';
+    var name = document.getElementById('formName').value.trim();
+    var url = document.getElementById('formUrl').value.trim();
+    var type = document.getElementById('formType').value;
+    var status = document.getElementById('formStatus').value;
+    if (!name) { toast('请输入名称', 'error'); return; }
+    if (!url) { toast('请输入地址', 'error'); return; }
+    var body = { name: name, url: url, type: type, status: status };
+    var request;
+    if (mode === 'edit' && id) { request = api('/imageSources/' + id, { method: 'PUT', body: body }); }
+    else { request = api('/imageSources', { method: 'POST', body: body }); }
+    request.then(function(res) {
+      if (res.code === 0) { toast(mode === 'edit' ? '更新成功' : '创建成功', 'success'); closeModal(); loadList(); }
+      else { toast(res.message || (mode === 'edit' ? '更新失败' : '创建失败'), 'error'); }
+    }).catch(function(err) { toast('网络请求失败: ' + (err.message || '未知错误'), 'error'); });
+  };
+  window.deleteSource = function(id) {
+    if (!confirm('确定要删除该镜像源吗？此操作不可恢复。')) return;
+    api('/imageSources/' + id, { method: 'DELETE' }).then(function(res) {
+      if (res.code === 0) { toast('删除成功', 'success'); loadList(); }
+      else { toast(res.message || '删除失败', 'error'); }
+    }).catch(function(err) { toast('网络请求失败: ' + (err.message || '未知错误'), 'error'); });
+  };
+  window.syncSource = function(id) {
+    if (!confirm('确定要同步该镜像源吗？')) return;
+    toast('正在同步...', 'info');
+    api('/imageSources/' + id + '/sync', { method: 'POST' }).then(function(res) {
+      if (res.code === 0) { toast('同步完成', 'success'); loadList(); }
+      else { toast(res.message || '同步失败', 'error'); }
+    }).catch(function(err) { toast('网络请求失败: ' + (err.message || '未知错误'), 'error'); });
+  };
+  loadList();
+})();
+</script>
+</body>
+</html>

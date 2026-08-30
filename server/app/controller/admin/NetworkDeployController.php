@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 namespace app\controller\admin;
 
 use app\model\NetworkDeploy;

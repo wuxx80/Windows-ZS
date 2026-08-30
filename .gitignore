@@ -1,4 +1,4 @@
-﻿# OS files
+# OS files
 Thumbs.db
 *.swp
 *.swo
@@ -29,3 +29,16 @@ temp/
 # Dependencies
 node_modules/
 vendor/
+
+# Environment
+.env
+
+# Composer phar
+composer.phar
+
+# ThinkPHP runtime
+server/runtime/
+
+# Temp scripts
+*.ps1
+temp_hash.php

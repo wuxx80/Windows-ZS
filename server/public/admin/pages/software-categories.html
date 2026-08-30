@@ -1,0 +1,244 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>软件分类 - ZS 装机助手</title>
+<link rel="stylesheet" href="../../assets/css/admin.css">
+<style>
+body{padding:0;background:transparent;font-family:-apple-system,"Microsoft YaHei","PingFang SC",sans-serif;}
+h2{margin-bottom:16px;font-size:20px;font-weight:600;color:#334155;}
+.search-bar{margin-bottom:16px;}
+.panel-body{position:relative;}
+.data-table th{background:#f8fafc;white-space:nowrap;}
+.data-table td{vertical-align:middle;}
+.detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+.detail-item{padding:10px 14px;background:#f8fafc;border-radius:6px;}
+.detail-item .dt-label{font-size:12px;color:#64748b;margin-bottom:2px;}
+.detail-item .dt-value{font-size:14px;color:#1e293b;font-weight:500;word-break:break-all;}
+.detail-full{grid-column:1 / -1;}
+</style>
+</head>
+<body>
+
+<h2>软件分类</h2>
+
+<div class="search-bar">
+  <button class="btn-create" onclick="showAddModal()">新增分类</button>
+</div>
+
+<div class="panel">
+  <div class="panel-body" style="padding:0;">
+    <table class="data-table" id="dataTable">
+      <thead>
+        <tr>
+          <th style="width:60px;">ID</th>
+          <th>名称</th>
+          <th style="width:100px;">排序</th>
+          <th style="width:100px;">软件数量</th>
+          <th style="width:140px;">创建时间</th>
+          <th style="width:160px;">操作</th>
+        </tr>
+      </thead>
+      <tbody id="tableBody"></tbody>
+    </table>
+    <div id="emptyState" class="empty-state" style="display:none;">
+      <div class="empty-icon">&#x1F4C1;</div>
+      <p>暂无软件分类数据</p>
+    </div>
+  </div>
+</div>
+
+<div id="paginationContainer"></div>
+
+<script src="../../assets/js/admin-common.js"></script>
+<script>
+(function() {
+  var currentPage = 1;
+  var pageSize = 15;
+  var totalCount = 0;
+  var currentList = [];
+
+  function loadCategories() {
+    var params = 'page=' + currentPage + '&pageSize=' + pageSize;
+
+    var tableBody = document.getElementById('tableBody');
+    tableBody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:40px;color:#94a3b8;">加载中...</td></tr>';
+
+    api('/softwareCategories?' + params).then(function(res) {
+      if (res.code === 0) {
+        totalCount = res.data.total || 0;
+        currentList = res.data.list || [];
+        renderTable(currentList);
+        renderPagination();
+      } else {
+        toast(res.message || '加载失败', 'error');
+        tableBody.innerHTML = '';
+        document.getElementById('emptyState').style.display = 'block';
+      }
+    }).catch(function(err) {
+      toast('网络请求失败: ' + (err.message || '未知错误'), 'error');
+      tableBody.innerHTML = '';
+      document.getElementById('emptyState').style.display = 'block';
+    });
+  }
+
+  function renderTable(list) {
+    var tableBody = document.getElementById('tableBody');
+    var emptyState = document.getElementById('emptyState');
+
+    if (!list || list.length === 0) {
+      tableBody.innerHTML = '';
+      emptyState.style.display = 'block';
+      return;
+    }
+    emptyState.style.display = 'none';
+
+    var html = '';
+    for (var i = 0; i < list.length; i++) {
+      var item = list[i];
+      html += '<tr>';
+      html += '<td>' + esc(item.id) + '</td>';
+      html += '<td><strong>' + esc(item.name) + '</strong></td>';
+      html += '<td>' + esc(item.sort_order || 0) + '</td>';
+      html += '<td>' + (item.software_count !== undefined ? esc(item.software_count) : '-') + '</td>';
+      html += '<td>' + fmtDate(item.created_at) + '</td>';
+      html += '<td>';
+      html += '<button class="action-btn edit" onclick="showEditModal(\'' + item.id + '\')">编辑</button>';
+      html += '<button class="action-btn delete" onclick="deleteCategory(\'' + item.id + '\')">删除</button>';
+      html += '</td>';
+      html += '</tr>';
+    }
+    tableBody.innerHTML = html;
+  }
+
+  function renderPagination() {
+    var container = document.getElementById('paginationContainer');
+    var totalPages = Math.ceil(totalCount / pageSize);
+    if (totalPages <= 1) {
+      container.innerHTML = '';
+      return;
+    }
+    var html = '<div class="pagination">';
+    html += '<span class="page-info">共 ' + totalCount + ' 条，第 ' + currentPage + '/' + totalPages + ' 页</span>';
+    html += '<div class="page-btns">';
+    if (currentPage > 1) {
+      html += '<button class="page-btn" onclick="goToPage(1)">首页</button>';
+      html += '<button class="page-btn" onclick="goToPage(' + (currentPage - 1) + ')">上一页</button>';
+    }
+    var startPage = Math.max(1, currentPage - 2);
+    var endPage = Math.min(totalPages, currentPage + 2);
+    for (var i = startPage; i <= endPage; i++) {
+      html += '<button class="page-btn' + (i === currentPage ? ' active' : '') + '" onclick="goToPage(' + i + ')">' + i + '</button>';
+    }
+    if (currentPage < totalPages) {
+      html += '<button class="page-btn" onclick="goToPage(' + (currentPage + 1) + ')">下一页</button>';
+      html += '<button class="page-btn" onclick="goToPage(' + totalPages + ')">末页</button>';
+    }
+    html += '</div></div>';
+    container.innerHTML = html;
+  }
+
+  window.goToPage = function(page) {
+    currentPage = page;
+    loadCategories();
+  };
+
+  window.showAddModal = function() {
+    var content = '';
+    content += '<div class="form-row">';
+    content += '<div class="form-group"><label>分类名称 <span style="color:#dc2626;">*</span></label><input type="text" id="formName" placeholder="如: 办公软件"></div>';
+    content += '<div class="form-group"><label>排序</label><input type="number" id="formSortOrder" placeholder="数字越小越靠前" value="0" min="0"></div>';
+    content += '</div>';
+    content += '<div class="form-actions">';
+    content += '<button class="btn-cancel" onclick="closeModal()">取消</button>';
+    content += '<button class="btn-submit" onclick="saveCategory()">保存</button>';
+    content += '</div>';
+
+    var modal = showModal('新增软件分类', content);
+    modal.setAttribute('data-mode', 'add');
+    modal.setAttribute('data-id', '');
+  };
+
+  window.showEditModal = function(id) {
+    api('/softwareCategories/' + id).then(function(res) {
+      if (res.code !== 0) {
+        toast(res.message || '获取详情失败', 'error');
+        return;
+      }
+      var item = res.data;
+      var content = '';
+      content += '<div class="form-row">';
+      content += '<div class="form-group"><label>分类名称 <span style="color:#dc2626;">*</span></label><input type="text" id="formName" value="' + esc(item.name) + '"></div>';
+      content += '<div class="form-group"><label>排序</label><input type="number" id="formSortOrder" value="' + (item.sort_order || 0) + '" min="0"></div>';
+      content += '</div>';
+      content += '<div class="form-actions">';
+      content += '<button class="btn-cancel" onclick="closeModal()">取消</button>';
+      content += '<button class="btn-submit" onclick="saveCategory()">保存</button>';
+      content += '</div>';
+
+      var modal = showModal('编辑软件分类', content);
+      modal.setAttribute('data-mode', 'edit');
+      modal.setAttribute('data-id', id);
+    }).catch(function(err) {
+      toast('获取分类详情失败: ' + (err.message || '未知错误'), 'error');
+    });
+  };
+
+  window.saveCategory = function() {
+    var modal = document.getElementById('modalOverlay');
+    var mode = modal ? modal.getAttribute('data-mode') : 'add';
+    var id = modal ? modal.getAttribute('data-id') : '';
+
+    var name = document.getElementById('formName').value.trim();
+    var sortOrder = document.getElementById('formSortOrder').value;
+
+    if (!name) {
+      toast('请输入分类名称', 'error');
+      return;
+    }
+
+    var body = {
+      name: name,
+      sort_order: sortOrder ? parseInt(sortOrder, 10) : 0
+    };
+
+    var request;
+    if (mode === 'edit' && id) {
+      request = api('/softwareCategories/' + id, { method: 'PUT', body: body });
+    } else {
+      request = api('/softwareCategories', { method: 'POST', body: body });
+    }
+
+    request.then(function(res) {
+      if (res.code === 0) {
+        toast(mode === 'edit' ? '更新成功' : '创建成功', 'success');
+        closeModal();
+        loadCategories();
+      } else {
+        toast(res.message || (mode === 'edit' ? '更新失败' : '创建失败'), 'error');
+      }
+    }).catch(function(err) {
+      toast('网络请求失败: ' + (err.message || '未知错误'), 'error');
+    });
+  };
+
+  window.deleteCategory = function(id) {
+    if (!confirm('确定要删除该分类吗？删除后相关软件将失去分类关联。')) return;
+    api('/softwareCategories/' + id, { method: 'DELETE' }).then(function(res) {
+      if (res.code === 0) {
+        toast('删除成功', 'success');
+        loadCategories();
+      } else {
+        toast(res.message || '删除失败', 'error');
+      }
+    }).catch(function(err) {
+      toast('网络请求失败: ' + (err.message || '未知错误'), 'error');
+    });
+  };
+
+  loadCategories();
+
+})();
+</script>
+</body>
+</html>

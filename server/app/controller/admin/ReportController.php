@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 namespace app\controller\admin;
 
 use app\model\Task;
@@ -14,15 +14,13 @@ class ReportController extends BaseController
         $startDate = input('start_date', date('Y-m-d', strtotime('-30 days')));
         $endDate = input('end_date', date('Y-m-d'));
 
-        $dailyStats = Task::where('type', 'install')
-            ->whereBetween('created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59'])
+        $dailyStats = Task::whereBetween('created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59'])
             ->field('DATE(created_at) as date, COUNT(*) as total, SUM(CASE WHEN status = "completed" THEN 1 ELSE 0 END) as success, SUM(CASE WHEN status = "failed" THEN 1 ELSE 0 END) as failed')
             ->group('DATE(created_at)')
             ->select()
             ->toArray();
 
-        $summary = Task::where('type', 'install')
-            ->whereBetween('created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59'])
+        $summary = Task::whereBetween('created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59'])
             ->field('COUNT(*) as total, SUM(CASE WHEN status = "completed" THEN 1 ELSE 0 END) as success, SUM(CASE WHEN status = "failed" THEN 1 ELSE 0 END) as failed')
             ->find();
 
@@ -42,8 +40,8 @@ class ReportController extends BaseController
         $pending = Client::where('status', 'pending')->count();
         $blocked = Client::where('status', 'blocked')->count();
 
-        $osDistribution = Client::field('os, COUNT(*) as count')
-            ->group('os')
+        $osDistribution = Client::field('os_version, COUNT(*) as count')
+            ->group('os_version')
             ->select()
             ->toArray();
 
@@ -82,15 +80,13 @@ class ReportController extends BaseController
         $startDate = input('start_date', date('Y-m-d', strtotime('-30 days')));
         $endDate = input('end_date', date('Y-m-d'));
 
-        $dailyOrders = Task::where('type', 'install')
-            ->whereBetween('created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59'])
+        $dailyOrders = Task::whereBetween('created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59'])
             ->field('DATE(created_at) as date, COUNT(*) as count')
             ->group('DATE(created_at)')
             ->select()
             ->toArray();
 
-        $statusStats = Task::where('type', 'install')
-            ->field('status, COUNT(*) as count')
+        $statusStats = Task::field('status, COUNT(*) as count')
             ->group('status')
             ->select()
             ->toArray();

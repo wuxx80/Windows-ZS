@@ -1,0 +1,452 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>无人值守模板 - ZS 装机助手</title>
+<link rel="stylesheet" href="../../assets/css/admin.css">
+<style>
+body{padding:0;background:transparent;font-family:-apple-system,"Microsoft YaHei","PingFang SC",sans-serif;}
+h2{margin-bottom:16px;font-size:20px;font-weight:600;color:#334155;}
+.search-bar{margin-bottom:16px;}
+.panel-body{position:relative;}
+.data-table th{background:#f8fafc;white-space:nowrap;}
+.data-table td{vertical-align:middle;}
+.data-table .name-cell{max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.data-table .desc-cell{max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.data-table .config-cell{max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+.detail-item{padding:10px 14px;background:#f8fafc;border-radius:6px;}
+.detail-item .dt-label{font-size:12px;color:#64748b;margin-bottom:2px;}
+.detail-item .dt-value{font-size:14px;color:#1e293b;font-weight:500;word-break:break-all;}
+.detail-full{grid-column:1 / -1;}
+.code-block{background:#1e293b;color:#e2e8f0;padding:14px;border-radius:6px;font-size:12px;font-family:Consolas,monospace;white-space:pre-wrap;word-break:break-all;max-height:400px;overflow:auto;}
+</style>
+</head>
+<body>
+
+<h2>无人值守模板</h2>
+
+<div class="search-bar">
+  <input type="text" id="searchKeyword" placeholder="模板名称/描述" style="min-width:200px;">
+  <button class="btn-search" onclick="searchTemplates()">搜索</button>
+  <button class="btn-reset" onclick="resetSearch()">重置</button>
+  <button class="btn-create" onclick="showAddModal()">新增模板</button>
+</div>
+
+<div class="panel">
+  <div class="panel-body" style="padding:0;">
+    <table class="data-table" id="dataTable">
+      <thead>
+        <tr>
+          <th style="width:60px;">ID</th>
+          <th style="width:160px;">名称</th>
+          <th style="width:200px;">描述</th>
+          <th style="width:80px;">系统类型</th>
+          <th style="width:80px;">系统版本</th>
+          <th style="width:60px;">语言</th>
+          <th style="width:60px;">自动登录</th>
+          <th style="width:60px;">自动激活</th>
+          <th style="width:80px;">分区配置</th>
+          <th style="width:140px;">创建时间</th>
+          <th style="width:200px;">操作</th>
+        </tr>
+      </thead>
+      <tbody id="tableBody"></tbody>
+    </table>
+    <div id="emptyState" class="empty-state" style="display:none;">
+      <div class="empty-icon">&#x2699;</div>
+      <p>暂无无人值守模板数据</p>
+    </div>
+  </div>
+</div>
+
+<div id="paginationContainer"></div>
+
+<script src="../../assets/js/admin-common.js"></script>
+<script>
+(function() {
+  var currentPage = 1;
+  var pageSize = 15;
+  var totalCount = 0;
+  var currentList = [];
+
+  function loadTemplates() {
+    var keyword = document.getElementById('searchKeyword').value.trim();
+
+    var params = 'page=' + currentPage + '&pageSize=' + pageSize;
+    if (keyword) params += '&keyword=' + encodeURIComponent(keyword);
+
+    var tableBody = document.getElementById('tableBody');
+    tableBody.innerHTML = '<tr><td colspan="11" style="text-align:center;padding:40px;color:#94a3b8;">加载中...</td></tr>';
+
+    api('/unattendTemplates?' + params).then(function(res) {
+      if (res.code === 0) {
+        totalCount = res.data.total || 0;
+        currentList = res.data.list || [];
+        renderTable(currentList);
+        renderPagination();
+      } else {
+        toast(res.message || '加载失败', 'error');
+        tableBody.innerHTML = '';
+        document.getElementById('emptyState').style.display = 'block';
+      }
+    }).catch(function(err) {
+      toast('网络请求失败: ' + (err.message || '未知错误'), 'error');
+      tableBody.innerHTML = '';
+      document.getElementById('emptyState').style.display = 'block';
+    });
+  }
+
+  function renderTable(list) {
+    var tableBody = document.getElementById('tableBody');
+    var emptyState = document.getElementById('emptyState');
+
+    if (!list || list.length === 0) {
+      tableBody.innerHTML = '';
+      emptyState.style.display = 'block';
+      return;
+    }
+    emptyState.style.display = 'none';
+
+    var html = '';
+    for (var i = 0; i < list.length; i++) {
+      var item = list[i];
+      var partitionStr = item.partition_config ? (typeof item.partition_config === 'string' ? item.partition_config.substring(0, 20) : '已配置') : '-';
+      html += '<tr>';
+      html += '<td>' + esc(item.id) + '</td>';
+      html += '<td><div class="name-cell" title="' + esc(item.name) + '">' + esc(item.name) + '</div></td>';
+      html += '<td><div class="desc-cell" title="' + esc(item.description || '') + '">' + esc(item.description || '-') + '</div></td>';
+      html += '<td>' + esc(item.os_type || '-') + '</td>';
+      html += '<td>' + esc(item.os_version || '-') + '</td>';
+      html += '<td>' + esc(item.language || '-') + '</td>';
+      html += '<td>' + (item.autologin ? '<span style="color:#16a34a;">是</span>' : '<span style="color:#94a3b8;">否</span>') + '</td>';
+      html += '<td>' + (item.auto_activate ? '<span style="color:#16a34a;">是</span>' : '<span style="color:#94a3b8;">否</span>') + '</td>';
+      html += '<td><div class="config-cell" title="' + esc(typeof item.partition_config === 'string' ? item.partition_config : JSON.stringify(item.partition_config || '')) + '">' + esc(partitionStr) + '</div></td>';
+      html += '<td>' + fmtDate(item.created_at) + '</td>';
+      html += '<td>';
+      html += '<button class="action-btn edit" onclick="showEditModal(\'' + item.id + '\')">编辑</button>';
+      html += '<button class="action-btn more" onclick="previewTemplate(\'' + item.id + '\')">预览</button>';
+      html += '<button class="action-btn more" style="background:#7c3aed;color:#fff;" onclick="generateXml(\'' + item.id + '\')">生成XML</button>';
+      html += '<button class="action-btn delete" onclick="deleteTemplate(\'' + item.id + '\')">删除</button>';
+      html += '</td>';
+      html += '</tr>';
+    }
+    tableBody.innerHTML = html;
+  }
+
+  function renderPagination() {
+    var container = document.getElementById('paginationContainer');
+    var totalPages = Math.ceil(totalCount / pageSize);
+    if (totalPages <= 1) {
+      container.innerHTML = '';
+      return;
+    }
+    var html = '<div class="pagination">';
+    html += '<span class="page-info">共 ' + totalCount + ' 条，第 ' + currentPage + '/' + totalPages + ' 页</span>';
+    html += '<div class="page-btns">';
+    if (currentPage > 1) {
+      html += '<button class="page-btn" onclick="goToPage(1)">首页</button>';
+      html += '<button class="page-btn" onclick="goToPage(' + (currentPage - 1) + ')">上一页</button>';
+    }
+    var startPage = Math.max(1, currentPage - 2);
+    var endPage = Math.min(totalPages, currentPage + 2);
+    for (var i = startPage; i <= endPage; i++) {
+      html += '<button class="page-btn' + (i === currentPage ? ' active' : '') + '" onclick="goToPage(' + i + ')">' + i + '</button>';
+    }
+    if (currentPage < totalPages) {
+      html += '<button class="page-btn" onclick="goToPage(' + (currentPage + 1) + ')">下一页</button>';
+      html += '<button class="page-btn" onclick="goToPage(' + totalPages + ')">末页</button>';
+    }
+    html += '</div></div>';
+    container.innerHTML = html;
+  }
+
+  window.goToPage = function(page) {
+    currentPage = page;
+    loadTemplates();
+  };
+
+  window.searchTemplates = function() {
+    currentPage = 1;
+    loadTemplates();
+  };
+
+  window.resetSearch = function() {
+    document.getElementById('searchKeyword').value = '';
+    currentPage = 1;
+    loadTemplates();
+  };
+
+  function getOsTypeOptions(selected) {
+    var types = ['Windows 10', 'Windows 11', 'Windows Server 2019', 'Windows Server 2022', 'Windows PE'];
+    var html = '';
+    for (var i = 0; i < types.length; i++) {
+      html += '<option value="' + esc(types[i]) + '"' + (selected === types[i] ? ' selected' : '') + '>' + esc(types[i]) + '</option>';
+    }
+    return html;
+  }
+
+  function getLanguageOptions(selected) {
+    var langs = ['zh-CN', 'en-US', 'ja-JP', 'ko-KR', 'zh-TW', 'de-DE', 'fr-FR'];
+    var labels = ['简体中文', 'English (US)', '日本語', '한국어', '繁體中文', 'Deutsch', 'Français'];
+    var html = '';
+    for (var i = 0; i < langs.length; i++) {
+      html += '<option value="' + langs[i] + '"' + (selected === langs[i] ? ' selected' : '') + '>' + labels[i] + '</option>';
+    }
+    return html;
+  }
+
+  window.showAddModal = function() {
+    var content = '';
+    content += '<div class="form-row">';
+    content += '<div class="form-group"><label>模板名称 <span style="color:#dc2626;">*</span></label><input type="text" id="formName" placeholder="如: Win11 专业版无人值守"></div>';
+    content += '<div class="form-group"><label>系统类型 <span style="color:#dc2626;">*</span></label><select id="formOsType">' + getOsTypeOptions() + '</select></div>';
+    content += '</div>';
+    content += '<div class="form-group"><label>描述</label><textarea id="formDescription" rows="2" placeholder="模板描述"></textarea></div>';
+    content += '<div class="form-row">';
+    content += '<div class="form-group"><label>系统版本</label><input type="text" id="formOsVersion" placeholder="如: 22H2"></div>';
+    content += '<div class="form-group"><label>语言</label><select id="formLanguage">' + getLanguageOptions() + '</select></div>';
+    content += '</div>';
+    content += '<div class="form-row">';
+    content += '<div class="form-group"><label>自动登录</label><select id="formAutologin"><option value="0">否</option><option value="1">是</option></select></div>';
+    content += '<div class="form-group"><label>自动激活</label><select id="formAutoActivate"><option value="0">否</option><option value="1">是</option></select></div>';
+    content += '</div>';
+    content += '<div class="form-group"><label>分区配置 (JSON)</label><textarea id="formPartitionConfig" rows="3" placeholder="{"disk_id":0,"partitions":[{"size":"100GB","type":"primary"}]}"></textarea></div>';
+    content += '<div class="form-actions">';
+    content += '<button class="btn-cancel" onclick="closeModal()">取消</button>';
+    content += '<button class="btn-submit" onclick="saveTemplate()">保存</button>';
+    content += '</div>';
+
+    var modal = showModal('新增无人值守模板', content);
+    modal.setAttribute('data-mode', 'add');
+    modal.setAttribute('data-id', '');
+  };
+
+  window.showEditModal = function(id) {
+    api('/unattendTemplates/' + id).then(function(res) {
+      if (res.code !== 0) {
+        toast(res.message || '获取详情失败', 'error');
+        return;
+      }
+      var item = res.data;
+      var content = '';
+      content += '<div class="form-row">';
+      content += '<div class="form-group"><label>模板名称 <span style="color:#dc2626;">*</span></label><input type="text" id="formName" value="' + esc(item.name) + '"></div>';
+      content += '<div class="form-group"><label>系统类型 <span style="color:#dc2626;">*</span></label><select id="formOsType">' + getOsTypeOptions(item.os_type) + '</select></div>';
+      content += '</div>';
+      content += '<div class="form-group"><label>描述</label><textarea id="formDescription" rows="2">' + esc(item.description || '') + '</textarea></div>';
+      content += '<div class="form-row">';
+      content += '<div class="form-group"><label>系统版本</label><input type="text" id="formOsVersion" value="' + esc(item.os_version || '') + '"></div>';
+      content += '<div class="form-group"><label>语言</label><select id="formLanguage">' + getLanguageOptions(item.language) + '</select></div>';
+      content += '</div>';
+      content += '<div class="form-row">';
+      content += '<div class="form-group"><label>自动登录</label><select id="formAutologin"><option value="0"' + (item.autologin ? '' : ' selected') + '>否</option><option value="1"' + (item.autologin ? ' selected' : '') + '>是</option></select></div>';
+      content += '<div class="form-group"><label>自动激活</label><select id="formAutoActivate"><option value="0"' + (item.auto_activate ? '' : ' selected') + '>否</option><option value="1"' + (item.auto_activate ? ' selected' : '') + '>是</option></select></div>';
+      content += '</div>';
+      content += '<div class="form-group"><label>分区配置 (JSON)</label><textarea id="formPartitionConfig" rows="3">' + esc(typeof item.partition_config === 'string' ? item.partition_config : JSON.stringify(item.partition_config || '', null, 2)) + '</textarea></div>';
+      content += '<div class="form-actions">';
+      content += '<button class="btn-cancel" onclick="closeModal()">取消</button>';
+      content += '<button class="btn-submit" onclick="saveTemplate()">保存</button>';
+      content += '</div>';
+
+      var modal = showModal('编辑无人值守模板', content);
+      modal.setAttribute('data-mode', 'edit');
+      modal.setAttribute('data-id', id);
+    }).catch(function(err) {
+      toast('获取模板详情失败: ' + (err.message || '未知错误'), 'error');
+    });
+  };
+
+  window.saveTemplate = function() {
+    var modal = document.getElementById('modalOverlay');
+    var mode = modal ? modal.getAttribute('data-mode') : 'add';
+    var id = modal ? modal.getAttribute('data-id') : '';
+
+    var name = document.getElementById('formName').value.trim();
+    var description = document.getElementById('formDescription').value.trim();
+    var osType = document.getElementById('formOsType').value;
+    var osVersion = document.getElementById('formOsVersion').value.trim();
+    var language = document.getElementById('formLanguage').value;
+    var autologin = document.getElementById('formAutologin').value === '1';
+    var autoActivate = document.getElementById('formAutoActivate').value === '1';
+    var partitionConfig = document.getElementById('formPartitionConfig').value.trim();
+
+    if (!name) {
+      toast('请输入模板名称', 'error');
+      return;
+    }
+
+    var body = {
+      name: name,
+      description: description,
+      os_type: osType,
+      os_version: osVersion,
+      language: language,
+      autologin: autologin,
+      auto_activate: autoActivate
+    };
+    if (partitionConfig) {
+      try {
+        body.partition_config = JSON.parse(partitionConfig);
+      } catch(e) {
+        body.partition_config = partitionConfig;
+      }
+    }
+
+    var request;
+    if (mode === 'edit' && id) {
+      request = api('/unattendTemplates/' + id, { method: 'PUT', body: body });
+    } else {
+      request = api('/unattendTemplates', { method: 'POST', body: body });
+    }
+
+    request.then(function(res) {
+      if (res.code === 0) {
+        toast(mode === 'edit' ? '更新成功' : '创建成功', 'success');
+        closeModal();
+        loadTemplates();
+      } else {
+        toast(res.message || (mode === 'edit' ? '更新失败' : '创建失败'), 'error');
+      }
+    }).catch(function(err) {
+      toast('网络请求失败: ' + (err.message || '未知错误'), 'error');
+    });
+  };
+
+  window.deleteTemplate = function(id) {
+    if (!confirm('确定要删除该无人值守模板吗？此操作不可恢复。')) return;
+    api('/unattendTemplates/' + id, { method: 'DELETE' }).then(function(res) {
+      if (res.code === 0) {
+        toast('删除成功', 'success');
+        loadTemplates();
+      } else {
+        toast(res.message || '删除失败', 'error');
+      }
+    }).catch(function(err) {
+      toast('网络请求失败: ' + (err.message || '未知错误'), 'error');
+    });
+  };
+
+  window.previewTemplate = function(id) {
+    toast('正在加载预览...', 'info');
+    api('/unattendTemplates/' + id + '/preview').then(function(res) {
+      if (res.code !== 0) {
+        toast(res.message || '获取预览失败', 'error');
+        return;
+      }
+      var data = res.data;
+      var content = '';
+      if (data && data.preview) {
+        content += '<div class="code-block">' + esc(data.preview) + '</div>';
+      } else {
+        content += '<div class="detail-grid">';
+        content += '<div class="detail-item"><div class="dt-label">模板名称</div><div class="dt-value">' + esc(data.name || '-') + '</div></div>';
+        content += '<div class="detail-item"><div class="dt-label">系统类型</div><div class="dt-value">' + esc(data.os_type || '-') + '</div></div>';
+        content += '<div class="detail-item"><div class="dt-label">系统版本</div><div class="dt-value">' + esc(data.os_version || '-') + '</div></div>';
+        content += '<div class="detail-item"><div class="dt-label">语言</div><div class="dt-value">' + esc(data.language || '-') + '</div></div>';
+        content += '<div class="detail-item"><div class="dt-label">自动登录</div><div class="dt-value">' + (data.autologin ? '是' : '否') + '</div></div>';
+        content += '<div class="detail-item"><div class="dt-label">自动激活</div><div class="dt-value">' + (data.auto_activate ? '是' : '否') + '</div></div>';
+        content += '</div>';
+      }
+      content += '<div class="form-actions" style="margin-top:16px;">';
+      content += '<button class="btn-cancel" onclick="closeModal()">关闭</button>';
+      content += '</div>';
+
+      showModal('模板预览 - ' + esc(data.name || ''), content);
+    }).catch(function(err) {
+      toast('获取预览失败: ' + (err.message || '未知错误'), 'error');
+    });
+  };
+
+  window.generateXml = function(id) {
+    toast('正在生成XML...', 'info');
+    api('/unattendTemplates/' + id + '/generateXml', { method: 'POST' }).then(function(res) {
+      if (res.code === 0) {
+        var xml = res.data && res.data.xml ? res.data.xml : (res.data || '');
+        var content = '';
+        content += '<div style="margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;">';
+        content += '<span style="font-size:14px;font-weight:500;color:#334155;">生成的 XML 内容</span>';
+        content += '<button class="action-btn edit" onclick="copyXmlContent()">复制内容</button>';
+        content += '</div>';
+        content += '<div class="code-block" id="xmlContent">' + esc(xml) + '</div>';
+        content += '<div class="form-actions" style="margin-top:16px;">';
+        content += '<button class="btn-cancel" onclick="closeModal()">关闭</button>';
+        content += '</div>';
+
+        showModal('生成 XML', content);
+      } else {
+        toast(res.message || '生成XML失败', 'error');
+      }
+    }).catch(function(err) {
+      toast('生成XML失败: ' + (err.message || '未知错误'), 'error');
+    });
+  };
+
+  window.copyXmlContent = function() {
+    var el = document.getElementById('xmlContent');
+    if (!el) return;
+    var text = el.textContent || el.innerText;
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(text).then(function() {
+        toast('XML 内容已复制', 'success');
+      }).catch(function() {
+        toast('复制失败', 'error');
+      });
+    } else {
+      toast('复制失败，请手动选择复制', 'error');
+    }
+  };
+
+  window.validateTemplate = function(id) {
+    toast('正在验证模板...', 'info');
+    api('/unattendTemplates/' + id + '/validate', { method: 'POST' }).then(function(res) {
+      if (res.code === 0) {
+        var result = res.data || {};
+        var valid = result.valid !== false;
+        var errors = result.errors || [];
+        var warnings = result.warnings || [];
+
+        var content = '';
+        content += '<div style="text-align:center;padding:20px 0;">';
+        if (valid && errors.length === 0) {
+          content += '<div style="font-size:48px;margin-bottom:12px;">&#x2705;</div>';
+          content += '<div style="font-size:16px;font-weight:600;color:#16a34a;">验证通过</div>';
+          content += '<div style="font-size:13px;color:#64748b;margin-top:4px;">模板配置无异常</div>';
+        } else {
+          content += '<div style="font-size:48px;margin-bottom:12px;">&#x26A0;</div>';
+          content += '<div style="font-size:16px;font-weight:600;color:#ea580c;">验证发现问题</div>';
+        }
+        content += '</div>';
+
+        if (errors.length > 0) {
+          content += '<div style="margin-bottom:8px;"><strong style="color:#dc2626;font-size:14px;">错误 (' + errors.length + ')</strong></div>';
+          for (var ei = 0; ei < errors.length; ei++) {
+            content += '<div style="padding:8px 12px;background:#fef2f2;border:1px solid #fecaca;border-radius:4px;margin-bottom:4px;font-size:13px;color:#dc2626;">' + esc(errors[ei]) + '</div>';
+          }
+        }
+        if (warnings.length > 0) {
+          content += '<div style="margin-top:12px;margin-bottom:8px;"><strong style="color:#ea580c;font-size:14px;">警告 (' + warnings.length + ')</strong></div>';
+          for (var wi = 0; wi < warnings.length; wi++) {
+            content += '<div style="padding:8px 12px;background:#fff7ed;border:1px solid #fed7aa;border-radius:4px;margin-bottom:4px;font-size:13px;color:#ea580c;">' + esc(warnings[wi]) + '</div>';
+          }
+        }
+
+        content += '<div class="form-actions" style="margin-top:16px;">';
+        content += '<button class="btn-cancel" onclick="closeModal()">关闭</button>';
+        content += '</div>';
+
+        showModal('验证结果', content);
+      } else {
+        toast(res.message || '验证失败', 'error');
+      }
+    }).catch(function(err) {
+      toast('验证请求失败: ' + (err.message || '未知错误'), 'error');
+    });
+  };
+
+  loadTemplates();
+
+})();
+</script>
+</body>
+</html>

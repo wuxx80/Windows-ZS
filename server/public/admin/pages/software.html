@@ -1,0 +1,524 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>软件管理 - ZS 装机助手</title>
+<link rel="stylesheet" href="../../assets/css/admin.css">
+<style>
+body{padding:0;background:transparent;font-family:-apple-system,"Microsoft YaHei","PingFang SC",sans-serif;}
+h2{margin-bottom:16px;font-size:20px;font-weight:600;color:#334155;}
+.search-bar{margin-bottom:16px;}
+.panel-body{position:relative;}
+.data-table th{background:#f8fafc;white-space:nowrap;}
+.data-table td{vertical-align:middle;}
+.data-table .name-cell{max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.data-table .desc-cell{max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.upload-area{border:2px dashed #e2e8f0;border-radius:8px;padding:30px;text-align:center;cursor:pointer;transition:all 0.3s;margin-bottom:16px;}
+.upload-area:hover{border-color:#1a73e8;background:#f0f7ff;}
+.upload-area .icon{font-size:36px;margin-bottom:8px;}
+.upload-area .text{font-size:14px;color:#64748b;}
+.upload-area .hint{font-size:12px;color:#94a3b8;margin-top:4px;}
+.upload-progress{margin:12px 0;display:none;}
+.upload-progress .progress-bar{height:6px;background:#e2e8f0;border-radius:3px;overflow:hidden;}
+.upload-progress .progress-fill{height:100%;background:#1a73e8;border-radius:3px;width:0%;transition:width 0.3s;}
+.upload-progress .progress-text{font-size:12px;color:#64748b;margin-top:4px;text-align:center;}
+.detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+.detail-item{padding:10px 14px;background:#f8fafc;border-radius:6px;}
+.detail-item .dt-label{font-size:12px;color:#64748b;margin-bottom:2px;}
+.detail-item .dt-value{font-size:14px;color:#1e293b;font-weight:500;word-break:break-all;}
+.detail-full{grid-column:1 / -1;}
+</style>
+</head>
+<body>
+
+<h2>软件管理</h2>
+
+<div class="search-bar">
+  <input type="text" id="searchKeyword" placeholder="关键词搜索（名称/描述/发布者）" style="min-width:200px;">
+  <select id="searchCategory">
+    <option value="">全部分类</option>
+  </select>
+  <select id="searchStatus">
+    <option value="">全部状态</option>
+    <option value="enabled">启用</option>
+    <option value="disabled">禁用</option>
+  </select>
+  <button class="btn-search" onclick="searchSoftware()">搜索</button>
+  <button class="btn-reset" onclick="resetSearch()">重置</button>
+  <button class="btn-create" onclick="showAddModal()">新增软件</button>
+  <button class="btn-create" style="background:#7c3aed;" onclick="showUploadModal()">上传软件</button>
+</div>
+
+<div class="panel">
+  <div class="panel-body" style="padding:0;">
+    <table class="data-table" id="dataTable">
+      <thead>
+        <tr>
+          <th style="width:60px;">ID</th>
+          <th>名称</th>
+          <th style="width:200px;">描述</th>
+          <th style="width:100px;">版本</th>
+          <th style="width:100px;">发布者</th>
+          <th style="width:80px;">分类</th>
+          <th style="width:80px;">大小</th>
+          <th style="width:70px;">状态</th>
+          <th style="width:140px;">创建时间</th>
+          <th style="width:170px;">操作</th>
+        </tr>
+      </thead>
+      <tbody id="tableBody"></tbody>
+    </table>
+    <div id="emptyState" class="empty-state" style="display:none;">
+      <div class="empty-icon">&#x1F4E6;</div>
+      <p>暂无软件数据</p>
+    </div>
+  </div>
+</div>
+
+<div id="paginationContainer"></div>
+
+<script src="../../assets/js/admin-common.js"></script>
+<script>
+(function() {
+  var currentPage = 1;
+  var pageSize = 15;
+  var totalSoftwares = 0;
+  var currentList = [];
+  var categoryMap = {};
+
+  function loadCategories() {
+    api('/software/categories').then(function(res) {
+      if (res.code === 0 && res.data && res.data.list) {
+        var sel = document.getElementById('searchCategory');
+        var list = res.data.list;
+        for (var i = 0; i < list.length; i++) {
+          var opt = document.createElement('option');
+          opt.value = list[i].id;
+          opt.textContent = list[i].name;
+          sel.appendChild(opt);
+          categoryMap[list[i].id] = list[i].name;
+        }
+      }
+    }).catch(function() {});
+  }
+
+  function loadSoftware() {
+    var keyword = document.getElementById('searchKeyword').value.trim();
+    var categoryId = document.getElementById('searchCategory').value;
+    var status = document.getElementById('searchStatus').value;
+
+    var params = 'page=' + currentPage + '&pageSize=' + pageSize;
+    if (keyword) params += '&keyword=' + encodeURIComponent(keyword);
+    if (categoryId) params += '&category_id=' + encodeURIComponent(categoryId);
+    if (status) params += '&status=' + encodeURIComponent(status);
+
+    var tableBody = document.getElementById('tableBody');
+    tableBody.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:40px;color:#94a3b8;">加载中...</td></tr>';
+
+    api('/software?' + params).then(function(res) {
+      if (res.code === 0) {
+        totalSoftwares = res.data.total || 0;
+        currentList = res.data.list || [];
+        renderTable(currentList);
+        renderPagination();
+      } else {
+        toast(res.message || '加载失败', 'error');
+        tableBody.innerHTML = '';
+        document.getElementById('emptyState').style.display = 'block';
+      }
+    }).catch(function(err) {
+      toast('网络请求失败: ' + (err.message || '未知错误'), 'error');
+      tableBody.innerHTML = '';
+      document.getElementById('emptyState').style.display = 'block';
+    });
+  }
+
+  function renderTable(list) {
+    var tableBody = document.getElementById('tableBody');
+    var emptyState = document.getElementById('emptyState');
+
+    if (!list || list.length === 0) {
+      tableBody.innerHTML = '';
+      emptyState.style.display = 'block';
+      return;
+    }
+    emptyState.style.display = 'none';
+
+    var html = '';
+    for (var i = 0; i < list.length; i++) {
+      var item = list[i];
+      var categoryName = categoryMap[item.category_id] || item.category_id || '-';
+      html += '<tr>';
+      html += '<td>' + esc(item.id) + '</td>';
+      html += '<td><div class="name-cell" title="' + esc(item.name) + '">' + esc(item.name) + '</div></td>';
+      html += '<td><div class="desc-cell" title="' + esc(item.description || '') + '">' + esc(item.description || '-') + '</div></td>';
+      html += '<td>' + esc(item.version || '-') + '</td>';
+      html += '<td>' + esc(item.publisher || '-') + '</td>';
+      html += '<td>' + esc(categoryName) + '</td>';
+      html += '<td>' + fmtSize(item.file_size) + '</td>';
+      html += '<td>' + statusBadge(item.status, item.status === 'enabled' ? '启用' : '禁用') + '</td>';
+      html += '<td>' + fmtDate(item.created_at) + '</td>';
+      html += '<td>';
+      html += '<button class="action-btn edit" onclick="showEditModal(\'' + item.id + '\')">编辑</button>';
+      html += '<button class="action-btn delete" onclick="deleteSoftware(\'' + item.id + '\')">删除</button>';
+      html += '<button class="action-btn more" onclick="viewDetail(\'' + item.id + '\')">详情</button>';
+      html += '</td>';
+      html += '</tr>';
+    }
+    tableBody.innerHTML = html;
+  }
+
+  function renderPagination() {
+    var container = document.getElementById('paginationContainer');
+    var totalPages = Math.ceil(totalSoftwares / pageSize);
+    if (totalPages <= 1) {
+      container.innerHTML = '';
+      return;
+    }
+    var html = '<div class="pagination">';
+    html += '<span class="page-info">共 ' + totalSoftwares + ' 条，第 ' + currentPage + '/' + totalPages + ' 页</span>';
+    html += '<div class="page-btns">';
+    if (currentPage > 1) {
+      html += '<button class="page-btn" onclick="goToPage(1)">首页</button>';
+      html += '<button class="page-btn" onclick="goToPage(' + (currentPage - 1) + ')">上一页</button>';
+    }
+    var startPage = Math.max(1, currentPage - 2);
+    var endPage = Math.min(totalPages, currentPage + 2);
+    for (var i = startPage; i <= endPage; i++) {
+      html += '<button class="page-btn' + (i === currentPage ? ' active' : '') + '" onclick="goToPage(' + i + ')">' + i + '</button>';
+    }
+    if (currentPage < totalPages) {
+      html += '<button class="page-btn" onclick="goToPage(' + (currentPage + 1) + ')">下一页</button>';
+      html += '<button class="page-btn" onclick="goToPage(' + totalPages + ')">末页</button>';
+    }
+    html += '</div></div>';
+    container.innerHTML = html;
+  }
+
+  window.goToPage = function(page) {
+    currentPage = page;
+    loadSoftware();
+  };
+
+  window.searchSoftware = function() {
+    currentPage = 1;
+    loadSoftware();
+  };
+
+  window.resetSearch = function() {
+    document.getElementById('searchKeyword').value = '';
+    document.getElementById('searchCategory').value = '';
+    document.getElementById('searchStatus').value = '';
+    currentPage = 1;
+    loadSoftware();
+  };
+
+  window.showAddModal = function() {
+    var content = '';
+    content += '<div class="form-row">';
+    content += '<div class="form-group"><label>名称 <span style="color:#dc2626;">*</span></label><input type="text" id="formName" placeholder="软件名称"></div>';
+    content += '<div class="form-group"><label>版本 <span style="color:#dc2626;">*</span></label><input type="text" id="formVersion" placeholder="如: 1.0.0"></div>';
+    content += '</div>';
+    content += '<div class="form-group"><label>描述</label><textarea id="formDescription" placeholder="软件描述" rows="2"></textarea></div>';
+    content += '<div class="form-row">';
+    content += '<div class="form-group"><label>发布者</label><input type="text" id="formPublisher" placeholder="发布者名称"></div>';
+    content += '<div class="form-group"><label>分类</label><select id="formCategoryId"><option value="">请选择</option></select></div>';
+    content += '</div>';
+    content += '<div class="form-row">';
+    content += '<div class="form-group"><label>下载地址</label><input type="text" id="formDownloadUrl" placeholder="https://..."></div>';
+    content += '<div class="form-group"><label>文件大小 (字节)</label><input type="number" id="formFileSize" placeholder="0" min="0"></div>';
+    content += '</div>';
+    content += '<div class="form-group"><label>状态</label><select id="formStatus"><option value="enabled">启用</option><option value="disabled">禁用</option></select></div>';
+    content += '<div class="form-actions">';
+    content += '<button class="btn-cancel" onclick="closeModal()">取消</button>';
+    content += '<button class="btn-submit" onclick="saveSoftware()">保存</button>';
+    content += '</div>';
+
+    var modal = showModal('新增软件', content);
+    modal.setAttribute('data-mode', 'add');
+    modal.setAttribute('data-id', '');
+    populateCategorySelect('formCategoryId');
+  };
+
+  window.showEditModal = function(id) {
+    api('/software/' + id).then(function(res) {
+      if (res.code !== 0) {
+        toast(res.message || '获取详情失败', 'error');
+        return;
+      }
+      var item = res.data;
+      var content = '';
+      content += '<div class="form-row">';
+      content += '<div class="form-group"><label>名称 <span style="color:#dc2626;">*</span></label><input type="text" id="formName" value="' + esc(item.name) + '"></div>';
+      content += '<div class="form-group"><label>版本 <span style="color:#dc2626;">*</span></label><input type="text" id="formVersion" value="' + esc(item.version || '') + '"></div>';
+      content += '</div>';
+      content += '<div class="form-group"><label>描述</label><textarea id="formDescription" rows="2">' + esc(item.description || '') + '</textarea></div>';
+      content += '<div class="form-row">';
+      content += '<div class="form-group"><label>发布者</label><input type="text" id="formPublisher" value="' + esc(item.publisher || '') + '"></div>';
+      content += '<div class="form-group"><label>分类</label><select id="formCategoryId"><option value="">请选择</option></select></div>';
+      content += '</div>';
+      content += '<div class="form-row">';
+      content += '<div class="form-group"><label>下载地址</label><input type="text" id="formDownloadUrl" value="' + esc(item.download_url || '') + '"></div>';
+      content += '<div class="form-group"><label>文件大小 (字节)</label><input type="number" id="formFileSize" value="' + (item.file_size || 0) + '" min="0"></div>';
+      content += '</div>';
+      content += '<div class="form-group"><label>状态</label><select id="formStatus"><option value="enabled"' + (item.status === 'enabled' ? ' selected' : '') + '>启用</option><option value="disabled"' + (item.status === 'disabled' ? ' selected' : '') + '>禁用</option></select></div>';
+      content += '<div class="form-actions">';
+      content += '<button class="btn-cancel" onclick="closeModal()">取消</button>';
+      content += '<button class="btn-submit" onclick="saveSoftware()">保存</button>';
+      content += '</div>';
+
+      var modal = showModal('编辑软件', content);
+      modal.setAttribute('data-mode', 'edit');
+      modal.setAttribute('data-id', id);
+      populateCategorySelect('formCategoryId', item.category_id);
+    }).catch(function(err) {
+      toast('获取软件详情失败: ' + (err.message || '未知错误'), 'error');
+    });
+  };
+
+  function populateCategorySelect(selectId, selectedValue) {
+    var sel = document.getElementById(selectId);
+    if (!sel) return;
+    sel.innerHTML = '<option value="">请选择</option>';
+    for (var id in categoryMap) {
+      var opt = document.createElement('option');
+      opt.value = id;
+      opt.textContent = categoryMap[id];
+      if (selectedValue && String(selectedValue) === String(id)) {
+        opt.selected = true;
+      }
+      sel.appendChild(opt);
+    }
+  }
+
+  window.saveSoftware = function() {
+    var modal = document.getElementById('modalOverlay');
+    var mode = modal ? modal.getAttribute('data-mode') : 'add';
+    var id = modal ? modal.getAttribute('data-id') : '';
+
+    var name = document.getElementById('formName').value.trim();
+    var version = document.getElementById('formVersion').value.trim();
+    var description = document.getElementById('formDescription').value.trim();
+    var publisher = document.getElementById('formPublisher').value.trim();
+    var categoryId = document.getElementById('formCategoryId').value;
+    var downloadUrl = document.getElementById('formDownloadUrl').value.trim();
+    var fileSize = document.getElementById('formFileSize').value;
+    var status = document.getElementById('formStatus').value;
+
+    if (!name) {
+      toast('请输入软件名称', 'error');
+      return;
+    }
+    if (!version) {
+      toast('请输入软件版本', 'error');
+      return;
+    }
+
+    var body = {
+      name: name,
+      version: version,
+      description: description,
+      publisher: publisher,
+      category_id: categoryId ? parseInt(categoryId, 10) : null,
+      download_url: downloadUrl,
+      file_size: fileSize ? parseInt(fileSize, 10) : 0,
+      status: status
+    };
+
+    var request;
+    if (mode === 'edit' && id) {
+      request = api('/software/' + id, { method: 'PUT', body: body });
+    } else {
+      request = api('/software', { method: 'POST', body: body });
+    }
+
+    request.then(function(res) {
+      if (res.code === 0) {
+        toast(mode === 'edit' ? '更新成功' : '创建成功', 'success');
+        closeModal();
+        loadSoftware();
+      } else {
+        toast(res.message || (mode === 'edit' ? '更新失败' : '创建失败'), 'error');
+      }
+    }).catch(function(err) {
+      toast('网络请求失败: ' + (err.message || '未知错误'), 'error');
+    });
+  };
+
+  window.deleteSoftware = function(id) {
+    if (!confirm('确定要删除该软件吗？此操作不可恢复。')) return;
+    api('/software/' + id, { method: 'DELETE' }).then(function(res) {
+      if (res.code === 0) {
+        toast('删除成功', 'success');
+        loadSoftware();
+      } else {
+        toast(res.message || '删除失败', 'error');
+      }
+    }).catch(function(err) {
+      toast('网络请求失败: ' + (err.message || '未知错误'), 'error');
+    });
+  };
+
+  window.viewDetail = function(id) {
+    toast('正在加载详情...', 'info');
+    api('/software/' + id).then(function(res) {
+      if (res.code !== 0) {
+        toast(res.message || '获取详情失败', 'error');
+        return;
+      }
+      var item = res.data;
+      var categoryName = categoryMap[item.category_id] || item.category_id || '-';
+      var content = '';
+      content += '<div class="detail-grid">';
+      content += '<div class="detail-item"><div class="dt-label">ID</div><div class="dt-value">' + esc(item.id) + '</div></div>';
+      content += '<div class="detail-item"><div class="dt-label">名称</div><div class="dt-value">' + esc(item.name) + '</div></div>';
+      content += '<div class="detail-item"><div class="dt-label">版本</div><div class="dt-value">' + esc(item.version || '-') + '</div></div>';
+      content += '<div class="detail-item"><div class="dt-label">发布者</div><div class="dt-value">' + esc(item.publisher || '-') + '</div></div>';
+      content += '<div class="detail-item"><div class="dt-label">分类</div><div class="dt-value">' + esc(categoryName) + '</div></div>';
+      content += '<div class="detail-item"><div class="dt-label">文件大小</div><div class="dt-value">' + fmtSize(item.file_size) + '</div></div>';
+      content += '<div class="detail-item detail-full"><div class="dt-label">下载地址</div><div class="dt-value" style="font-size:12px;word-break:break-all;">' + esc(item.download_url || '-') + '</div></div>';
+      content += '<div class="detail-item"><div class="dt-label">状态</div><div class="dt-value">' + statusBadge(item.status, item.status === 'enabled' ? '启用' : '禁用') + '</div></div>';
+      content += '<div class="detail-item"><div class="dt-label">创建时间</div><div class="dt-value">' + fmtDate(item.created_at) + '</div></div>';
+      content += '<div class="detail-item"><div class="dt-label">更新时间</div><div class="dt-value">' + fmtDate(item.updated_at) + '</div></div>';
+      if (item.description) {
+        content += '<div class="detail-item detail-full"><div class="dt-label">描述</div><div class="dt-value">' + esc(item.description) + '</div></div>';
+      }
+      content += '</div>';
+      content += '<div class="form-actions" style="margin-top:16px;">';
+      content += '<button class="btn-cancel" onclick="closeModal()">关闭</button>';
+      content += '<button class="action-btn edit" style="padding:8px 20px;font-size:13px;" onclick="closeModal();showEditModal(\'' + item.id + '\')">编辑</button>';
+      content += '</div>';
+
+      showModal('软件详情 - ' + esc(item.name), content);
+    }).catch(function(err) {
+      toast('获取详情失败: ' + (err.message || '未知错误'), 'error');
+    });
+  };
+
+  window.showUploadModal = function() {
+    var content = '';
+    content += '<div class="upload-area" id="uploadArea" onclick="document.getElementById(\'fileInput\').click()">';
+    content += '<div class="icon">&#x1F4C1;</div>';
+    content += '<div class="text">点击选择文件或拖拽文件到此处</div>';
+    content += '<div class="hint">支持 EXE / MSI / ZIP / 7z 等格式</div>';
+    content += '</div>';
+    content += '<input type="file" id="fileInput" style="display:none;" onchange="onFileSelected(this)">';
+    content += '<div id="fileInfo" style="display:none;margin-bottom:12px;">';
+    content += '<div style="padding:10px 14px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:6px;font-size:13px;color:#16a34a;">';
+    content += '已选择: <strong id="fileName"></strong> (<span id="fileSize"></span>)</div></div>';
+    content += '<div class="upload-progress" id="uploadProgress">';
+    content += '<div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>';
+    content += '<div class="progress-text" id="progressText">准备上传...</div>';
+    content += '</div>';
+    content += '<div class="form-row">';
+    content += '<div class="form-group"><label>软件名称 <span style="color:#dc2626;">*</span></label><input type="text" id="uploadName" placeholder="上传后自动填入"></div>';
+    content += '<div class="form-group"><label>版本 <span style="color:#dc2626;">*</span></label><input type="text" id="uploadVersion" placeholder="如: 1.0.0"></div>';
+    content += '</div>';
+    content += '<div class="form-group"><label>描述</label><textarea id="uploadDescription" rows="2" placeholder="可选描述"></textarea></div>';
+    content += '<div class="form-row">';
+    content += '<div class="form-group"><label>发布者</label><input type="text" id="uploadPublisher" placeholder="发布者名称"></div>';
+    content += '<div class="form-group"><label>分类</label><select id="uploadCategory"><option value="">请选择</option></select></div>';
+    content += '</div>';
+    content += '<div class="form-actions">';
+    content += '<button class="btn-cancel" onclick="closeModal()">取消</button>';
+    content += '<button class="btn-submit" id="uploadBtn" onclick="startUpload()" disabled>上传</button>';
+    content += '</div>';
+
+    showModal('上传软件文件', content);
+    var sel = document.getElementById('uploadCategory');
+    sel.innerHTML = '<option value="">请选择</option>';
+    for (var cid in categoryMap) {
+      var opt = document.createElement('option');
+      opt.value = cid;
+      opt.textContent = categoryMap[cid];
+      sel.appendChild(opt);
+    }
+  };
+
+  window.onFileSelected = function(input) {
+    var file = input.files[0];
+    if (!file) return;
+    document.getElementById('fileInfo').style.display = 'block';
+    document.getElementById('fileName').textContent = file.name;
+    document.getElementById('fileSize').textContent = fmtSize(file.size);
+    document.getElementById('uploadBtn').disabled = false;
+    var nameInput = document.getElementById('uploadName');
+    if (!nameInput.value.trim()) {
+      nameInput.value = file.name.replace(/\.[^/.]+$/, '');
+    }
+  };
+
+  window.startUpload = function() {
+    var fileInput = document.getElementById('fileInput');
+    var file = fileInput.files[0];
+    if (!file) { toast('请先选择文件', 'error'); return; }
+
+    var name = document.getElementById('uploadName').value.trim();
+    var version = document.getElementById('uploadVersion').value.trim();
+    var description = document.getElementById('uploadDescription').value.trim();
+    var publisher = document.getElementById('uploadPublisher').value.trim();
+    var categoryId = document.getElementById('uploadCategory').value;
+
+    if (!name) { toast('请输入软件名称', 'error'); return; }
+    if (!version) { toast('请输入软件版本', 'error'); return; }
+
+    var progressDiv = document.getElementById('uploadProgress');
+    progressDiv.style.display = 'block';
+    document.getElementById('uploadBtn').disabled = true;
+
+    var formData = new FormData();
+    formData.append('file', file);
+    formData.append('name', name);
+    formData.append('version', version);
+    if (description) formData.append('description', description);
+    if (publisher) formData.append('publisher', publisher);
+    if (categoryId) formData.append('category_id', categoryId);
+
+    var token = localStorage.getItem(TOKEN_KEY);
+    var xhr = new XMLHttpRequest();
+
+    xhr.upload.onprogress = function(e) {
+      if (e.lengthComputable) {
+        var pct = Math.round((e.loaded / e.total) * 100);
+        document.getElementById('progressFill').style.width = pct + '%';
+        document.getElementById('progressText').textContent = '上传中 ' + pct + '% (' + fmtSize(e.loaded) + ' / ' + fmtSize(e.total) + ')';
+      }
+    };
+
+    xhr.onload = function() {
+      document.getElementById('uploadBtn').disabled = false;
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          var res = JSON.parse(xhr.responseText);
+          if (res.code === 0) {
+            toast('上传成功', 'success');
+            closeModal();
+            loadSoftware();
+          } else {
+            toast(res.message || '上传失败', 'error');
+          }
+        } catch (e) {
+          toast('上传响应解析失败', 'error');
+        }
+      } else {
+        toast('上传失败 (HTTP ' + xhr.status + ')', 'error');
+      }
+    };
+
+    xhr.onerror = function() {
+      document.getElementById('uploadBtn').disabled = false;
+      toast('上传网络错误', 'error');
+    };
+
+    xhr.open('POST', '/api/v1/software/upload', true);
+    xhr.setRequestHeader('Authorization', 'Bearer ' + token);
+    xhr.send(formData);
+  };
+
+  loadCategories();
+  loadSoftware();
+
+})();
+</script>
+</body>
+</html>

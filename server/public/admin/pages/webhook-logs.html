@@ -1,0 +1,200 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Webhook日志 - ZS 装机助手</title>
+<link rel="stylesheet" href="../../assets/css/admin.css">
+<style>
+body{padding:24px;background:transparent;}
+h2{margin-bottom:20px;font-size:20px;font-weight:600;color:#334155;}
+.data-table th{background:#f8fafc;white-space:nowrap;}
+.data-table td{vertical-align:middle;}
+.actions-cell{display:flex;gap:4px;flex-wrap:wrap;}
+.webhook-url{max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block;vertical-align:middle;}
+.detail-json{background:#1e293b;color:#e2e8f0;border-radius:6px;padding:12px;font-family:Consolas,monospace;font-size:12px;max-height:200px;overflow:auto;white-space:pre-wrap;word-break:break-all;}
+.event-badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:500;background:#dbeafe;color:#2563eb;}
+</style>
+</head>
+<body>
+<h2>Webhook日志</h2>
+<div class="search-bar">
+  <button class="btn-reset" onclick="refreshList()" style="border-color:var(--primary);color:var(--primary);">刷新</button>
+</div>
+<div class="panel">
+  <div class="panel-body" style="padding:0;">
+    <table class="data-table" id="dataTable">
+      <thead>
+        <tr>
+          <th style="width:50px;">ID</th>
+          <th style="width:80px;">事件</th>
+          <th>URL</th>
+          <th style="width:70px;">状态码</th>
+          <th style="width:60px;">状态</th>
+          <th style="width:140px;">时间</th>
+          <th style="width:120px;">操作</th>
+        </tr>
+      </thead>
+      <tbody id="tableBody">
+        <tr><td colspan="7"><div class="empty-state"><div class="empty-icon">🔗</div><p>加载中...</p></div></td></tr>
+      </tbody>
+    </table>
+    <div id="emptyState" class="empty-state" style="display:none;">
+      <div class="empty-icon">🔗</div>
+      <p>暂无Webhook日志</p>
+    </div>
+  </div>
+</div>
+<div id="paginationContainer"></div>
+<script src="../../assets/js/admin-common.js"></script>
+
+<script>
+(function() {
+  var currentPage = 1;
+  var pageSize = 15;
+  var totalCount = 0;
+  var currentList = [];
+
+  function loadData() {
+    var params = "page=" + currentPage + "&pageSize=" + pageSize;
+
+    var tableBody = document.getElementById("tableBody");
+    tableBody.innerHTML = "<tr><td colspan=\"7\" style=\"text-align:center;padding:40px;color:#94a3b8;\">加载中...</td></tr>";
+
+    api("/webhookLogs?" + params).then(function(res) {
+      if (res.code === 0) {
+        totalCount = res.data.total || 0;
+        currentList = res.data.list || [];
+        renderTable(currentList);
+        renderPagination();
+      } else {
+        tableBody.innerHTML = "<tr><td colspan=\"7\"><div class=\"empty-state\"><div class=\"empty-icon\">&#x274C;</div><p>" + esc(res.message || "加载失败") + "</p></div></td></tr>";
+      }
+    }).catch(function(err) {
+      tableBody.innerHTML = "<tr><td colspan=\"7\"><div class=\"empty-state\"><div class=\"empty-icon\">&#x274C;</div><p>网络错误：" + esc(err.message) + "</p></div></td></tr>";
+    });
+  }
+
+  function renderTable(list) {
+    var tableBody = document.getElementById("tableBody");
+    var emptyState = document.getElementById("emptyState");
+
+    if (!list || list.length === 0) {
+      tableBody.innerHTML = "";
+      emptyState.style.display = "block";
+      return;
+    }
+    emptyState.style.display = "none";
+
+    var html = "";
+    for (var i = 0; i < list.length; i++) {
+      var item = list[i];
+      var statusHtml = item.status === "success"
+        ? "<span style=\"color:#16a34a;font-weight:600;\">成功</span>"
+        : (item.status === "failed" ? "<span style=\"color:#dc2626;font-weight:600;\">失败</span>" : "<span style=\"color:var(--text-light);\">" + esc(item.status) + "</span>");
+      var codeHtml = item.status_code
+        ? "<span style=\"font-family:Consolas,monospace;font-weight:600;" + (item.status_code >= 200 && item.status_code < 300 ? "color:#16a34a;" : "color:#dc2626;") + "\">" + esc(item.status_code) + "</span>"
+        : "<span style=\"color:var(--text-light);\">-</span>";
+
+      html += "<tr>";
+      html += "<td>" + esc(item.id) + "</td>";
+      html += "<td><span class=\"event-badge\">" + esc(item.event || "-") + "</span></td>";
+      html += "<td title=\"" + esc(item.url) + "\"><span class=\"webhook-url\">" + esc(item.url || "-") + "</span></td>";
+      html += "<td>" + codeHtml + "</td>";
+      html += "<td>" + statusHtml + "</td>";
+      html += "<td style=\"font-size:12px;color:var(--text-light);\">" + fmtDate(item.created_at) + "</td>";
+      html += "<td><div class=\"actions-cell\">";
+      html += "<button class=\"action-btn more\" onclick=\"viewDetail(" + item.id + ")\">详情</button>";
+      if (item.status === "failed") {
+        html += "<button class=\"action-btn run\" onclick=\"retryLog(" + item.id + ")\">重试</button>";
+      }
+      html += "</div></td>";
+      html += "</tr>";
+    }
+    tableBody.innerHTML = html;
+  }
+
+  function renderPagination() {
+    var container = document.getElementById("paginationContainer");
+    var totalPages = Math.ceil(totalCount / pageSize);
+    if (totalPages <= 1) {
+      container.innerHTML = "";
+      return;
+    }
+    var html = "<div class=\"pagination\">";
+    html += "<span class=\"page-info\">共 " + totalCount + " 条，第 " + currentPage + "/" + totalPages + " 页</span>";
+    html += "<div class=\"page-btns\">";
+    if (currentPage > 1) {
+      html += "<button class=\"page-btn\" onclick=\"goToPage(1)\">首页</button>";
+      html += "<button class=\"page-btn\" onclick=\"goToPage(" + (currentPage - 1) + ")\">上一页</button>";
+    }
+    var startPage = Math.max(1, currentPage - 2);
+    var endPage = Math.min(totalPages, currentPage + 2);
+    for (var i = startPage; i <= endPage; i++) {
+      html += "<button class=\"page-btn" + (i === currentPage ? " active" : "") + "\" onclick=\"goToPage(" + i + ")\">" + i + "</button>";
+    }
+    if (currentPage < totalPages) {
+      html += "<button class=\"page-btn\" onclick=\"goToPage(" + (currentPage + 1) + ")\">下一页</button>";
+      html += "<button class=\"page-btn\" onclick=\"goToPage(" + totalPages + ")\">末页</button>";
+    }
+    html += "</div></div>";
+    container.innerHTML = html;
+  }
+
+  window.goToPage = function(page) {
+    currentPage = page;
+    loadData();
+  };
+
+  window.refreshList = function() {
+    currentPage = 1;
+    loadData();
+  };
+
+  window.viewDetail = function(id) {
+    for (var i = 0; i < currentList.length; i++) {
+      if (currentList[i].id === id) {
+        var item = currentList[i];
+        var content = "";
+        content += "<div class=\"detail-grid\" style=\"margin-bottom:16px;\">";
+        content += "<div class=\"detail-item\"><div class=\"dt-label\">事件</div><div class=\"dt-value\">" + esc(item.event || "-") + "</div></div>";
+        content += "<div class=\"detail-item\"><div class=\"dt-label\">URL</div><div class=\"dt-value\" style=\"word-break:break-all;\">" + esc(item.url || "-") + "</div></div>";
+        content += "<div class=\"detail-item\"><div class=\"dt-label\">状态码</div><div class=\"dt-value\">" + (item.status_code || "-") + "</div></div>";
+        content += "<div class=\"detail-item\"><div class=\"dt-label\">状态</div><div class=\"dt-value\">" + (item.status || "-") + "</div></div>";
+        content += "<div class=\"detail-item\"><div class=\"dt-label\">时间</div><div class=\"dt-value\">" + fmtDate(item.created_at) + "</div></div>";
+        content += "</div>";
+        if (item.request_body) {
+          var reqBody = typeof item.request_body === "object" ? JSON.stringify(item.request_body, null, 2) : item.request_body;
+          content += "<div style=\"margin-bottom:12px;\"><div style=\"font-size:13px;font-weight:600;margin-bottom:4px;\">请求体</div><div class=\"detail-json\">" + esc(reqBody) + "</div></div>";
+        }
+        if (item.response_body) {
+          var resBody = typeof item.response_body === "object" ? JSON.stringify(item.response_body, null, 2) : item.response_body;
+          content += "<div style=\"margin-bottom:12px;\"><div style=\"font-size:13px;font-weight:600;margin-bottom:4px;\">响应体</div><div class=\"detail-json\">" + esc(resBody) + "</div></div>";
+        }
+        content += "<div class=\"form-actions\"><button class=\"btn-cancel\" onclick=\"closeModal()\">关闭</button></div>";
+        showModal("Webhook日志详情", content);
+        return;
+      }
+    }
+    toast("日志不存在", "error");
+  };
+
+  window.retryLog = function(id) {
+    if (!confirm("确定要重试该Webhook请求吗？")) return;
+    api("/webhookLogs/" + id + "/retry", { method: "POST" }).then(function(res) {
+      if (res.code === 0) {
+        toast("重试请求已发送", "success");
+        loadData();
+      } else {
+        toast(res.message || "重试失败", "error");
+      }
+    }).catch(function(err) {
+      toast("网络错误：" + err.message, "error");
+    });
+  };
+
+  loadData();
+})();
+</script>
+</body>
+</html>

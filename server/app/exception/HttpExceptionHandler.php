@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 namespace app\exception;
 
 use think\exception\Handle;

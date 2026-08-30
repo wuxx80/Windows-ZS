@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 namespace app\service;
 
 use think\facade\Cache;

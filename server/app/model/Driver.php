@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 namespace app\model;
 
 class Driver extends BaseModel

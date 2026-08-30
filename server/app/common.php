@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 // 通用辅助函数
 
 if (!function_exists('json_success')) {

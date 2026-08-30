@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ZS 装机助手 - 管理后台</title>
+<link rel="stylesheet" href="../assets/css/admin.css">
+</head>
+<body>
+<div class="admin-wrapper">
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <div class="logo-icon">ZS</div>
+      <span class="title">ZS 装机助手</span>
+    </div>
+    <nav class="sidebar-menu" id="sidebarMenu">
+      <div class="menu-section">概览</div>
+      <a class="menu-item active" href="pages/dashboard.html" target="contentFrame" onclick="return switchPage(this, event)">
+        <span class="icon">📊</span><span class="label">控制台</span>
+      </a>
+      <div class="menu-section">镜像管理</div>
+      <a class="menu-item" href="pages/images.html" target="contentFrame" onclick="return switchPage(this, event)">
+        <span class="icon">💿</span><span class="label">镜像列表</span>
+      </a>
+      <a class="menu-item" href="pages/image-sources.html" target="contentFrame" onclick="return switchPage(this, event)">
+        <span class="icon">🌐</span><span class="label">镜像源</span>
+      </a>
+      <a class="menu-item" href="pages/image-tags.html" target="contentFrame" onclick="return switchPage(this, event)">
+        <span class="icon">🏷️</span><span class="label">镜像标签</span>
+      </a>
+      <div class="menu-section">任务管理</div>
+      <a class="menu-item" href="pages/tasks.html" target="contentFrame" onclick="return switchPage(this, event)">
+        <span class="icon">📋</span><span class="label">任务列表</span>
+      </a>
+      <a class="menu-item" href="pages/task-templates.html" target="contentFrame" onclick="return switchPage(this, event)">
+        <span class="icon">📄</span><span class="label">任务模板</span>
+      </a>
+      <div class="menu-section">无人值守</div>
+      <a class="menu-item" href="pages/unattend.html" target="contentFrame" onclick="return switchPage(this, event)">
+        <span class="icon">🤖</span><span class="label">无人值守模板</span>
+      </a>
+      <div class="menu-section">客户端</div>
+      <a class="menu-item" href="pages/clients.html" target="contentFrame" onclick="return switchPage(this, event)">
+        <span class="icon">🖥️</span><span class="label">客户端管理</span>
+      </a>
+      <a class="menu-item" href="pages/client-groups.html" target="contentFrame" onclick="return switchPage(this, event)">
+        <span class="icon">📁</span><span class="label">客户端分组</span>
+      </a>
+      <a class="menu-item" href="pages/client-versions.html" target="contentFrame" onclick="return switchPage(this, event)">
+        <span class="icon">📦</span><span class="label">版本管理</span>
+      </a>
+      <div class="menu-section">软件驱动</div>
+      <a class="menu-item" href="pages/software.html" target="contentFrame" onclick="return switchPage(this, event)">
+        <span class="icon">📱</span><span class="label">软件管理</span>
+      </a>
+      <a class="menu-item" href="pages/software-categories.html" target="contentFrame" onclick="return switchPage(this, event)">
+        <span class="icon">📂</span><span class="label">软件分类</span>
+      </a>
+      <a class="menu-item" href="pages/software-templates.html" target="contentFrame" onclick="return switchPage(this, event)">
+        <span class="icon">📋</span><span class="label">软件模板</span>
+      </a>
+      <a class="menu-item" href="pages/drivers.html" target="contentFrame" onclick="return switchPage(this, event)">
+        <span class="icon">🔧</span><span class="label">驱动管理</span>
+      </a>
+      <a class="menu-item" href="pages/scripts.html" target="contentFrame" onclick="return switchPage(this, event)">
+        <span class="icon">📜</span><span class="label">脚本管理</span>
+      </a>
+      <div class="menu-section">PE定制</div>
+      <a class="menu-item" href="pages/pe-versions.html" target="contentFrame" onclick="return switchPage(this, event)">
+        <span class="icon">💾</span><span class="label">PE版本</span>
+      </a>
+      <a class="menu-item" href="pages/pe-customize.html" target="contentFrame" onclick="return switchPage(this, event)">
+        <span class="icon">🛠️</span><span class="label">PE定制</span>
+      </a>
+      <div class="menu-section">网络部署</div>
+      <a class="menu-item" href="pages/pxe-configs.html" target="contentFrame" onclick="return switchPage(this, event)">
+        <span class="icon">🌐</span><span class="label">PXE配置</span>
+      </a>
+      <a class="menu-item" href="pages/network-deploys.html" target="contentFrame" onclick="return switchPage(this, event)">
+        <span class="icon">📡</span><span class="label">网络部署</span>
+      </a>
+      <div class="menu-section">业务管理</div>
+      <a class="menu-item" href="pages/customers.html" target="contentFrame" onclick="return switchPage(this, event)">
+        <span class="icon">👤</span><span class="label">客户管理</span>
+      </a>
+      <a class="menu-item" href="pages/work-orders.html" target="contentFrame" onclick="return switchPage(this, event)">
+        <span class="icon">📝</span><span class="label">工单管理</span>
+      </a>
+      <div class="menu-section">系统管理</div>
+      <a class="menu-item" href="pages/users.html" target="contentFrame" onclick="return switchPage(this, event)">
+        <span class="icon">👥</span><span class="label">用户管理</span>
+      </a>
+      <a class="menu-item" href="pages/settings.html" target="contentFrame" onclick="return switchPage(this, event)">
+        <span class="icon">⚙️</span><span class="label">系统设置</span>
+      </a>
+      <a class="menu-item" href="pages/logs.html" target="contentFrame" onclick="return switchPage(this, event)">
+        <span class="icon">📝</span><span class="label">操作日志</span>
+      </a>
+      <a class="menu-item" href="pages/notifications.html" target="contentFrame" onclick="return switchPage(this, event)">
+        <span class="icon">🔔</span><span class="label">通知消息</span>
+      </a>
+      <a class="menu-item" href="pages/scheduled-tasks.html" target="contentFrame" onclick="return switchPage(this, event)">
+        <span class="icon">⏰</span><span class="label">定时任务</span>
+      </a>
+      <div class="menu-section">其他</div>
+      <a class="menu-item" href="pages/reports.html" target="contentFrame" onclick="return switchPage(this, event)">
+        <span class="icon">📊</span><span class="label">报表统计</span>
+      </a>
+      <a class="menu-item" href="pages/webhook-logs.html" target="contentFrame" onclick="return switchPage(this, event)">
+        <span class="icon">🔗</span><span class="label">Webhook日志</span>
+      </a>
+      <a class="menu-item" href="pages/recycle-bin.html" target="contentFrame" onclick="return switchPage(this, event)">
+        <span class="icon">🗑️</span><span class="label">回收站</span>
+      </a>
+    </nav>
+  </aside>
+  <div class="main-content">
+    <header class="topbar">
+      <div class="topbar-left">
+        <span class="page-title" id="pageTitle">控制台</span>
+      </div>
+      <div class="topbar-right">
+        <div class="user-info" id="userInfo">
+          <div class="avatar" id="userAvatar">A</div>
+          <span id="userName">admin</span>
+        </div>
+        <button class="btn-logout" onclick="handleLogout()">退出登录</button>
+      </div>
+    </header>
+    <div class="page-content" id="pageContent">
+      <iframe src="pages/dashboard.html" name="contentFrame" id="contentFrame" onload="onFrameLoaded()"></iframe>
+    </div>
+  </div>
+</div>
+<script src="../assets/js/admin-common.js"></script>
+<script>
+var pageTitles = {
+  'dashboard.html': '控制台',
+  'images.html': '镜像列表', 'image-sources.html': '镜像源', 'image-tags.html': '镜像标签',
+  'tasks.html': '任务列表', 'task-templates.html': '任务模板',
+  'unattend.html': '无人值守模板',
+  'clients.html': '客户端管理', 'client-groups.html': '客户端分组', 'client-versions.html': '版本管理',
+  'software.html': '软件管理', 'software-categories.html': '软件分类', 'software-templates.html': '软件模板',
+  'drivers.html': '驱动管理', 'scripts.html': '脚本管理',
+  'pe-versions.html': 'PE版本', 'pe-customize.html': 'PE定制',
+  'pxe-configs.html': 'PXE配置', 'network-deploys.html': '网络部署',
+  'customers.html': '客户管理', 'work-orders.html': '工单管理',
+  'users.html': '用户管理', 'settings.html': '系统设置', 'logs.html': '操作日志',
+  'notifications.html': '通知消息', 'scheduled-tasks.html': '定时任务',
+  'reports.html': '报表统计', 'webhook-logs.html': 'Webhook日志', 'recycle-bin.html': '回收站'
+};
+(function() {
+  var token = localStorage.getItem(TOKEN_KEY);
+  if (!token) { window.location.href = '/admin/login.html'; return; }
+  var userStr = localStorage.getItem(USER_KEY);
+  if (userStr) {
+    try {
+      var user = JSON.parse(userStr);
+      document.getElementById('userName').textContent = user.username || 'admin';
+      document.getElementById('userAvatar').textContent = (user.username || 'A')[0].toUpperCase();
+    } catch(e) {}
+  }
+})();
+function switchPage(el, e) {
+  document.querySelectorAll('.menu-item').forEach(function(item) { item.classList.remove('active'); });
+  el.classList.add('active');
+  var pageName = el.getAttribute('href').split('/').pop();
+  document.getElementById('pageTitle').textContent = pageTitles[pageName] || '页面';
+  return true;
+}
+function onFrameLoaded() {
+  try { document.getElementById('contentFrame').style.height = '100%'; } catch(e) {}
+}
+function handleLogout() {
+  if (!confirm('确定要退出登录吗？')) return;
+  var token = localStorage.getItem(TOKEN_KEY);
+  fetch('/api/v1/auth/logout', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token }
+  }).catch(function() {}).finally(function() {
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(USER_KEY);
+    window.location.href = '/admin/login.html';
+  });
+}
+</script>
+</body>
+</html>

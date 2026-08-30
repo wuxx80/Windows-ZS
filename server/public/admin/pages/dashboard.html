@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>控制台 - ZS 装机助手</title>
+<link rel="stylesheet" href="../../assets/css/admin.css">
+</head>
+<body>
+<div class="stats-grid">
+  <div class="stat-card">
+    <div class="stat-icon blue">💿</div>
+    <div class="stat-info">
+      <div class="number" id="statImages">-</div>
+      <div class="label">镜像总数</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon green">📋</div>
+    <div class="stat-info">
+      <div class="number" id="statTasks">-</div>
+      <div class="label">今日任务</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon purple">🖥️</div>
+    <div class="stat-info">
+      <div class="number" id="statClients">-</div>
+      <div class="label">在线客户端</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon orange">⏳</div>
+    <div class="stat-info">
+      <div class="number" id="statPending">-</div>
+      <div class="label">待处理任务</div>
+    </div>
+  </div>
+</div>
+<div class="panels-grid">
+  <div class="panel">
+    <div class="panel-header">
+      <span>最近任务</span>
+      <span class="more">查看全部</span>
+    </div>
+    <div class="panel-body">
+      <table class="data-table" id="recentTasks">
+        <thead>
+          <tr>
+            <th>任务名称</th>
+            <th>类型</th>
+            <th>状态</th>
+            <th>时间</th>
+          </tr>
+        </thead>
+        <tbody id="tasksBody">
+          <tr><td colspan="4"><div class="empty-state"><div class="empty-icon">📋</div><p>暂无任务数据</p></div></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div class="panel">
+    <div class="panel-header">
+      <span>快捷操作</span>
+    </div>
+    <div class="panel-body">
+      <div class="quick-actions">
+        <a class="quick-action" href="../pages/images.html">
+          <div class="qa-icon blue">💿</div>
+          <span class="qa-label">添加镜像</span>
+        </a>
+        <a class="quick-action" href="../pages/tasks.html">
+          <div class="qa-icon green">📋</div>
+          <span class="qa-label">任务管理</span>
+        </a>
+        <a class="quick-action" href="../pages/clients.html">
+          <div class="qa-icon purple">🖥️</div>
+          <span class="qa-label">客户端</span>
+        </a>
+        <a class="quick-action" href="../pages/settings.html">
+          <div class="qa-icon orange">⚙️</div>
+          <span class="qa-label">系统设置</span>
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+var TOKEN_KEY = 'zs_admin_token';
+function getToken() { return localStorage.getItem(TOKEN_KEY) || ''; }
+function loadDashboard() {
+  var token = getToken();
+  if (!token) { window.top.location.href = '/admin/login.html'; return; }
+  fetch('/api/v1/dashboard', {
+    headers: { 'Authorization': 'Bearer ' + token }
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(resp) {
+    if (resp.code === 0 && resp.data) {
+      var data = resp.data;
+      document.getElementById('statImages').textContent = data.total_images || 0;
+      document.getElementById('statTasks').textContent = data.today_completed || 0;
+      document.getElementById('statClients').textContent = data.online_clients || 0;
+      document.getElementById('statPending').textContent = data.pending_clients || 0;
+      renderTasks(data.recent_tasks || []);
+    }
+  })
+  .catch(function(err) { console.error('Dashboard load failed:', err); });
+}
+function renderTasks(tasks) {
+  var tbody = document.getElementById('tasksBody');
+  if (!tasks.length) {
+    tbody.innerHTML = '<tr><td colspan="4"><div class="empty-state"><div class="empty-icon">📋</div><p>暂无任务数据</p></div></td></tr>';
+    return;
+  }
+  var html = '';
+  tasks.forEach(function(task) {
+    var statusClass = task.status === 'completed' ? 'completed' : (task.status === 'running' ? 'running' : (task.status === 'failed' ? 'failed' : 'pending'));
+    var statusText = task.status === 'completed' ? '已完成' : (task.status === 'running' ? '运行中' : (task.status === 'failed' ? '失败' : '待处理'));
+    var typeText = task.type === 'install' ? '安装' : (task.type === 'usb' ? 'U盘' : (task.type === 'repair' ? '修复' : task.type || '-'));
+    html += '<tr><td>' + (task.name || '-') + '</td><td>' + typeText + '</td><td><span class="status-badge ' + statusClass + '">' + statusText + '</span></td><td>' + (task.created_at || '-') + '</td></tr>';
+  });
+  tbody.innerHTML = html;
+}
+loadDashboard();
+</script>
+</body>
+</html>

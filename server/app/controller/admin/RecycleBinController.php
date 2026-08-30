@@ -1,54 +1,63 @@
-﻿<?php
+<?php
 namespace app\controller\admin;
 
-use app\model\Image;
 use think\facade\Db;
 
 class RecycleBinController extends BaseController
 {
     public function index()
     {
-        $type = input('type', 'image');
+        $type = input('type');
         $keyword = input('keyword');
 
-        $query = Image::where('delete_time', '>', 0)
-            ->where('delete_time', '<>', '')
-            ->order('delete_time', 'desc');
+        $query = Db::name('recycle_bin')->order('deleted_at', 'desc');
 
+        if ($type) {
+            $query->where('original_table', $type);
+        }
         if ($keyword) {
-            $query->where('name|description', 'like', '%' . $keyword . '%');
+            $query->where('data', 'like', '%' . $keyword . '%');
         }
 
-        return $this->paginate($query);
+        $total = $query->count();
+        $page = input('page', 1);
+        $limit = input('limit', 20);
+        $list = $query->page($page, $limit)->select()->toArray();
+
+        return $this->success([
+            'list' => $list,
+            'total' => $total,
+            'page' => (int)$page,
+            'limit' => (int)$limit,
+        ]);
     }
 
     public function restore($id)
     {
-        $image = Image::where('id', $id)
-            ->where('delete_time', '>', 0)
-            ->find();
-
-        if (!$image) {
-            return $this->error('not_found', '资源不存在或未被删除');
+        $record = Db::name('recycle_bin')->where('id', $id)->find();
+        if (!$record) {
+            return $this->error('not_found', '记录不存在');
         }
 
-        $image->delete_time = 0;
-        $image->save();
+        $originalData = json_decode($record['data'], true);
+        if (!$originalData) {
+            return $this->error('param_error', '恢复数据损坏');
+        }
 
-        return $this->success($image, '已恢复');
+        Db::name($record['original_table'])->insert($originalData);
+        Db::name('recycle_bin')->where('id', $id)->delete();
+
+        return $this->success(null, '已恢复');
     }
 
     public function delete($id)
     {
-        $image = Image::where('id', $id)
-            ->where('delete_time', '>', 0)
-            ->find();
-
-        if (!$image) {
-            return $this->error('not_found', '资源不存在或未被删除');
+        $record = Db::name('recycle_bin')->where('id', $id)->find();
+        if (!$record) {
+            return $this->error('not_found', '记录不存在');
         }
 
-        $image->force()->delete();
+        Db::name('recycle_bin')->where('id', $id)->delete();
         return $this->success(null, '已永久删除');
     }
 
@@ -57,9 +66,8 @@ class RecycleBinController extends BaseController
         $beforeDays = input('before_days', 30);
         $date = date('Y-m-d H:i:s', strtotime('-' . $beforeDays . ' days'));
 
-        $count = Image::where('delete_time', '>', 0)
-            ->where('delete_time', '<', strtotime($date))
-            ->force()
+        $count = Db::name('recycle_bin')
+            ->where('deleted_at', '<', $date)
             ->delete();
 
         return $this->success(['deleted' => $count], '已清理' . $count . '条记录');

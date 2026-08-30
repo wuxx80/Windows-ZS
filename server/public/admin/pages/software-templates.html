@@ -1,0 +1,337 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>软件模板 - ZS 装机助手</title>
+<link rel="stylesheet" href="../../assets/css/admin.css">
+<style>
+body{padding:0;background:transparent;font-family:-apple-system,"Microsoft YaHei","PingFang SC",sans-serif;}
+h2{margin-bottom:16px;font-size:20px;font-weight:600;color:#334155;}
+.search-bar{margin-bottom:16px;}
+.panel-body{position:relative;}
+.data-table th{background:#f8fafc;white-space:nowrap;}
+.data-table td{vertical-align:middle;}
+.data-table .name-cell{max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.data-table .desc-cell{max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.default-badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:500;background:#f0fdf4;color:#16a34a;}
+.detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+.detail-item{padding:10px 14px;background:#f8fafc;border-radius:6px;}
+.detail-item .dt-label{font-size:12px;color:#64748b;margin-bottom:2px;}
+.detail-item .dt-value{font-size:14px;color:#1e293b;font-weight:500;word-break:break-all;}
+.detail-full{grid-column:1 / -1;}
+.software-tag{display:inline-block;padding:2px 8px;margin:2px;background:#dbeafe;color:#2563eb;border-radius:4px;font-size:12px;}
+</style>
+</head>
+<body>
+
+<h2>软件模板</h2>
+
+<div class="search-bar">
+  <button class="btn-create" onclick="showAddModal()">新增模板</button>
+</div>
+
+<div class="panel">
+  <div class="panel-body" style="padding:0;">
+    <table class="data-table" id="dataTable">
+      <thead>
+        <tr>
+          <th style="width:60px;">ID</th>
+          <th style="width:160px;">名称</th>
+          <th style="width:200px;">描述</th>
+          <th style="width:200px;">包含软件</th>
+          <th style="width:70px;">默认</th>
+          <th style="width:140px;">创建时间</th>
+          <th style="width:200px;">操作</th>
+        </tr>
+      </thead>
+      <tbody id="tableBody"></tbody>
+    </table>
+    <div id="emptyState" class="empty-state" style="display:none;">
+      <div class="empty-icon">&#x1F4E6;</div>
+      <p>暂无软件模板数据</p>
+    </div>
+  </div>
+</div>
+
+<div id="paginationContainer"></div>
+
+<script src="../../assets/js/admin-common.js"></script>
+<script>
+(function() {
+  var currentPage = 1;
+  var pageSize = 15;
+  var totalCount = 0;
+  var currentList = [];
+  var softwareMap = {};
+
+  function loadSoftwareList() {
+    api('/software?page=1&pageSize=1000').then(function(res) {
+      if (res.code === 0 && res.data && res.data.list) {
+        var list = res.data.list;
+        for (var i = 0; i < list.length; i++) {
+          softwareMap[list[i].id] = list[i].name;
+        }
+      }
+    }).catch(function() {});
+  }
+
+  function loadTemplates() {
+    var params = 'page=' + currentPage + '&pageSize=' + pageSize;
+
+    var tableBody = document.getElementById('tableBody');
+    tableBody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:40px;color:#94a3b8;">加载中...</td></tr>';
+
+    api('/softwareTemplates?' + params).then(function(res) {
+      if (res.code === 0) {
+        totalCount = res.data.total || 0;
+        currentList = res.data.list || [];
+        renderTable(currentList);
+        renderPagination();
+      } else {
+        toast(res.message || '加载失败', 'error');
+        tableBody.innerHTML = '';
+        document.getElementById('emptyState').style.display = 'block';
+      }
+    }).catch(function(err) {
+      toast('网络请求失败: ' + (err.message || '未知错误'), 'error');
+      tableBody.innerHTML = '';
+      document.getElementById('emptyState').style.display = 'block';
+    });
+  }
+
+  function renderSoftwareNames(softwareIds) {
+    if (!softwareIds || (Array.isArray(softwareIds) && softwareIds.length === 0)) {
+      return '<span style="color:#94a3b8;">-</span>';
+    }
+    var ids = Array.isArray(softwareIds) ? softwareIds : String(softwareIds).split(',').map(function(s) { return s.trim(); });
+    var html = '';
+    var count = 0;
+    for (var i = 0; i < ids.length; i++) {
+      var id = ids[i];
+      var name = softwareMap[id] || id;
+      if (count < 5) {
+        html += '<span class="software-tag">' + esc(name) + '</span>';
+      }
+      count++;
+    }
+    if (count > 5) {
+      html += '<span style="font-size:12px;color:#64748b;">+ ' + (count - 5) + ' 个</span>';
+    }
+    return html;
+  }
+
+  function renderTable(list) {
+    var tableBody = document.getElementById('tableBody');
+    var emptyState = document.getElementById('emptyState');
+
+    if (!list || list.length === 0) {
+      tableBody.innerHTML = '';
+      emptyState.style.display = 'block';
+      return;
+    }
+    emptyState.style.display = 'none';
+
+    var html = '';
+    for (var i = 0; i < list.length; i++) {
+      var item = list[i];
+      html += '<tr>';
+      html += '<td>' + esc(item.id) + '</td>';
+      html += '<td><div class="name-cell" title="' + esc(item.name) + '">' + esc(item.name) + '</div></td>';
+      html += '<td><div class="desc-cell" title="' + esc(item.description || '') + '">' + esc(item.description || '-') + '</div></td>';
+      html += '<td><div style="max-width:200px;">' + renderSoftwareNames(item.software_ids) + '</div></td>';
+      html += '<td>' + (item.is_default ? '<span class="default-badge">默认</span>' : '<span style="color:#94a3b8;">-</span>') + '</td>';
+      html += '<td>' + fmtDate(item.created_at) + '</td>';
+      html += '<td>';
+      html += '<button class="action-btn edit" onclick="showEditModal(\'' + item.id + '\')">编辑</button>';
+      if (!item.is_default) {
+        html += '<button class="action-btn more" onclick="setAsDefault(\'' + item.id + '\')">设为默认</button>';
+      }
+      html += '<button class="action-btn delete" onclick="deleteTemplate(\'' + item.id + '\')">删除</button>';
+      html += '</td>';
+      html += '</tr>';
+    }
+    tableBody.innerHTML = html;
+  }
+
+  function renderPagination() {
+    var container = document.getElementById('paginationContainer');
+    var totalPages = Math.ceil(totalCount / pageSize);
+    if (totalPages <= 1) {
+      container.innerHTML = '';
+      return;
+    }
+    var html = '<div class="pagination">';
+    html += '<span class="page-info">共 ' + totalCount + ' 条，第 ' + currentPage + '/' + totalPages + ' 页</span>';
+    html += '<div class="page-btns">';
+    if (currentPage > 1) {
+      html += '<button class="page-btn" onclick="goToPage(1)">首页</button>';
+      html += '<button class="page-btn" onclick="goToPage(' + (currentPage - 1) + ')">上一页</button>';
+    }
+    var startPage = Math.max(1, currentPage - 2);
+    var endPage = Math.min(totalPages, currentPage + 2);
+    for (var i = startPage; i <= endPage; i++) {
+      html += '<button class="page-btn' + (i === currentPage ? ' active' : '') + '" onclick="goToPage(' + i + ')">' + i + '</button>';
+    }
+    if (currentPage < totalPages) {
+      html += '<button class="page-btn" onclick="goToPage(' + (currentPage + 1) + ')">下一页</button>';
+      html += '<button class="page-btn" onclick="goToPage(' + totalPages + ')">末页</button>';
+    }
+    html += '</div></div>';
+    container.innerHTML = html;
+  }
+
+  window.goToPage = function(page) {
+    currentPage = page;
+    loadTemplates();
+  };
+
+  window.showAddModal = function() {
+    var content = '';
+    content += '<div class="form-row">';
+    content += '<div class="form-group"><label>模板名称 <span style="color:#dc2626;">*</span></label><input type="text" id="formName" placeholder="如: 办公软件套装"></div>';
+    content += '<div class="form-group"><label>设为默认</label><select id="formIsDefault"><option value="0">否</option><option value="1">是</option></select></div>';
+    content += '</div>';
+    content += '<div class="form-group"><label>描述</label><textarea id="formDescription" rows="2" placeholder="模板描述"></textarea></div>';
+    content += '<div class="form-group"><label>包含软件ID (逗号分隔)</label><input type="text" id="formSoftwareIds" placeholder="如: 1,2,3,4,5"></div>';
+    content += '<div style="margin-bottom:12px;padding:10px 14px;background:#f8fafc;border-radius:6px;font-size:12px;color:#64748b;">';
+    content += '提示：软件ID可在"软件管理"页面查看，多个ID用英文逗号分隔。';
+    content += '</div>';
+    content += '<div class="form-actions">';
+    content += '<button class="btn-cancel" onclick="closeModal()">取消</button>';
+    content += '<button class="btn-submit" onclick="saveTemplate()">保存</button>';
+    content += '</div>';
+
+    var modal = showModal('新增软件模板', content);
+    modal.setAttribute('data-mode', 'add');
+    modal.setAttribute('data-id', '');
+  };
+
+  window.showEditModal = function(id) {
+    api('/softwareTemplates/' + id).then(function(res) {
+      if (res.code !== 0) {
+        toast(res.message || '获取详情失败', 'error');
+        return;
+      }
+      var item = res.data;
+      var softwareIdsStr = '';
+      if (item.software_ids) {
+        if (Array.isArray(item.software_ids)) {
+          softwareIdsStr = item.software_ids.join(',');
+        } else {
+          softwareIdsStr = String(item.software_ids);
+        }
+      }
+
+      var content = '';
+      content += '<div class="form-row">';
+      content += '<div class="form-group"><label>模板名称 <span style="color:#dc2626;">*</span></label><input type="text" id="formName" value="' + esc(item.name) + '"></div>';
+      content += '<div class="form-group"><label>设为默认</label><select id="formIsDefault"><option value="0"' + (item.is_default ? '' : ' selected') + '>否</option><option value="1"' + (item.is_default ? ' selected' : '') + '>是</option></select></div>';
+      content += '</div>';
+      content += '<div class="form-group"><label>描述</label><textarea id="formDescription" rows="2">' + esc(item.description || '') + '</textarea></div>';
+      content += '<div class="form-group"><label>包含软件ID (逗号分隔)</label><input type="text" id="formSoftwareIds" value="' + esc(softwareIdsStr) + '" placeholder="如: 1,2,3,4,5"></div>';
+      content += '<div style="margin-bottom:12px;padding:10px 14px;background:#f8fafc;border-radius:6px;font-size:12px;color:#64748b;">';
+      content += '提示：软件ID可在"软件管理"页面查看，多个ID用英文逗号分隔。';
+      content += '</div>';
+      content += '<div class="form-actions">';
+      content += '<button class="btn-cancel" onclick="closeModal()">取消</button>';
+      content += '<button class="btn-submit" onclick="saveTemplate()">保存</button>';
+      content += '</div>';
+
+      var modal = showModal('编辑软件模板', content);
+      modal.setAttribute('data-mode', 'edit');
+      modal.setAttribute('data-id', id);
+    }).catch(function(err) {
+      toast('获取软件模板详情失败: ' + (err.message || '未知错误'), 'error');
+    });
+  };
+
+  window.saveTemplate = function() {
+    var modal = document.getElementById('modalOverlay');
+    var mode = modal ? modal.getAttribute('data-mode') : 'add';
+    var id = modal ? modal.getAttribute('data-id') : '';
+
+    var name = document.getElementById('formName').value.trim();
+    var description = document.getElementById('formDescription').value.trim();
+    var softwareIdsStr = document.getElementById('formSoftwareIds').value.trim();
+    var isDefault = document.getElementById('formIsDefault').value === '1';
+
+    if (!name) {
+      toast('请输入模板名称', 'error');
+      return;
+    }
+
+    var softwareIds = [];
+    if (softwareIdsStr) {
+      var parts = softwareIdsStr.split(',');
+      for (var i = 0; i < parts.length; i++) {
+        var sid = parts[i].trim();
+        if (sid) {
+          var num = parseInt(sid, 10);
+          if (!isNaN(num)) {
+            softwareIds.push(num);
+          }
+        }
+      }
+    }
+
+    var body = {
+      name: name,
+      description: description,
+      software_ids: softwareIds,
+      is_default: isDefault
+    };
+
+    var request;
+    if (mode === 'edit' && id) {
+      request = api('/softwareTemplates/' + id, { method: 'PUT', body: body });
+    } else {
+      request = api('/softwareTemplates', { method: 'POST', body: body });
+    }
+
+    request.then(function(res) {
+      if (res.code === 0) {
+        toast(mode === 'edit' ? '更新成功' : '创建成功', 'success');
+        closeModal();
+        loadTemplates();
+      } else {
+        toast(res.message || (mode === 'edit' ? '更新失败' : '创建失败'), 'error');
+      }
+    }).catch(function(err) {
+      toast('网络请求失败: ' + (err.message || '未知错误'), 'error');
+    });
+  };
+
+  window.deleteTemplate = function(id) {
+    if (!confirm('确定要删除该软件模板吗？此操作不可恢复。')) return;
+    api('/softwareTemplates/' + id, { method: 'DELETE' }).then(function(res) {
+      if (res.code === 0) {
+        toast('删除成功', 'success');
+        loadTemplates();
+      } else {
+        toast(res.message || '删除失败', 'error');
+      }
+    }).catch(function(err) {
+      toast('网络请求失败: ' + (err.message || '未知错误'), 'error');
+    });
+  };
+
+  window.setAsDefault = function(id) {
+    api('/softwareTemplates/' + id + '/setDefault', { method: 'POST' }).then(function(res) {
+      if (res.code === 0) {
+        toast('已设为默认模板', 'success');
+        loadTemplates();
+      } else {
+        toast(res.message || '设置失败', 'error');
+      }
+    }).catch(function(err) {
+      toast('网络请求失败: ' + (err.message || '未知错误'), 'error');
+    });
+  };
+
+  loadSoftwareList();
+  loadTemplates();
+
+})();
+</script>
+</body>
+</html>
