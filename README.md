@@ -48,20 +48,12 @@ ZS 装机助手是一套完整的 Windows 系统安装与维护解决方案，�
 | 阶段 | 状态 |
 |------|------|
 | 设计文档 | ✅ 已完成 |
-| 后端骨架（ThinkPHP 6） | ✅ 已完成 |
-| 管理后台前端（Layui） | ✅ 已完成 |
-| 核心业务逻辑 | ✅ 已完成 |
+| 后端骨架（ThinkPHP 6 + 35张表 + 30个控制器） | ✅ 已完成 |
+| 管理后台前端（29个管理页面，Layui风格） | ✅ 已完成 |
+| 核心业务逻辑（所有控制器+服务层，浏览器全量测试验证） | ✅ 已完成 |
 | WinPE 客户端（.NET 8 WPF） | ✅ 已完成 |
 | Windows 客户端（.NET 8 WPF） | ✅ 已完成 |
 | 联调与部署 | ⏳ 待开始 |
-| 后端骨架 | ✅ 已完成 |
-| 数据库 | ✅ 已完成 |
-| API 认证 | ✅ 已验证 |
-| 后台前端 | ✅ 已完成（29个管理页面） |
-| 核心业务逻辑 | ✅ 已完成（浏览器全量测试验证） |
-| WinPE 客户端 | ⏳ 待开发 |
-| Windows 客户端 | ⏳ 待开发 |
-| 联调部署 | ⏳ 待开发 |
 
 ## 文档列表（六件套）
 
@@ -76,7 +68,7 @@ ZS 装机助手是一套完整的 Windows 系统安装与维护解决方案，�
 
 ## 目录结构
 
-`
+```
 Windows-ZS/
 ├── .gitignore
 ├── README.md
@@ -85,6 +77,7 @@ Windows-ZS/
 ├── 操作指南.md
 ├── 版本更新记录.md
 ├── 开发计划表.md                    ← 第六件套
+├── ZS_Installer.sln                 ← .NET 解决方案文件
 ├── 设计文档/
 │   ├── 详细设计文档.md
 │   ├── Web后台详细设计.md
@@ -102,7 +95,6 @@ Windows-ZS/
 │   ├── route/
 │   ├── public/
 │   │   ├── index.php                ← ThinkPHP 入口
-│   │   ├── admin.php                ← 管理后台入口
 │   │   ├── index.html               ← 首页（介绍下载网站）
 │   │   ├── admin/                   ← 管理后台前端页面
 │   │   │   ├── login.html           ← 登录页
@@ -117,8 +109,23 @@ Windows-ZS/
 │   ├── .env
 │   ├── composer.json
 │   └── thinkphp.nginx.rewrite.conf  ← 独立伪静态规则
-└── 360截图20260830185410947.jpg
-`
+├── WinPE_Client/                    ← WinPE 客户端 (.NET 8 WPF)
+│   ├── WinPE_Client.csproj
+│   ├── App.xaml
+│   ├── MainWindow.xaml
+│   ├── Models/
+│   ├── Services/
+│   ├── ViewModels/
+│   └── Helpers/
+└── Windows_Client/                  ← Windows 客户端 (.NET 8 WPF)
+    ├── Windows_Client.csproj
+    ├── App.xaml
+    ├── MainWindow.xaml
+    ├── Models/
+    ├── Services/
+    ├── ViewModels/
+    └── Helpers/
+```
 
 ## 快速开始
 
@@ -132,31 +139,30 @@ Windows-ZS/
 ### 2. 配置伪静态（宝塔面板）
 进入 宝塔面板 → 网站 → 设置 → 伪静态 → 选择"自定义规则"，粘贴以下内容：
 
-`
-ginx
+```
 location / {
     if (!-e $request_filename) {
         rewrite ^(.*)$ /index.php?s=$1 last;
         break;
     }
 }
-`
+```
 
 或者直接使用项目中的 server/thinkphp.nginx.rewrite.conf 文件内容。
 
 ### 3. 导入数据库
-`sql
+```sql
 source /path/to/database/install.sql;
-`
+```
 
 ### 4. 配置环境
 复制 .env.example 为 .env，修改数据库连接信息。
 
 ### 5. 安装依赖
-`ash
+```bash
 cd server
 composer install
-`
+```
 
 ### 6. 访问后台
 浏览器访问 http://你的域名/admin/login.html
