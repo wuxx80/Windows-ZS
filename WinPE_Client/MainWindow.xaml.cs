@@ -27,15 +27,18 @@ namespace WinPE_Client
                 Vm.OpenInstallWizardCommand.Execute(null);
         }
 
-        // U盘制作 / 工具大全 / 绿色软件：设计文档已规划，属后续开发阶段
+        // U盘制作：打开四步向导（真实写盘，带安全护栏）
         private void OnUsbClick(object sender, MouseButtonEventArgs e)
         {
-            Vm?.NotifyNotImplementedCommand.Execute("U盘制作");
+            if (Vm?.OpenUDiskCommand.CanExecute(null) == true)
+                Vm.OpenUDiskCommand.Execute(null);
         }
 
+        // 工具大全：打开工具大全子窗口；绿色软件属后续开发阶段
         private void OnToolsClick(object sender, MouseButtonEventArgs e)
         {
-            Vm?.NotifyNotImplementedCommand.Execute("工具大全");
+            if (Vm?.OpenToolsCommand.CanExecute(null) == true)
+                Vm.OpenToolsCommand.Execute(null);
         }
 
         private void OnSoftwareClick(object sender, MouseButtonEventArgs e)

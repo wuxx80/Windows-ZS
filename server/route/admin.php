@@ -21,6 +21,7 @@ Route::group('api/v1', function () {
     Route::post('images/:id/verify', 'admin.Image/verify');
     Route::post('images/:id/convert', 'admin.Image/convert');
     Route::post('images/:id/download', 'admin.Image/download');
+    Route::get('images/:id/clientDownload', 'admin.Image/clientDownload');
     Route::post('images/:id/restore', 'admin.Image/restore');
     Route::post('images/upload', 'admin.Image/upload');
     Route::post('images/uploadComplete', 'admin.Image/uploadComplete');
@@ -140,6 +141,8 @@ Route::group('api/v1', function () {
     Route::post('scripts', 'admin.Script/create');
 
     // PE Versions
+    Route::get('peVersions/clientList', 'admin.PeVersion/clientList');
+    Route::get('peVersions/:id/download', 'admin.PeVersion/clientDownload');
     Route::put('peVersions/:id', 'admin.PeVersion/edit');
     Route::delete('peVersions/:id', 'admin.PeVersion/delete');
     Route::get('peVersions', 'admin.PeVersion/index');

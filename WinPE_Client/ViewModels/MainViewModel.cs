@@ -16,15 +16,11 @@ namespace WinPE_Client.ViewModels
         private readonly ApiService _api;
         private readonly DeviceService _device;
         private readonly ImageDeployService _deploy;
-        private readonly DiskPartService _diskPart;
         private readonly DispatcherTimer _heartbeatTimer;
 
         // 客户端注册信息（连接服务器后填充）
         private string _clientId = "";
         private int _serverClientId;
-
-        // 当前装机任务（创建后保存，用于进度上报）
-        private int _taskId;
 
         // 本机待执行任务（首页「待执行任务」卡片 + 立即继续）
         private TaskInfo? _pendingTask;
@@ -34,14 +30,8 @@ namespace WinPE_Client.ViewModels
             _api = new ApiService();
             _device = new DeviceService();
             _deploy = new ImageDeployService();
-            _diskPart = new DiskPartService();
 
             _deploy.ProgressChanged += (p, m) =>
-            {
-                ProgressValue = p;
-                StatusMessage = m;
-            };
-            _diskPart.ProgressChanged += (p, m) =>
             {
                 ProgressValue = p;
                 StatusMessage = m;
@@ -53,8 +43,9 @@ namespace WinPE_Client.ViewModels
 
             NavigateCommand = new RelayCommand<string>(Navigate);
             OpenInstallWizardCommand = new RelayCommand(async () => await OpenInstallWizard());
+            OpenUDiskCommand = new RelayCommand(OpenUDisk);
+            OpenToolsCommand = new RelayCommand(OpenTools);
             ContinueTaskCommand = new RelayCommand(async () => await OpenInstallWizardContinuation());
-            StartInstallCommand = new RelayCommand(async () => await StartInstall(), () => CanStartInstall);
             RefreshDisksCommand = new RelayCommand(async () => await RefreshDisks());
             RefreshImagesCommand = new RelayCommand(async () => await RefreshImages());
             BootRepairCommand = new RelayCommand(async () => await BootRepair());
@@ -97,51 +88,14 @@ namespace WinPE_Client.ViewModels
         public bool IsInstalling
         {
             get => _isInstalling;
-            set { _isInstalling = value; OnPropertyChanged(); OnPropertyChanged(nameof(CanStartInstall)); }
+            set { _isInstalling = value; OnPropertyChanged(); }
         }
-
-        public bool CanStartInstall => !IsInstalling && IsConnected && SelectedImage != null && SelectedDisk != null;
 
         private string _currentView = "Home";
         public string CurrentView
         {
             get => _currentView;
             set { _currentView = value; OnPropertyChanged(); }
-        }
-
-        private ImageInfo? _selectedImage;
-        public ImageInfo? SelectedImage
-        {
-            get => _selectedImage;
-            set { _selectedImage = value; OnPropertyChanged(); OnPropertyChanged(nameof(CanStartInstall)); }
-        }
-
-        private DiskInfo? _selectedDisk;
-        public DiskInfo? SelectedDisk
-        {
-            get => _selectedDisk;
-            set { _selectedDisk = value; OnPropertyChanged(); OnPropertyChanged(nameof(CanStartInstall)); }
-        }
-
-        private bool _autoPartition = true;
-        public bool AutoPartition
-        {
-            get => _autoPartition;
-            set { _autoPartition = value; OnPropertyChanged(); }
-        }
-
-        private bool _autoRepairBoot = true;
-        public bool AutoRepairBoot
-        {
-            get => _autoRepairBoot;
-            set { _autoRepairBoot = value; OnPropertyChanged(); }
-        }
-
-        private bool _autoInjectDrivers;
-        public bool AutoInjectDrivers
-        {
-            get => _autoInjectDrivers;
-            set { _autoInjectDrivers = value; OnPropertyChanged(); }
         }
 
         private string _driverPath = "";
@@ -192,8 +146,9 @@ namespace WinPE_Client.ViewModels
 
         public ICommand NavigateCommand { get; }
         public ICommand OpenInstallWizardCommand { get; }
+        public ICommand OpenUDiskCommand { get; }
+        public ICommand OpenToolsCommand { get; }
         public ICommand ContinueTaskCommand { get; }
-        public ICommand StartInstallCommand { get; }
         public ICommand RefreshDisksCommand { get; }
         public ICommand RefreshImagesCommand { get; }
         public ICommand BootRepairCommand { get; }
@@ -341,114 +296,6 @@ namespace WinPE_Client.ViewModels
             StatusMessage = "已检测到 " + Disks.Count + " 个磁盘";
         }
 
-        private async Task StartInstall()
-        {
-            if (SelectedImage == null || SelectedDisk == null) return;
-
-            IsInstalling = true;
-            StatusMessage = "开始装机...";
-            ProgressValue = 0;
-            _taskId = 0;
-
-            try
-            {
-                // 1. 创建装机任务（服务端记录，客户端后续上报进度）
-                StatusMessage = "正在创建装机任务...";
-                var taskResult = await _api.CreateTaskAsync(
-                    imageId: SelectedImage.Id,
-                    clientId: _serverClientId > 0 ? _serverClientId : (int?)null,
-                    targetDiskIndex: SelectedDisk.Index,
-                    targetPartition: "C:",
-                    partitionScheme: AutoPartition ? "auto" : "keep",
-                    optionsJson: System.Text.Json.JsonSerializer.Serialize(new
-                    {
-                        auto_partition = AutoPartition,
-                        auto_repair_boot = AutoRepairBoot,
-                        auto_inject_drivers = AutoInjectDrivers,
-                        image_index = 1
-                    }));
-                if (!taskResult.IsSuccess || taskResult.Data == null)
-                {
-                    StatusMessage = "创建任务失败: " + taskResult.Message;
-                    IsInstalling = false;
-                    return;
-                }
-                _taskId = taskResult.Data.Id;
-
-                if (AutoPartition)
-                {
-                    await ReportProgress(5, "正在分区...", "分区", "running");
-                    var op = new PartitionOperation
-                    {
-                        Operation = "create",
-                        DiskIndex = SelectedDisk.Index,
-                        FileSystem = "NTFS",
-                        DriveLetter = "C",
-                        Label = "Windows"
-                    };
-                    var partResult = await _diskPart.ExecutePartitionOperation(op);
-                    if (!partResult)
-                    {
-                        StatusMessage = "分区失败，中止装机";
-                        await ReportProgress(0, "分区失败，中止装机", "分区", "failed");
-                        IsInstalling = false;
-                        return;
-                    }
-                }
-
-                await ReportProgress(20, "正在部署镜像...", "部署镜像", "running");
-                var deployResult = await _deploy.DeployWimImage(
-                    SelectedImage.FilePath, 1, "C:", false);
-
-                if (!deployResult)
-                {
-                    StatusMessage = "镜像部署失败";
-                    await ReportProgress(0, "镜像部署失败", "部署镜像", "failed");
-                    IsInstalling = false;
-                    return;
-                }
-
-                if (AutoRepairBoot)
-                {
-                    await ReportProgress(80, "正在修复引导...", "修复引导", "running");
-                    await _deploy.RepairBoot("C:");
-                }
-
-                if (AutoInjectDrivers && !string.IsNullOrEmpty(DriverPath))
-                {
-                    await ReportProgress(90, "正在注入驱动...", "注入驱动", "running");
-                    await _deploy.InjectDrivers("C:", DriverPath);
-                }
-
-                ProgressValue = 100;
-                StatusMessage = "装机完成！";
-                await ReportProgress(100, "装机完成", "完成", "completed");
-            }
-            catch (Exception ex)
-            {
-                StatusMessage = "装机失败: " + ex.Message;
-                await ReportProgress(0, "装机失败: " + ex.Message, "异常", "failed");
-            }
-            finally
-            {
-                IsInstalling = false;
-            }
-        }
-
-        /// <summary>上报任务进度（任务未创建成功时静默跳过）</summary>
-        private async Task ReportProgress(int progress, string? message, string? stepName, string? status)
-        {
-            if (_taskId <= 0) return;
-            try
-            {
-                await _api.ReportProgressAsync(_taskId, progress, message, stepName, status);
-            }
-            catch
-            {
-                // 进度上报失败不影响装机主流程
-            }
-        }
-
         private async Task BootRepair()
         {
             IsInstalling = true;
@@ -511,7 +358,27 @@ namespace WinPE_Client.ViewModels
             await CheckWaitingTasks();
         }
 
-        /// <summary>占位入口：U盘制作 / 工具大全 / 绿色软件（设计文档规划中，未实现）</summary>
+        /// <summary>打开 U盘制作四步向导子窗口（真实写盘，带安全护栏）</summary>
+        private void OpenUDisk()
+        {
+            var vm = new UDiskViewModel(_api, new UDiskService(), ServerUrl, AppContext.BaseDirectory);
+            var win = new UDiskWindow { DataContext = vm };
+            vm.RequestClose += () => win.Close();
+            win.Owner = Application.Current.MainWindow;
+            win.ShowDialog();
+        }
+
+        /// <summary>打开工具大全子窗口（53 个维护工具：本地内置 + 服务器同步）</summary>
+        private void OpenTools()
+        {
+            var vm = new ToolsViewModel(_api, ServerUrl, AppContext.BaseDirectory);
+            var win = new ToolsWindow { DataContext = vm };
+            vm.RequestClose += () => win.Close();
+            win.Owner = Application.Current.MainWindow;
+            win.ShowDialog();
+        }
+
+        /// <summary>占位入口：工具大全 / 绿色软件（设计文档规划中，未实现）</summary>
         private void NotifyNotImplemented(string? feature)
         {
             StatusMessage = "【" + (feature ?? "该功能") + "】正在开发中，敬请期待";

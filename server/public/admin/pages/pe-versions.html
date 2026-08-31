@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
@@ -26,9 +26,8 @@ h2{margin-bottom:16px;font-size:20px;font-weight:600;color:#334155;}
   <input type="text" id="searchKeyword" placeholder="关键词搜索（版本号/基础OS/架构）" style="min-width:200px;">
   <select id="searchStatus">
     <option value="">全部状态</option>
-    <option value="draft">草稿</option>
-    <option value="published">已发布</option>
-    <option value="archived">已归档</option>
+    <option value="1">已发布</option>
+    <option value="0">草稿</option>
   </select>
   <button class="btn-search" onclick="searchPE()">搜索</button>
   <button class="btn-reset" onclick="resetSearch()">重置</button>
@@ -45,7 +44,7 @@ h2{margin-bottom:16px;font-size:20px;font-weight:600;color:#334155;}
           <th style="width:120px;">基础OS</th>
           <th style="width:80px;">架构</th>
           <th style="width:100px;">文件大小</th>
-          <th>下载地址</th>
+          <th>文件路径</th>
           <th style="width:70px;">状态</th>
           <th style="width:140px;">创建时间</th>
           <th style="width:160px;">操作</th>
@@ -113,7 +112,7 @@ h2{margin-bottom:16px;font-size:20px;font-weight:600;color:#334155;}
     var html = '';
     for (var i = 0; i < list.length; i++) {
       var item = list[i];
-      var statusMap = { draft: '草稿', published: '已发布', archived: '已归档' };
+      var statusMap = { 1: '已发布', 0: '草稿' };
       var statusText = statusMap[item.status] || item.status;
       html += '<tr>';
       html += '<td>' + esc(item.id) + '</td>';
@@ -121,7 +120,7 @@ h2{margin-bottom:16px;font-size:20px;font-weight:600;color:#334155;}
       html += '<td>' + esc(item.base_os || '-') + '</td>';
       html += '<td>' + esc(item.arch || '-') + '</td>';
       html += '<td>' + fmtSize(item.file_size) + '</td>';
-      html += '<td><div class="url-cell" title="' + esc(item.download_url) + '">' + esc(item.download_url || '-') + '</div></td>';
+      html += '<td><div class="url-cell" title="' + esc(item.file_path) + '">' + esc(item.file_path || '-') + '</div></td>';
       html += '<td>' + statusBadge(item.status, statusText) + '</td>';
       html += '<td>' + fmtDate(item.created_at) + '</td>';
       html += '<td>';
@@ -184,7 +183,9 @@ h2{margin-bottom:16px;font-size:20px;font-weight:600;color:#334155;}
       base_os: document.getElementById('formBaseOs').value.trim(),
       arch: document.getElementById('formArch').value,
       file_size: document.getElementById('formFileSize').value ? parseInt(document.getElementById('formFileSize').value, 10) : 0,
-      download_url: document.getElementById('formDownloadUrl').value.trim(),
+      file_name: document.getElementById('formFileName').value.trim(),
+      file_path: document.getElementById('formFilePath').value.trim(),
+      file_hash: document.getElementById('formFileHash').value.trim(),
       status: document.getElementById('formStatus').value
     };
   }
@@ -194,8 +195,10 @@ h2{margin-bottom:16px;font-size:20px;font-weight:600;color:#334155;}
     var baseOs = data ? esc(data.base_os) : '';
     var arch = data ? esc(data.arch) : '';
     var fileSize = data ? (data.file_size || '') : '';
-    var downloadUrl = data ? esc(data.download_url) : '';
-    var status = data ? (data.status || 'draft') : 'draft';
+    var fileName = data ? esc(data.file_name) : '';
+    var filePath = data ? esc(data.file_path) : '';
+    var fileHash = data ? esc(data.file_hash) : '';
+    var status = (data && (data.status === 1 || data.status === '1')) ? '1' : '0';
 
     var content = '';
     content += '<div class="form-row">';
@@ -206,8 +209,10 @@ h2{margin-bottom:16px;font-size:20px;font-weight:600;color:#334155;}
     content += '<div class="form-group"><label>架构</label><select id="formArch"><option value="">请选择</option><option value="x64"' + (arch === 'x64' ? ' selected' : '') + '>x64</option><option value="x86"' + (arch === 'x86' ? ' selected' : '') + '>x86</option><option value="arm64"' + (arch === 'arm64' ? ' selected' : '') + '>arm64</option></select></div>';
     content += '<div class="form-group"><label>文件大小 (字节)</label><input type="number" id="formFileSize" value="' + fileSize + '" min="0" placeholder="0"></div>';
     content += '</div>';
-    content += '<div class="form-group"><label>下载地址</label><input type="url" id="formDownloadUrl" value="' + downloadUrl + '" placeholder="https://example.com/pe.iso"></div>';
-    content += '<div class="form-group"><label>状态</label><select id="formStatus"><option value="draft"' + (status === 'draft' ? ' selected' : '') + '>草稿</option><option value="published"' + (status === 'published' ? ' selected' : '') + '>已发布</option><option value="archived"' + (status === 'archived' ? ' selected' : '') + '>已归档</option></select></div>';
+    content += '<div class="form-group"><label>文件名</label><input type="text" id="formFileName" value="' + fileName + '" placeholder="如: Win11PE.iso"></div>';
+    content += '<div class="form-group"><label>服务器文件路径</label><input type="text" id="formFilePath" value="' + filePath + '" placeholder="如: /www/wwwroot/zs/storage/pe/Win11PE.iso"></div>';
+    content += '<div class="form-group"><label>文件哈希</label><input type="text" id="formFileHash" value="' + fileHash + '" placeholder="SHA256/MD5，用于下载校验"></div>';
+    content += '<div class="form-group"><label>状态</label><select id="formStatus"><option value="1"' + (status === '1' ? ' selected' : '') + '>已发布</option><option value="0"' + (status === '0' ? ' selected' : '') + '>草稿</option></select></div>';
     content += '<div class="form-actions">';
     content += '<button class="btn-cancel" onclick="closeModal()">取消</button>';
     content += '<button class="btn-submit" onclick="saveItem()">保存</button>';
@@ -291,7 +296,7 @@ h2{margin-bottom:16px;font-size:20px;font-weight:600;color:#334155;}
         return;
       }
       var item = res.data;
-      var statusMap = { draft: '草稿', published: '已发布', archived: '已归档' };
+      var statusMap = { 1: '已发布', 0: '草稿' };
       var statusText = statusMap[item.status] || item.status;
       var content = '';
       content += '<div class="detail-grid">';
@@ -300,7 +305,7 @@ h2{margin-bottom:16px;font-size:20px;font-weight:600;color:#334155;}
       content += '<div class="detail-item"><div class="dt-label">基础OS</div><div class="dt-value">' + esc(item.base_os || '-') + '</div></div>';
       content += '<div class="detail-item"><div class="dt-label">架构</div><div class="dt-value">' + esc(item.arch || '-') + '</div></div>';
       content += '<div class="detail-item"><div class="dt-label">文件大小</div><div class="dt-value">' + fmtSize(item.file_size) + '</div></div>';
-      content += '<div class="detail-item detail-full"><div class="dt-label">下载地址</div><div class="dt-value" style="font-size:12px;word-break:break-all;">' + esc(item.download_url || '-') + '</div></div>';
+      content += '<div class="detail-item detail-full"><div class="dt-label">文件路径</div><div class="dt-value" style="font-size:12px;word-break:break-all;">' + esc(item.file_path || '-') + '</div></div>';
       content += '<div class="detail-item"><div class="dt-label">状态</div><div class="dt-value">' + statusBadge(item.status, statusText) + '</div></div>';
       content += '<div class="detail-item"><div class="dt-label">创建时间</div><div class="dt-value">' + fmtDate(item.created_at) + '</div></div>';
       content += '<div class="detail-item"><div class="dt-label">更新时间</div><div class="dt-value">' + fmtDate(item.updated_at) + '</div></div>';

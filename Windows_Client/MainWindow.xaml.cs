@@ -19,13 +19,13 @@ namespace Windows_Client
         private void OnUsbClick(object sender, MouseButtonEventArgs e)
         {
             var vm = DataContext as ViewModels.MainViewModel;
-            vm?.NavigateCommand.Execute("Usb");
+            vm?.OpenUDiskCommand.Execute(null);
         }
 
         private void OnToolsClick(object sender, MouseButtonEventArgs e)
         {
             var vm = DataContext as ViewModels.MainViewModel;
-            vm?.NavigateCommand.Execute("Tools");
+            vm?.OpenToolsCommand.Execute(null);
         }
 
         private void OnSoftwareClick(object sender, MouseButtonEventArgs e)

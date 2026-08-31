@@ -44,6 +44,8 @@ namespace Windows_Client.Models
         public string FileName { get; set; } = "";
         [JsonPropertyName("file_path")]
         public string FilePath { get; set; } = "";
+        [JsonPropertyName("file_hash")]
+        public string FileHash { get; set; } = "";
         [JsonPropertyName("file_size")]
         public long FileSize { get; set; }
         [JsonPropertyName("size_display")]

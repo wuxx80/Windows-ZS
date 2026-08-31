@@ -52,12 +52,12 @@ class ImageService
         }
 
         $actualHash = hash_file("sha256", $image["file_path"]);
-        $expectedHash = $image["sha256"] ?? "";
+        $expectedHash = $image["file_hash"] ?? "";
         $match = !empty($expectedHash) && strtolower($actualHash) === strtolower($expectedHash);
 
         // 更新哈希值
-        if (empty($image["sha256"])) {
-            Db::name("images")->where("id", $id)->update(["sha256" => $actualHash]);
+        if (empty($image["file_hash"])) {
+            Db::name("images")->where("id", $id)->update(["file_hash" => $actualHash]);
         }
 
         $fileSize = filesize($image["file_path"]);

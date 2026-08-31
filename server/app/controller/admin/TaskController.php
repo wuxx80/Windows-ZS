@@ -265,6 +265,12 @@ class TaskController extends BaseController
             }
         }
 
+        // 闭环校验：waiting 任务（Windows 下单 → PE 续装）必须关联已注册客户端，
+        // 否则 PE 端无法按 client_id 拉取到该任务，导致「下单后无人认领」断链
+        if ($status === 'waiting' && empty($data['client_id'])) {
+            return $this->error('param_error', '等待执行任务必须关联已注册客户端');
+        }
+
         $task = Task::create($data);
         return $this->success($task, '创建成功');
     }
@@ -351,11 +357,18 @@ class TaskController extends BaseController
             return $this->error('task_status_error', '当前状态不允许重试');
         }
 
-        $task->status = 'pending';
+        // 状态置为 waiting（供 PE 客户端按 client_id 重新拉取执行，闭环修复），并清空失败痕迹
+        $task->status = 'waiting';
+        $task->progress = 0;
+        $task->error_message = '';
+        $task->started_at = null;
+        $task->completed_at = null;
+        $task->cancelled_at = null;
+        $task->duration = 0;
         $task->retry_count = $task->retry_count + 1;
         $task->save();
 
-        return $this->success($task, '已加入重试队列');
+        return $this->success($task, '已重新进入待执行队列，等待 PE 客户端认领');
     }
 
     public function pause($id)
@@ -412,10 +425,17 @@ class TaskController extends BaseController
         $progress = input('progress/d', 0);
         $message = input('message', '');
         $stepName = input('step_name', '');
+        // 上报方客户端ID（可选）：用于任务认领/进度上报的身份校验
+        $clientId = input('client_id');
         // 客户端可上报状态：running/completed/failed
         $reportStatus = input('status', '');
         if ($progress < 0 || $progress > 100) {
             return $this->error('param_error', '进度值必须在0-100之间');
+        }
+
+        // 身份校验：任务已绑定客户端时，仅允许任务所属客户端上报（防止 A 客户端操控 B 任务）
+        if ($clientId && $task->client_id && (int) $task->client_id !== (int) $clientId) {
+            return $this->error('auth_client_mismatch', '任务不属于当前客户端');
         }
 
         $recordStatus = 'running';
@@ -431,7 +451,19 @@ class TaskController extends BaseController
             $task->completed_at = date('Y-m-d H:i:s');
             $task->progress = 100;
             $recordStatus = 'completed';
-        } elseif (in_array($task->status, ['pending', 'waiting']) && $reportStatus === 'running') {
+        } elseif ($reportStatus === 'running' && in_array($task->status, ['pending', 'waiting'])) {
+            // 认领并发保护（乐观锁条件更新）：仅当任务仍为 pending/waiting 时才能原子认领为 running，
+            // 返回 0 表示已被其他客户端认领或状态已变更，防止重复认领同一任务
+            $claim = Db::name('tasks')
+                ->where('id', $id)
+                ->where('status', $task->status)
+                ->update([
+                    'status'     => 'running',
+                    'started_at' => date('Y-m-d H:i:s'),
+                ]);
+            if (!$claim) {
+                return $this->error('task_claim_conflict', '任务已被其他客户端认领或状态已变更');
+            }
             $task->status = 'running';
             $task->started_at = date('Y-m-d H:i:s');
         }

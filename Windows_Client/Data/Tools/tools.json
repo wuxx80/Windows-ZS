@@ -1,0 +1,79 @@
+{
+  "version": 1,
+  "categories": [
+    { "key": "disk", "name": "磁盘", "icon": "💽" },
+    { "key": "system", "name": "系统", "icon": "🖥️" },
+    { "key": "network", "name": "网络", "icon": "🌐" },
+    { "key": "hardware", "name": "硬件", "icon": "🔬" },
+    { "key": "backup", "name": "备份", "icon": "🗄️" },
+    { "key": "password", "name": "密码", "icon": "🔑" },
+    { "key": "recovery", "name": "恢复", "icon": "♻️" },
+    { "key": "boot", "name": "引导", "icon": "🚀" },
+    { "key": "pe", "name": "PE工具", "icon": "🧰" },
+    { "key": "comprehensive", "name": "综合", "icon": "🧩" }
+  ],
+  "tools": [
+    { "id": 1, "name": "DiskGenius", "category": "disk", "icon": "💽", "exe": "Tools\\Disk\\DiskGenius\\DiskGenius.exe", "args": "", "description": "分区/数据恢复（免费版）", "need_admin": false },
+    { "id": 2, "name": "傲梅分区助手", "category": "disk", "icon": "🗂️", "exe": "Tools\\Disk\\AomeiPartitionAssistant\\PartAssist.exe", "args": "", "description": "分区调整/扩容", "need_admin": false },
+    { "id": 3, "name": "CrystalDiskInfo", "category": "disk", "icon": "💾", "exe": "Tools\\Disk\\CrystalDiskInfo\\DiskInfo64.exe", "args": "", "description": "硬盘健康检测", "need_admin": false },
+    { "id": 4, "name": "HD Tune Pro", "category": "disk", "icon": "📊", "exe": "Tools\\Disk\\HDTune\\HDTunePro.exe", "args": "", "description": "坏道/性能测试", "need_admin": false },
+    { "id": 5, "name": "Victoria", "category": "disk", "icon": "🔍", "exe": "Tools\\Disk\\Victoria\\vcr544.exe", "args": "", "description": "坏道扫描修复", "need_admin": false },
+    { "id": 6, "name": "Diskpart GUI", "category": "disk", "icon": "🧮", "exe": "Tools\\Disk\\DiskpartGUI\\DiskpartGUI.exe", "args": "", "description": "命令行分区图形化", "need_admin": true },
+
+    { "id": 7, "name": "Dism++", "category": "system", "icon": "🛠️", "exe": "Tools\\System\\DismPlusPlus\\Dism++x64.exe", "args": "", "description": "系统镜像/更新/驱动工具", "need_admin": false },
+    { "id": 8, "name": "RegWorkshop", "category": "system", "icon": "📝", "exe": "Tools\\System\\RegWorkshop\\RegWorkshop.exe", "args": "", "description": "注册表编辑器增强", "need_admin": false },
+    { "id": 9, "name": "Autoruns", "category": "system", "icon": "🚦", "exe": "Tools\\System\\Autoruns\\Autoruns64.exe", "args": "", "description": "启动项管理", "need_admin": true },
+    { "id": 10, "name": "Process Explorer", "category": "system", "icon": "⚙️", "exe": "Tools\\System\\ProcessExplorer\\procexp64.exe", "args": "", "description": "进程/句柄管理", "need_admin": false },
+    { "id": 11, "name": "NTLite", "category": "system", "icon": "🧹", "exe": "Tools\\System\\NTLite\\NTLite.exe", "args": "", "description": "系统精简（PE 内轻量编辑）", "need_admin": false },
+    { "id": 12, "name": "系统激活工具", "category": "system", "icon": "🏆", "exe": "Tools\\System\\KMSActivate\\Activate.cmd", "args": "", "description": "激活/查看激活状态（免费 KMS 脚本）", "need_admin": true },
+
+    { "id": 13, "name": "IP 配置工具", "category": "network", "icon": "🌐", "exe": "Tools\\Network\\IPConfig\\IPConfig.exe", "args": "", "description": "快速设置 IP/DNS", "need_admin": true },
+    { "id": 14, "name": "网卡驱动工具", "category": "network", "icon": "🖧", "exe": "Tools\\Network\\NetDriver\\NetDriver.exe", "args": "", "description": "驱动备份/安装", "need_admin": true },
+    { "id": 15, "name": "局域网共享修复", "category": "network", "icon": "🔗", "exe": "Tools\\Network\\ShareFix\\ShareFix.cmd", "args": "", "description": "一键修复共享", "need_admin": true },
+    { "id": 16, "name": "网络测速", "category": "network", "icon": "📶", "exe": "Tools\\Network\\SpeedTest\\SpeedTest.exe", "args": "", "description": "速度/延迟测试", "need_admin": false },
+    { "id": 17, "name": "AnyDesk", "category": "network", "icon": "🖥️", "exe": "Tools\\Network\\AnyDesk\\AnyDesk.exe", "args": "", "description": "远程协助", "need_admin": false },
+    { "id": 18, "name": "路由追踪", "category": "network", "icon": "🧭", "exe": "Tools\\Network\\TraceRoute\\TraceRoute.exe", "args": "", "description": "tracert 图形化", "need_admin": false },
+
+    { "id": 19, "name": "AIDA64", "category": "hardware", "icon": "🔬", "exe": "Tools\\Hardware\\AIDA64\\aida64.exe", "args": "", "description": "硬件综合检测（用户自备版）", "need_admin": false },
+    { "id": 20, "name": "CPU-Z", "category": "hardware", "icon": "🧠", "exe": "Tools\\Hardware\\CPUZ\\cpuz_x64.exe", "args": "", "description": "CPU/主板/内存检测", "need_admin": false },
+    { "id": 21, "name": "GPU-Z", "category": "hardware", "icon": "🎮", "exe": "Tools\\Hardware\\GPUZ\\GPU-Z.exe", "args": "", "description": "显卡检测", "need_admin": false },
+    { "id": 22, "name": "HWiNFO", "category": "hardware", "icon": "🌡️", "exe": "Tools\\Hardware\\HWiNFO\\HWiNFO64.exe", "args": "", "description": "传感器/温度监控", "need_admin": false },
+    { "id": 23, "name": "MemTest86", "category": "hardware", "icon": "🧬", "exe": "Tools\\Hardware\\MemTest86\\MemTest86.exe", "args": "", "description": "内存测试", "need_admin": false },
+    { "id": 24, "name": "显示器测试", "category": "hardware", "icon": "🖥️", "exe": "Tools\\Hardware\\MonitorTest\\MonitorTest.exe", "args": "", "description": "坏点/色彩测试", "need_admin": false },
+
+    { "id": 25, "name": "傲梅备份", "category": "backup", "icon": "🗄️", "exe": "Tools\\Backup\\AomeiBackupper\\Backupper.exe", "args": "", "description": "系统/分区备份还原", "need_admin": false },
+    { "id": 26, "name": "Dism 备份", "category": "backup", "icon": "📀", "exe": "Tools\\Backup\\DismBackup\\DismBackup.cmd", "args": "", "description": "系统映像备份", "need_admin": true },
+    { "id": 27, "name": "Ghost 32", "category": "backup", "icon": "👻", "exe": "Tools\\Backup\\Ghost32\\Ghost32.exe", "args": "", "description": "磁盘/分区克隆", "need_admin": false },
+    { "id": 28, "name": "分区表备份", "category": "backup", "icon": "📋", "exe": "Tools\\Backup\\PartitionTableBackup\\PTBackup.exe", "args": "", "description": "备份/还原分区表", "need_admin": true },
+    { "id": 29, "name": "WIM 挂载工具", "category": "backup", "icon": "📦", "exe": "Tools\\Backup\\WIMTool\\WIMTool.exe", "args": "", "description": "挂载/编辑 WIM", "need_admin": true },
+
+    { "id": 30, "name": "NT 密码重置", "category": "password", "icon": "🔑", "exe": "Tools\\Password\\NTPasswd\\NTPasswd.exe", "args": "", "description": "重置本地密码", "need_admin": false },
+    { "id": 31, "name": "账号密码清除", "category": "password", "icon": "🗝️", "exe": "Tools\\Password\\SAMClear\\SAMClear.exe", "args": "", "description": "清空 SAM 密码", "need_admin": false },
+    { "id": 32, "name": "SAM 编辑器", "category": "password", "icon": "📇", "exe": "Tools\\Password\\SAMEdit\\SAMEdit.exe", "args": "", "description": "直接编辑 SAM", "need_admin": false },
+    { "id": 33, "name": "域密码重置", "category": "password", "icon": "🏢", "exe": "Tools\\Password\\DomainReset\\DomainReset.exe", "args": "", "description": "域环境密码重置", "need_admin": true },
+
+    { "id": 34, "name": "Recuva", "category": "recovery", "icon": "🗑️", "exe": "Tools\\Recovery\\Recuva\\Recuva.exe", "args": "", "description": "误删文件恢复", "need_admin": false },
+    { "id": 35, "name": "EasyRecovery", "category": "recovery", "icon": "💫", "exe": "Tools\\Recovery\\EasyRecovery\\EasyRecovery.exe", "args": "", "description": "数据恢复（免费版）", "need_admin": false },
+    { "id": 36, "name": "分区恢复", "category": "recovery", "icon": "🗺️", "exe": "Tools\\Recovery\\PartitionRecovery\\PartitionRecovery.exe", "args": "", "description": "丢失分区恢复", "need_admin": false },
+    { "id": 37, "name": "文件恢复", "category": "recovery", "icon": "🔃", "exe": "Tools\\Recovery\\FileRecovery\\FileRecovery.exe", "args": "", "description": "格式化后恢复", "need_admin": false },
+    { "id": 38, "name": "回收站恢复", "category": "recovery", "icon": "🛒", "exe": "Tools\\Recovery\\RecycleRestore\\RecycleRestore.exe", "args": "", "description": "回收站/深度扫描", "need_admin": false },
+
+    { "id": 39, "name": "引导修复工具", "category": "boot", "icon": "🚀", "exe": "Tools\\Boot\\BootFix\\BootFix.exe", "args": "", "description": "一键修复引导", "need_admin": true },
+    { "id": 40, "name": "bcdboot 修复", "category": "boot", "icon": "🛰️", "exe": "Tools\\Boot\\BCDBoot\\BCDBoot.cmd", "args": "", "description": "重建 BCD", "need_admin": true },
+    { "id": 41, "name": "MBR 修复", "category": "boot", "icon": "🧭", "exe": "Tools\\Boot\\MBRFix\\MBRFix.exe", "args": "", "description": "主引导记录修复", "need_admin": true },
+    { "id": 42, "name": "EFI 修复", "category": "boot", "icon": "🖥️", "exe": "Tools\\Boot\\EFIFix\\EFIFix.exe", "args": "", "description": "EFI 引导修复", "need_admin": true },
+    { "id": 43, "name": "系统安装修复", "category": "boot", "icon": "🔧", "exe": "Tools\\Boot\\SystemRepair\\SystemRepair.exe", "args": "", "description": "系统损坏修复", "need_admin": true },
+
+    { "id": 44, "name": "CMD 命令行", "category": "pe", "icon": "⌨️", "exe": "Tools\\PE\\CMD\\cmd.exe", "args": "", "description": "系统命令行", "need_admin": false },
+    { "id": 45, "name": "注册表编辑器", "category": "pe", "icon": "📝", "exe": "Tools\\PE\\RegEdit\\regedit.exe", "args": "", "description": "PE 内注册表", "need_admin": false },
+    { "id": 46, "name": "PE 截图", "category": "pe", "icon": "📸", "exe": "Tools\\PE\\Screenshot\\Screenshot.exe", "args": "", "description": "屏幕截图", "need_admin": false },
+    { "id": 47, "name": "虚拟键盘", "category": "pe", "icon": "⌨️", "exe": "Tools\\PE\\OSK\\osk.exe", "args": "", "description": "无键盘操作", "need_admin": false },
+    { "id": 48, "name": "资源管理器增强", "category": "pe", "icon": "📁", "exe": "Tools\\PE\\ExplorerPlus\\ExplorerPlus.exe", "args": "", "description": "文件管理增强", "need_admin": false },
+
+    { "id": 49, "name": "Everything", "category": "comprehensive", "icon": "🔎", "exe": "Tools\\Comprehensive\\Everything\\Everything.exe", "args": "", "description": "文件秒搜", "need_admin": false },
+    { "id": 50, "name": "驱动备份还原", "category": "comprehensive", "icon": "🛻", "exe": "Tools\\Comprehensive\\DriverBackup\\DriverBackup.exe", "args": "", "description": "驱动导出/还原", "need_admin": true },
+    { "id": 51, "name": "文本工具", "category": "comprehensive", "icon": "📄", "exe": "Tools\\Comprehensive\\TextTool\\TextTool.exe", "args": "", "description": "文本处理/编码转换", "need_admin": false },
+    { "id": 52, "name": "截图工具", "category": "comprehensive", "icon": "✂️", "exe": "Tools\\Comprehensive\\SnippingTool\\SnippingTool.exe", "args": "", "description": "截图/标注", "need_admin": false },
+    { "id": 53, "name": "计算器", "category": "comprehensive", "icon": "🧮", "exe": "Tools\\Comprehensive\\Calculator\\calc.exe", "args": "", "description": "科学计算", "need_admin": false }
+  ]
+}

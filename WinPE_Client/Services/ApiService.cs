@@ -1,8 +1,10 @@
 using System.Collections.Generic;
+using System.IO;
 using System.Net.Http;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Threading;
 using WinPE_Client.Models;
 
 namespace WinPE_Client.Services
@@ -180,6 +182,12 @@ namespace WinPE_Client.Services
             return await GetPaginatedAsync<object>("/api/v1/software", page, limit);
         }
 
+        /// <summary>获取软件列表（工具大全 在线同步，强类型）</summary>
+        public async Task<ApiResponse<PaginatedData<SoftwareInfo>>> GetSoftwareAsync(int page = 1, int limit = 200)
+        {
+            return await GetPaginatedAsync<SoftwareInfo>("/api/v1/software", page, limit);
+        }
+
         /// <summary>获取无人值守模板列表（扩展配置-无人值守）</summary>
         public async Task<ApiResponse<PaginatedData<object>>> GetUnattendTemplatesAsync(int page = 1, int limit = 200)
         {
@@ -219,7 +227,15 @@ namespace WinPE_Client.Services
         public async Task<ApiResponse<object>> CancelTaskAsync(int taskId)
         {
             return await PostAsync<object>("/api/v1/tasks/" + taskId + "/cancel");
-        }        /// <summary>上报任务进度（支持状态闭环：running/completed/failed）</summary>
+        }
+
+        /// <summary>重试任务（r9 闭环：失败/取消任务重新进入 waiting 队列，复用原任务订单）</summary>
+        public async Task<ApiResponse<TaskInfo>> RetryTaskAsync(int taskId)
+        {
+            return await PostAsync<TaskInfo>("/api/v1/tasks/" + taskId + "/retry");
+        }
+
+        /// <summary>上报任务进度（支持状态闭环：running/completed/failed）</summary>
         public async Task<ApiResponse<object>> ReportProgressAsync(
             int taskId, int progress, string? message = null, string? stepName = null, string? status = null)
         {
@@ -255,6 +271,53 @@ namespace WinPE_Client.Services
         public async Task<ApiResponse<object>> GetSoftwareTemplateAsync(int templateId)
         {
             return await GetAsync<object>("/api/v1/softwareTemplates/" + templateId);
+        }
+
+        /// <summary>获取 PE 版本列表（U盘制作 步骤② 服务器来源）</summary>
+        public async Task<ApiResponse<List<PeVersionInfo>>> GetPeVersionsAsync()
+        {
+            return await GetAsync<List<PeVersionInfo>>("/api/v1/peVersions/clientList");
+        }
+
+        /// <summary>下载文件到本地（带进度；用于 PE/软件 下载）</summary>
+        public async Task<(bool Ok, string Path, string Error)> DownloadFileAsync(
+            string url, string savePath, IProgress<int>? progress = null, CancellationToken ct = default)
+        {
+            try
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(savePath)!);
+                using var client = new HttpClient { Timeout = TimeSpan.FromMinutes(60) };
+                foreach (var h in _httpClient.DefaultRequestHeaders)
+                    client.DefaultRequestHeaders.TryAddWithoutValidation(h.Key, h.Value);
+                using var response = await client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, ct);
+                if (!response.IsSuccessStatusCode)
+                    return (false, "", "下载失败 HTTP " + (int)response.StatusCode);
+                var total = response.Content.Headers.ContentLength ?? 0;
+                var tmp = savePath + ".part";
+                await using (var fs = new FileStream(tmp, FileMode.Create, FileAccess.Write, FileShare.None))
+                await using (var stream = await response.Content.ReadAsStreamAsync(ct))
+                {
+                    var buffer = new byte[1024 * 256];
+                    long written = 0;
+                    int read;
+                    while ((read = await stream.ReadAsync(buffer, ct)) > 0)
+                    {
+                        await fs.WriteAsync(buffer.AsMemory(0, read), ct);
+                        written += read;
+                        progress?.Report(total > 0 ? (int)(written * 100 / total) : 0);
+                    }
+                }
+                File.Move(tmp, savePath, true);
+                return (true, savePath, "");
+            }
+            catch (OperationCanceledException)
+            {
+                return (false, "", "已取消下载");
+            }
+            catch (Exception ex)
+            {
+                return (false, "", "下载失败: " + ex.Message);
+            }
         }
     }
 }

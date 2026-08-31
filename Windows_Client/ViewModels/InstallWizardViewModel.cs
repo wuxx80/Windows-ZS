@@ -437,13 +437,40 @@ namespace Windows_Client.ViewModels
 
         private async Task CheckAuth(EnvCheckItem item)
         {
-            var reg = await _api.RegisterClientAsync(_device.GetHostname(), _device.GetMacAddress(), _device.GetOsVersion(), "winpe", string.IsNullOrEmpty(_clientId) ? null : _clientId);
+            var reg = await _api.RegisterClientAsync(_device.GetHostname(), _device.GetMacAddress(), _device.GetOsVersion(), "windows", string.IsNullOrEmpty(_clientId) ? null : _clientId);
             if (reg.IsSuccess && reg.Data != null)
             {
                 _clientId = reg.Data.ClientId; _serverClientId = reg.Data.Id;
                 item.Status = "success"; item.Detail = "已认证 " + _clientId;
             }
             else { item.Status = "fail"; item.Detail = reg.Message; }
+        }
+
+        /// <summary>
+        /// 保证 Windows 端已完成客户端注册（r2 闭环）。
+        /// 即使环境检测被「强制继续」跳过注册失败项，下单前也会再次尝试注册，
+        /// 确保 waiting 任务始终携带 client_id，避免服务端「等待执行任务必须关联已注册客户端」拒绝。
+        /// </summary>
+        private async Task<bool> EnsureRegistered()
+        {
+            if (_serverClientId > 0 && !string.IsNullOrEmpty(_clientId)) return true;
+            try
+            {
+                var reg = await _api.RegisterClientAsync(_device.GetHostname(), _device.GetMacAddress(), _device.GetOsVersion(), "windows", string.IsNullOrEmpty(_clientId) ? null : _clientId);
+                if (reg.IsSuccess && reg.Data != null)
+                {
+                    _clientId = reg.Data.ClientId; _serverClientId = reg.Data.Id;
+                    AddLog("客户端注册成功：" + _clientId);
+                    return true;
+                }
+                FailAt("客户端注册", reg.Message);
+                return false;
+            }
+            catch (Exception ex)
+            {
+                FailAt("客户端注册", ex.Message);
+                return false;
+            }
         }
 
         private void CheckPeEnv(EnvCheckItem item)
@@ -927,7 +954,7 @@ namespace Windows_Client.ViewModels
         /// 分区/部署/驱动/引导/无人值守/首次登录脚本等实际装机步骤全部交由 WinPE 客户端执行，
         /// 避免在宿主机执行破坏性磁盘操作。完成页引导用户重启进入 WinPE 自动续装。
         /// </summary>
-        private async Task StartExecution()
+        private async Task StartExecution(bool reuseTask = false)
         {
             if (SelectedImage == null || SelectedDisk == null) return;
             BuildSummary();
@@ -936,32 +963,52 @@ namespace Windows_Client.ViewModels
             IsFinished = false;
             IsExecuting = true;
             _isPaused = false; IsPausedFlag = false;
-            _taskId = 0;
+            if (!reuseTask) _taskId = 0;
             ProgressValue = 0;
             _startTime = DateTime.Now;
             Logs.Clear();
             foreach (var s in ExecSteps) { s.Status = "waiting"; s.Detail = ""; s.Progress = 0; }
-            AddLog("开始创建装机任务（实际装机将在 WinPE 中自动执行）");
+            AddLog(reuseTask ? "开始重试装机任务（实际装机将在 WinPE 中自动执行）" : "开始创建装机任务（实际装机将在 WinPE 中自动执行）");
 
             try
             {
-                SetExec(0, "running", "正在创建任务...");
-                var taskResult = await _api.CreateTaskAsync(
-                    imageId: SelectedImage.Id,
-                    clientId: _serverClientId > 0 ? _serverClientId : (int?)null,
-                    targetDiskIndex: SelectedDisk.Index,
-                    targetPartition: "C:",
-                    partitionScheme: PartitionScheme == 0 ? "auto" : "keep",
-                    status: "waiting",
-                    optionsJson: BuildOptionsJson());
-                if (!taskResult.IsSuccess || taskResult.Data == null)
+                // r2 闭环：下单前确保已注册客户端，waiting 任务必须携带 client_id
+                if (!await EnsureRegistered()) return;
+
+                if (reuseTask && _taskId > 0)
                 {
-                    FailAt("创建任务", taskResult.Message);
-                    return;
+                    // r9 闭环：重试复用原任务订单，服务端将其重置为 waiting 供 PE 重新认领
+                    SetExec(0, "running", "正在重试任务...");
+                    var retryResult = await _api.RetryTaskAsync(_taskId);
+                    if (!retryResult.IsSuccess || retryResult.Data == null)
+                    {
+                        FailAt("重试任务", retryResult.Message);
+                        return;
+                    }
+                    _taskId = retryResult.Data.Id;
+                    SetExec(0, "completed", "任务编号 " + retryResult.Data.TaskNo);
+                    AddLog("任务重试：" + retryResult.Data.TaskNo + "（状态：等待 WinPE 执行）");
                 }
-                _taskId = taskResult.Data.Id;
-                SetExec(0, "completed", "任务编号 " + taskResult.Data.TaskNo);
-                AddLog("任务已创建：" + taskResult.Data.TaskNo + "（状态：等待 WinPE 执行）");
+                else
+                {
+                    SetExec(0, "running", "正在创建任务...");
+                    var taskResult = await _api.CreateTaskAsync(
+                        imageId: SelectedImage.Id,
+                        clientId: _serverClientId > 0 ? _serverClientId : (int?)null,
+                        targetDiskIndex: SelectedDisk.Index,
+                        targetPartition: "C:",
+                        partitionScheme: PartitionScheme == 0 ? "auto" : "keep",
+                        status: "waiting",
+                        optionsJson: BuildOptionsJson());
+                    if (!taskResult.IsSuccess || taskResult.Data == null)
+                    {
+                        FailAt("创建任务", taskResult.Message);
+                        return;
+                    }
+                    _taskId = taskResult.Data.Id;
+                    SetExec(0, "completed", "任务编号 " + taskResult.Data.TaskNo);
+                    AddLog("任务已创建：" + taskResult.Data.TaskNo + "（状态：等待 WinPE 执行）");
+                }
                 // 关键闭环：Windows 端只下单，进度上报 waiting，绝不上报 completed
                 await ReportProgress(5, "任务已创建，等待 WinPE 执行", "创建任务", "waiting");
                 ProgressValue = 5;
@@ -1015,6 +1062,7 @@ namespace Windows_Client.ViewModels
         /// </summary>
         private string BuildOptionsJson()
         {
+            if (SelectedDisk == null) return "{}";
             string CleanValue(string? v)
                 => string.IsNullOrEmpty(v) || v == "none" ? "" : v;
 
@@ -1029,6 +1077,10 @@ namespace Windows_Client.ViewModels
                 optimize = Options.First(o => o.Key == "optimize").IsOn,
                 backup_data = Options.First(o => o.Key == "backup_data").IsOn,
                 image_index = 1,
+                // r8 磁盘跨环境兜底：PE 环境磁盘序号可能与宿主机不一致，记录物理特征供 PE 端模糊匹配
+                disk_index = SelectedDisk.Index,
+                disk_size = SelectedDisk.Size,
+                disk_model = SelectedDisk.Model,
                 unattend_template_id = CleanValue(SelectedUnattendTemplate?.Value) is { Length: > 0 } ut ? ut : null,
                 software_template_id = CleanValue(SelectedSoftwareTemplate?.Value) is { Length: > 0 } st ? st : null,
                 driver_package = SelectedDriverPackage?.Value ?? "auto",
@@ -1079,7 +1131,8 @@ namespace Windows_Client.ViewModels
 
         private async Task RetryExecution()
         {
-            await StartExecution();
+            // r9 闭环：已有任务订单时复用原任务重试（服务端重置为 waiting），不重复创建新任务
+            await StartExecution(_taskId > 0);
         }
 
         private void FailAt(string step, string reason)
@@ -1134,9 +1187,29 @@ namespace Windows_Client.ViewModels
 
         private void RestartNow()
         {
-            // Windows 桌面端不执行 PE 重启，直接关闭窗口（实际装机在 WinPE 中执行）
+            // r5 闭环：Windows 桌面端「立即重启」真实重启系统，重启后需手动进入 PE 完成装机
             _rebootTimer.Stop();
-            RequestClose?.Invoke();
+            RebootText = "正在重启...";
+            AddLog("正在重启系统...");
+            AddLog("提示：重启后请按启动热键（如 F12）进入 PE 环境，ZS 装机助手将自动继续装机");
+            var confirm = MessageBox.Show(
+                "系统即将重启以进入装机流程。\n\n请先保存所有工作！\n重启后请按启动热键（如 F12 / F11 / Esc）选择进入 WinPE 环境，装机助手将自动继续完成装机。\n\n是否立即重启？",
+                "确认重启", MessageBoxButton.YesNo, MessageBoxImage.Question);
+            if (confirm != MessageBoxResult.Yes) { RebootText = "已取消重启，可稍后手动重启"; return; }
+            try
+            {
+                using var p = new System.Diagnostics.Process();
+                p.StartInfo.FileName = "shutdown.exe";
+                p.StartInfo.Arguments = "/r /t 5 /c \"ZS 装机助手：任务已创建，重启后进入 PE 自动装机\"";
+                p.StartInfo.UseShellExecute = false;
+                p.StartInfo.CreateNoWindow = true;
+                p.Start();
+            }
+            catch (Exception ex)
+            {
+                AddLog("自动重启失败：" + ex.Message);
+                RequestClose?.Invoke();
+            }
         }
         // 兼容旧引用
         private string _driverPath = "";

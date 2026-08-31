@@ -290,5 +290,111 @@ foreach ($clients as $cl) {
 $allPass = ok("客户端列表含在线判定", $hasOnline, "字段online=" . ($hasOnline ? "存在" : "缺失")) && $allPass;
 
 
+// ============ 一键安装闭环修复回归测试（r2/r3/r4/r8/r9） ============
+
+// 25. r2 后端闭环：waiting 任务必须关联已注册客户端（否则 PE 端无法按 client_id 拉取，下单后无人认领断链）
+$r = req("POST", "/api/v1/tasks", [
+    "image_id" => $imageId,
+    "target_disk_index" => 0, "target_partition" => "C:", "partition_scheme" => "auto",
+    "status" => "waiting"
+], $token);
+$allPass = ok("waiting无client拦截", $r["body"]["code"] !== 0, "code=" . ($r["body"]["code"] ?? "") . " msg=" . ($r["body"]["message"] ?? "")) && $allPass;
+
+// 26. r4 身份校验：A 客户端不能操控 B 客户端任务（client_id 不匹配 → auth_client_mismatch）
+$r = req("POST", "/api/v1/tasks", [
+    "image_id" => $imageId,
+    "client_id" => $serverClientId,
+    "target_disk_index" => 0, "target_partition" => "C:", "partition_scheme" => "auto",
+    "status" => "waiting"
+], $token);
+$ownTaskId = $r["body"]["data"]["id"] ?? 0;
+$r = req("POST", "/api/v1/tasks/" . $ownTaskId . "/progress", [
+    "progress" => 5, "message" => "越权上报", "step_name" => "认领", "status" => "running",
+    "client_id" => $winServerId
+], $token);
+$allPass = ok("任务身份校验拦截", $r["body"]["code"] !== 0 && strpos($r["body"]["message"] ?? "", "任务不属于当前客户端") !== false,
+    "code=" . ($r["body"]["code"] ?? "") . " msg=" . ($r["body"]["message"] ?? "")) && $allPass;
+
+// 26.5 r4 认领闭环：正确身份认领 waiting → running，并写入 started_at
+$r = req("POST", "/api/v1/tasks/" . $ownTaskId . "/progress", [
+    "progress" => 5, "message" => "正确认领", "step_name" => "认领", "status" => "running",
+    "client_id" => $serverClientId
+], $token);
+$r2 = req("GET", "/api/v1/tasks/" . $ownTaskId, null, $token);
+$ownDetail = $r2["body"]["data"] ?? [];
+$allPass = ok("正确身份认领", $r["body"]["code"] === 0 && ($ownDetail["status"] ?? "") === "running" && !empty($ownDetail["started_at"]),
+    "status=" . ($ownDetail["status"] ?? "") . " started_at=" . ($ownDetail["started_at"] ?? "")) && $allPass;
+
+// 27. r3/r9 失败重试复用原任务：failed → retry → 同一 id 变为 waiting（供 PE 重新认领，不新建任务）
+$r = req("POST", "/api/v1/tasks/" . $ownTaskId . "/progress", [
+    "progress" => 20, "message" => "模拟安装失败", "step_name" => "部署", "status" => "failed",
+    "client_id" => $serverClientId
+], $token);
+$failOk = ($r["body"]["data"]["status"] ?? "") === "failed";
+$r = req("POST", "/api/v1/tasks/" . $ownTaskId . "/retry", null, $token);
+$retryData = $r["body"]["data"] ?? [];
+$retryOk = $r["body"]["code"] === 0 && ($retryData["id"] ?? 0) == $ownTaskId && ($retryData["status"] ?? "") === "waiting" && ($retryData["progress"] ?? -1) === 0;
+$allPass = ok("失败重试复用原任务", $failOk && $retryOk,
+    "fail=" . ($failOk ? "failed" : "?") . " retryId=" . ($retryData["id"] ?? 0) . " status=" . ($retryData["status"] ?? "") . " progress=" . ($retryData["progress"] ?? "")) && $allPass;
+
+// 27.5 r9 取消重试复用原任务：cancelled → retry → 同一 id 变为 waiting
+$r = req("POST", "/api/v1/tasks/" . $ownTaskId . "/cancel", null, $token);
+$r = req("POST", "/api/v1/tasks/" . $ownTaskId . "/retry", null, $token);
+$retryData = $r["body"]["data"] ?? [];
+$allPass = ok("取消重试复用原任务", $r["body"]["code"] === 0 && ($retryData["id"] ?? 0) == $ownTaskId && ($retryData["status"] ?? "") === "waiting",
+    "id=" . ($retryData["id"] ?? 0) . " status=" . ($retryData["status"] ?? "")) && $allPass;
+
+// 28. r8 磁盘跨环境兜底：options 持久化 disk_index/disk_size/disk_model（PE 端模糊匹配依据）
+$r = req("POST", "/api/v1/tasks", [
+    "image_id" => $imageId,
+    "client_id" => $serverClientId,
+    "target_disk_index" => 3, "target_partition" => "C:", "partition_scheme" => "auto",
+    "status" => "waiting",
+    "options" => json_encode([
+        "auto_partition" => true, "disk_index" => 3, "disk_size" => 476940, "disk_model" => "Samsung SSD 870 EVO 500GB"
+    ])
+], $token);
+$r8TaskId = $r["body"]["data"]["id"] ?? 0;
+$r = req("GET", "/api/v1/tasks/" . $r8TaskId, null, $token);
+$r8opts = json_decode($r["body"]["data"]["options"] ?? "{}", true);
+$r8ok = ($r8opts["disk_index"] ?? null) === 3 && ($r8opts["disk_size"] ?? null) == 476940 && ($r8opts["disk_model"] ?? "") === "Samsung SSD 870 EVO 500GB";
+$allPass = ok("options持久化磁盘特征", $r8ok, "disk_size=" . ($r8opts["disk_size"] ?? "-") . " model=" . ($r8opts["disk_model"] ?? "-")) && $allPass;
+
+// 29. r4 认领并发保护：同一 waiting 任务被双客户端同时认领，仅一次转为 running，另一侧触发冲突
+$r = req("POST", "/api/v1/tasks", [
+    "image_id" => $imageId,
+    "client_id" => $serverClientId,
+    "target_disk_index" => 0, "target_partition" => "C:", "partition_scheme" => "auto",
+    "status" => "waiting"
+], $token);
+$raceTaskId = $r["body"]["data"]["id"] ?? 0;
+$mkRaceCh = function ($tid) use ($baseUrl, $token, $serverClientId) {
+    $ch = curl_init();
+    curl_setopt($ch, CURLOPT_URL, $baseUrl . "/api/v1/tasks/" . $tid . "/progress");
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_POST, true);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode(["progress" => 10, "message" => "并发认领", "step_name" => "认领", "status" => "running", "client_id" => $serverClientId]));
+    curl_setopt($ch, CURLOPT_HTTPHEADER, ["Content-Type: application/json", "Authorization: Bearer " . $token]);
+    return $ch;
+};
+$mh = curl_multi_init();
+$raceCh1 = $mkRaceCh($raceTaskId);
+$raceCh2 = $mkRaceCh($raceTaskId);
+curl_multi_add_handle($mh, $raceCh1);
+curl_multi_add_handle($mh, $raceCh2);
+do { $me = curl_multi_exec($mh, $active); } while ($active && $me == CURLM_OK);
+$raceB1 = json_decode(curl_multi_getcontent($raceCh1), true);
+$raceB2 = json_decode(curl_multi_getcontent($raceCh2), true);
+curl_multi_remove_handle($mh, $raceCh1);
+curl_multi_remove_handle($mh, $raceCh2);
+curl_multi_close($mh);
+$raceCodes = [$raceB1["code"] ?? -1, $raceB2["code"] ?? -1];
+$conflictSeen = in_array("task_claim_conflict", $raceCodes);
+$r = req("GET", "/api/v1/tasks/" . $raceTaskId, null, $token);
+$raceFinal = $r["body"]["data"] ?? [];
+$raceOk = ($raceFinal["status"] ?? "") === "running";
+$allPass = ok("认领并发保护", $raceOk, "codes=[" . implode(",", $raceCodes) . "] 冲突=" . ($conflictSeen ? "触发" : "未触发(被读侧已转running)") . " 最终status=" . ($raceFinal["status"] ?? "")) && $allPass;
+
+
 echo "\n=== 结果: " . ($allPass ? "全部通过" : "存在失败") . " ===\n";
 exit($allPass ? 0 : 1);

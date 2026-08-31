@@ -51,12 +51,14 @@ ZS 装机助手是一套完整的 Windows 系统安装与维护解决方案，�
 | 后端骨架（ThinkPHP 6 + 35张表 + 30个控制器） | ✅ 已完成 |
 | 管理后台前端（29个管理页面，Layui风格） | ✅ 已完成 |
 | 核心业务逻辑（所有控制器+服务层，浏览器全量测试验证） | ✅ 已完成 |
-| WinPE 客户端（.NET 8 WPF，六步向导） | ✅ 已完成 |
-| Windows 客户端（.NET 8 WPF，六步向导） | ✅ 已完成 |
+| WinPE 客户端（.NET 8 WPF，六步向导 + U盘制作 + 工具大全） | ✅ 已完成 |
+| Windows 客户端（.NET 8 WPF，六步向导 + U盘制作 + 工具大全） | ✅ 已完成 |
 | 客户端集成（注册/建任务/进度上报） | ✅ 已完成 |
 | API 全量联调测试（44/44 接口通过） | ✅ 已完成 |
-| 客户端端到端回归测试（29 项 PASS） | ✅ 已完成 |
+| 客户端端到端回归测试（36 项 PASS） | ✅ 已完成 |
 | 全功能流程闭环整理（首页 + 一键装机 + 无人值守全链路，见 设计文档/全功能流程闭环清单.md） | ✅ 已完成 |
+| U 盘制作与工具大全（B5 联动：写入内置工具，PE 内离线可用） | ✅ 已完成 |
+| 一键安装闭环修复（9 项：真实下载/校验/备份、认领并发保护、身份校验、任务重试复用等） | ✅ 已完成 |
 | 性能优化（N+1 查询消除） | ✅ 已完成 |
 | 安全审查（认证/CORS/上传/日志） | ✅ 已完成 |
 | 部署文档与打包发布（publish.ps1 / deploy_server.ps1） | ✅ 已完成 |
@@ -90,7 +92,10 @@ Windows-ZS/
 │   ├── 详细设计文档.md
 │   ├── Web后台详细设计.md
 │   ├── 一键装机交互设计.md
-│   └── 全功能流程闭环清单.md          ← 全流程闭环梳理（入口→执行→退出→联动→状态）
+│   ├── 全功能流程闭环清单.md          ← 全流程闭环梳理（入口→执行→退出→联动→状态）
+│   └── U盘制作与工具大全详细设计.md     ← U盘四步向导 + 工具大全（53工具/10分类）+ B5 工具联动
+├── _b5_logic_test/                  ← B5 逻辑测试脚手架（IncludeTools 合并拷贝等 4 项）
+├── _b5_ui_harness/                  ← B5 UI 自动化测试脚手架（STA WPF 测试 4 项）
 ├── database/
 │   ├── install.sql                  ← 35张表建表SQL
 │   └── migration_closure.sql        ← 闭环轮增量迁移（waiting 状态等）
@@ -124,18 +129,24 @@ Windows-ZS/
 │   ├── App.xaml
 │   ├── MainWindow.xaml
 │   ├── InstallWizardWindow.xaml       ← 一键装机六步向导窗口
+│   ├── UDiskWindow.xaml               ← U 盘制作四步向导窗口
+│   ├── ToolsWindow.xaml               ← 工具大全窗口
 │   ├── Models/                       （含 WizardModels.cs 向导模型）
-│   ├── Services/
-│   ├── ViewModels/                   （含 InstallWizardViewModel.cs 六步向导）
+│   ├── Services/                     （含 UDiskService/ToolService）
+│   ├── ViewModels/                   （含 InstallWizardViewModel/UDiskViewModel/ToolsViewModel）
+│   ├── Data/Tools/tools.json          ← 工具清单（53工具/10分类）
 │   └── Helpers/
 ├── Windows_Client/                  ← Windows 客户端 (.NET 8 WPF)
 │   ├── Windows_Client.csproj
 │   ├── App.xaml
 │   ├── MainWindow.xaml
 │   ├── InstallWizardWindow.xaml       ← 一键装机六步向导窗口（安全版）
+│   ├── UDiskWindow.xaml               ← U 盘制作四步向导窗口
+│   ├── ToolsWindow.xaml               ← 工具大全窗口
 │   ├── Models/
-│   ├── Services/                     （含 Device/DiskPart/ImageDeploy 服务）
-│   ├── ViewModels/                   （含 InstallWizardViewModel.cs 六步向导）
+│   ├── Services/                     （含 Device/DiskPart/ImageDeploy/UDiskService/ToolService）
+│   ├── ViewModels/                   （含 InstallWizardViewModel/UDiskViewModel/ToolsViewModel）
+│   ├── Data/Tools/tools.json          ← 工具清单（53工具/10分类）
 │   └── Helpers/
 └── publish/                         ← 客户端发布产物（git 忽略）
     ├── WinPE_Client/                ← 自包含发布（~146MB）

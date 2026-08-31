@@ -79,8 +79,8 @@
                 <StackPanel Grid.Row="1" Margin="0,15,0,0">
                     <Button Content="  首页" Style="{StaticResource NavButton}" Command="{Binding NavigateCommand}" CommandParameter="Home"/>
                     <Button Content="  一键装机" Style="{StaticResource NavButton}" Command="{Binding OpenInstallWizardCommand}"/>
-                    <Button Content="  U盘制作" Style="{StaticResource NavButton}" Command="{Binding NavigateCommand}" CommandParameter="Usb"/>
-                    <Button Content="  工具大全" Style="{StaticResource NavButton}" Command="{Binding NavigateCommand}" CommandParameter="Tools"/>
+                    <Button Content="  U盘制作" Style="{StaticResource NavButton}" Command="{Binding OpenUDiskCommand}"/>
+                    <Button Content="  工具大全" Style="{StaticResource NavButton}" Command="{Binding OpenToolsCommand}"/>
                     <Button Content="  绿色软件" Style="{StaticResource NavButton}" Command="{Binding NavigateCommand}" CommandParameter="Software"/>
                     <Button Content="  设置" Style="{StaticResource NavButton}" Command="{Binding NavigateCommand}" CommandParameter="Settings"/>
                 </StackPanel>
@@ -195,48 +195,6 @@
                                     Command="{Binding RefreshMyTasksCommand}"/>
                         </Grid>
                     </Border>
-                </StackPanel>
-
-                <!-- USB View -->
-                <StackPanel Visibility="{Binding CurrentView, Converter={StaticResource ViewConverter}, ConverterParameter=Usb}">
-                    <TextBlock Text="U盘制作" FontSize="20" FontWeight="SemiBold" Margin="0,0,0,15"/>
-                    <Border Background="White" CornerRadius="8" Padding="20">
-                        <StackPanel>
-                            <TextBlock Text="制作 Windows 启动盘" FontSize="14" Foreground="#666" Margin="0,0,0,15"/>
-                            <TextBlock Text="支持 PE 写入、格式化还原、多PE 启动" FontSize="12" Foreground="#888"/>
-                        </StackPanel>
-                    </Border>
-                </StackPanel>
-
-                <!-- Tools View -->
-                <StackPanel Visibility="{Binding CurrentView, Converter={StaticResource ViewConverter}, ConverterParameter=Tools}">
-                    <TextBlock Text="工具大全" FontSize="20" FontWeight="SemiBold" Margin="0,0,0,15"/>
-                    <WrapPanel>
-                        <Border Style="{StaticResource EntranceCard}" Width="180" Height="120" Margin="0,0,15,15">
-                            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                                <TextBlock Text="&#x1F4BE;" FontSize="28" HorizontalAlignment="Center"/>
-                                <TextBlock Text="磁盘管理" FontSize="13" HorizontalAlignment="Center" Margin="0,5,0,0"/>
-                            </StackPanel>
-                        </Border>
-                        <Border Style="{StaticResource EntranceCard}" Width="180" Height="120" Margin="0,0,15,15">
-                            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                                <TextBlock Text="&#x1F527;" FontSize="28" HorizontalAlignment="Center"/>
-                                <TextBlock Text="系统修复" FontSize="13" HorizontalAlignment="Center" Margin="0,5,0,0"/>
-                            </StackPanel>
-                        </Border>
-                        <Border Style="{StaticResource EntranceCard}" Width="180" Height="120" Margin="0,0,15,15">
-                            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                                <TextBlock Text="&#x1F511;" FontSize="28" HorizontalAlignment="Center"/>
-                                <TextBlock Text="密码重置" FontSize="13" HorizontalAlignment="Center" Margin="0,5,0,0"/>
-                            </StackPanel>
-                        </Border>
-                        <Border Style="{StaticResource EntranceCard}" Width="180" Height="120" Margin="0,0,15,15">
-                            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                                <TextBlock Text="&#x1F4CA;" FontSize="28" HorizontalAlignment="Center"/>
-                                <TextBlock Text="数据恢复" FontSize="13" HorizontalAlignment="Center" Margin="0,5,0,0"/>
-                            </StackPanel>
-                        </Border>
-                    </WrapPanel>
                 </StackPanel>
 
                 <!-- Software View -->

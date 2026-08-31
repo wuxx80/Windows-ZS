@@ -125,7 +125,7 @@ class ImageController extends BaseController
 
         $data = [];
         $fields = ["name", "description", "filename", "file_path", "format", "file_size",
-                    "sha256", "os_type", "os_edition", "os_version", "os_arch",
+                    "file_hash", "os_type", "os_edition", "os_version", "os_arch",
                     "os_language", "source_id", "source_url", "status", "is_public"];
         foreach ($fields as $field) {
             $val = input($field);
@@ -425,6 +425,33 @@ class ImageController extends BaseController
 
         try {
             FileService::download($info["path"], $info["filename"]);
+        } catch (\Exception $e) {
+            return $this->error("file_not_found", $e->getMessage());
+        }
+    }
+
+    /**
+     * 客户端接口：直接流式下载镜像文件（校验启用状态；支持断点续传）。
+     * 供 PE/Windows 客户端在装机场内拉取镜像，鉴权复用客户端 Token（AuthMiddleware）。
+     */
+    public function clientDownload($id)
+    {
+        $image = Image::find($id);
+        if (!$image) {
+            return $this->error("image_not_found", "镜像不存在");
+        }
+        if ((int) $image->status !== 1) {
+            return $this->error("disabled", "该镜像未启用");
+        }
+
+        $filePath = $image->file_path;
+        if (!$filePath || !file_exists($filePath)) {
+            return $this->error("file_not_found", "镜像文件不存在，请先在后台配置文件路径");
+        }
+
+        $fileName = $image->file_name ?: basename($filePath);
+        try {
+            FileService::download($filePath, $fileName);
         } catch (\Exception $e) {
             return $this->error("file_not_found", $e->getMessage());
         }

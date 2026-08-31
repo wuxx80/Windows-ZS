@@ -326,9 +326,11 @@ namespace WinPE_Client.ViewModels
             if (task.ImageId > 0)
                 SelectedImage = Images.FirstOrDefault(i => i.Id == task.ImageId);
 
-            // 预填目标磁盘（按服务端磁盘序号）
-            if (task.TargetDiskIndex >= 0)
-                SelectedDisk = Disks.FirstOrDefault(d => d.Index == task.TargetDiskIndex);
+            // 预填目标磁盘：优先按服务端磁盘序号精确匹配；
+            // r8 跨环境兜底：PE 环境磁盘序号可能与宿主机不一致，改按 options 中记录的 size/model 模糊匹配
+            SelectedDisk = MatchTargetDisk(task);
+            if (SelectedDisk == null)
+                StatusText = "已载入待执行任务，但未匹配到目标磁盘，请手动选择";
 
             // 预填分区方案
             PartitionScheme = task.PartitionScheme switch
@@ -352,6 +354,60 @@ namespace WinPE_Client.ViewModels
             CurrentStep = 4;
             BuildSummary();
             BuildConfirm();
+        }
+
+        /// <summary>
+        /// 续装目标磁盘匹配（r8 跨环境兜底）：
+        /// 1) 优先按服务端磁盘序号精确匹配；
+        /// 2) 序号未命中时，用 options 中记录的 disk_size/disk_model 物理特征模糊匹配
+        ///    （磁盘大小允许 ±5% 容差，优先同时命中 size+model，退而求其次仅匹配 size）。
+        /// </summary>
+        private DiskInfo? MatchTargetDisk(TaskInfo task)
+        {
+            if (Disks.Count == 0) return null;
+
+            // 1) 精确序号匹配
+            if (task.TargetDiskIndex >= 0)
+            {
+                var byIndex = Disks.FirstOrDefault(d => d.Index == task.TargetDiskIndex);
+                if (byIndex != null) return byIndex;
+            }
+
+            // 2) 物理特征模糊匹配
+            long expectSize = 0;
+            string expectModel = "";
+            if (!string.IsNullOrWhiteSpace(task.Options))
+            {
+                try
+                {
+                    using var doc = System.Text.Json.JsonDocument.Parse(task.Options);
+                    var root = doc.RootElement;
+                    if (root.TryGetProperty("disk_size", out var ds))
+                        long.TryParse(ds.ToString(), out expectSize);
+                    if (root.TryGetProperty("disk_model", out var dm) && dm.ValueKind == System.Text.Json.JsonValueKind.String)
+                        expectModel = dm.GetString() ?? "";
+                }
+                catch { /* options 解析失败不阻塞模糊匹配 */ }
+            }
+            if (expectSize <= 0 && string.IsNullOrEmpty(expectModel)) return null;
+
+            if (expectSize > 0)
+            {
+                long min = (long)(expectSize * 0.95);
+                long max = (long)(expectSize * 1.05);
+                var sizeMatches = Disks.Where(d => d.Size >= min && d.Size <= max).ToList();
+                if (!string.IsNullOrEmpty(expectModel))
+                {
+                    var both = sizeMatches.FirstOrDefault(d =>
+                        d.Model.Contains(expectModel, StringComparison.OrdinalIgnoreCase));
+                    if (both != null) return both;
+                }
+                return sizeMatches.FirstOrDefault();
+            }
+
+            return Disks.FirstOrDefault(d =>
+                !string.IsNullOrEmpty(d.Model) &&
+                d.Model.Contains(expectModel, StringComparison.OrdinalIgnoreCase));
         }
 
         /// <summary>按 options JSON 回填安装选项开关与扩展配置（续装预填）</summary>
@@ -1086,21 +1142,38 @@ namespace WinPE_Client.ViewModels
             IsFinished = false;
             IsExecuting = true;
             _isPaused = false; IsPausedFlag = false;
-            _taskId = 0;
             ProgressValue = 0;
             _startTime = DateTime.Now;
             Logs.Clear();
             foreach (var s in ExecSteps) { s.Status = "waiting"; s.Detail = ""; s.Progress = 0; }
-            AddLog("开始执行装机流程");
+            AddLog(_taskId > 0 ? "开始执行装机流程（复用任务 " + _taskId + "）" : "开始执行装机流程");
 
             try
             {
                 SetExec(0, "running", "正在创建任务...");
-                if (_isContinuation && _taskId > 0)
+                if (_taskId > 0)
                 {
-                    // 续装闭环：复用已有 waiting 任务，上报 running 触发服务端 waiting→running 认领
-                    AddLog("续装任务 " + _taskId + "，正在认领...");
-                    await ReportProgress(5, "续装开始，任务已认领", "创建任务", "running");
+                    // r9 闭环：复用已有任务订单（不重复创建新任务）
+                    if (!_isContinuation)
+                    {
+                        // 失败/取消后重试：服务端先将任务重置为 waiting，再认领执行
+                        AddLog("重试任务 " + _taskId + "，正在重置状态...");
+                        var rr = await _api.RetryTaskAsync(_taskId);
+                        if (!rr.IsSuccess || rr.Data == null)
+                        {
+                            FailAt("重试任务", rr.Message);
+                            return;
+                        }
+                        _taskId = rr.Data.Id;
+                        SetExec(0, "completed", "任务编号 " + rr.Data.TaskNo);
+                        AddLog("任务重试：" + rr.Data.TaskNo + "，等待 WinPE 执行");
+                    }
+                    else
+                    {
+                        // 续装闭环：复用已有 waiting 任务，上报 running 触发服务端 waiting→running 认领
+                        AddLog("续装任务 " + _taskId + "，正在认领...");
+                    }
+                    await ReportProgress(5, "任务已认领，开始执行", "创建任务", "running");
                     SetExec(0, "completed", "任务已认领（等待→执行中）");
                     AddLog("任务认领成功：等待→执行中");
                     ProgressValue = 5;
@@ -1126,34 +1199,63 @@ namespace WinPE_Client.ViewModels
                     ProgressValue = 5;
                 }
 
-                // 下载镜像（模拟缓存检测，设计文档 §8.1）
-                bool cached = File.Exists(Path.Combine(_localCacheDir, SelectedImage.FileName));
+                // 下载镜像（真实下载：服务端 clientDownload 流式接口，支持断点续传）
+                string cacheFile = Path.Combine(_localCacheDir, SelectedImage.FileName);
+                bool cached = File.Exists(cacheFile);
                 SetExec(1, "running", cached ? "已缓存，跳过下载" : "正在下载镜像...");
                 if (!cached)
                 {
-                    AddLog("下载镜像（未缓存）：" + SelectedImage.FileName);
-                    await WaitIfPausedOrCanceled();
-                    await Task.Delay(500);
+                    AddLog("下载镜像：" + SelectedImage.FileName);
+                    var dlProgress = new Progress<int>(p =>
+                    {
+                        int mapped = 5 + (int)(p * 0.15);
+                        ProgressValue = Math.Max(ProgressValue, mapped);
+                        SetExec(1, "running", "正在下载镜像... " + p + "%");
+                    });
+                    var dlUrl = ServerUrl + "/api/v1/images/" + SelectedImage.Id + "/clientDownload";
+                    var dl = await _api.DownloadFileAsync(dlUrl, cacheFile, dlProgress);
+                    if (!dl.Ok) { FailAt("下载镜像", dl.Error); return; }
+                    AddLog("镜像下载完成：" + cacheFile);
                 }
                 else AddLog("镜像已缓存，跳过下载");
                 SetExec(1, "completed", cached ? "已缓存" : "下载完成");
                 ProgressValue = 20;
 
-                // 校验镜像
+                // 校验镜像（真实 SHA256：与后端 file_hash 比对）
                 SetExec(2, "running", "校验 SHA256...");
                 await ReportProgress(25, "正在校验镜像", "校验镜像", "running");
-                await WaitIfPausedOrCanceled();
-                SetExec(2, "completed", "SHA256 匹配");
+                string expectedHash = SelectedImage.FileHash;
+                if (!string.IsNullOrEmpty(expectedHash) && expectedHash.Length >= 32)
+                {
+                    string actualHash = ComputeSha256(cacheFile);
+                    if (!string.Equals(actualHash, expectedHash, StringComparison.OrdinalIgnoreCase))
+                    {
+                        FailAt("校验镜像", "SHA256 校验失败，镜像文件可能已损坏");
+                        return;
+                    }
+                    SetExec(2, "completed", "SHA256 匹配");
+                    AddLog("SHA256 校验通过：" + actualHash.Substring(0, 12) + "...");
+                }
+                else
+                {
+                    SetExec(2, "completed", "服务端未提供哈希，跳过校验");
+                    AddLog("服务端未提供 file_hash，跳过 SHA256 校验");
+                }
                 ProgressValue = 30;
 
-                // 备份数据
+                // 备份数据（真实 robocopy：分区格式化前备份原系统盘用户数据目录）
                 bool backup = Options.First(o => o.Key == "backup_data").IsOn;
                 if (backup)
                 {
                     SetExec(3, "running", "正在备份数据...");
                     await ReportProgress(35, "正在备份数据", "备份数据", "running");
-                    await WaitIfPausedOrCanceled();
-                    SetExec(3, "completed", "备份完成");
+                    string backupResult = await BackupData(SelectedBackupLocation?.Value ?? "auto");
+                    if (backupResult == "failed")
+                    {
+                        FailAt("备份数据", "备份失败，已中止装机");
+                        return;
+                    }
+                    SetExec(3, "completed", backupResult == "none" ? "无用户数据可备份" : "备份完成");
                 }
                 else SetExec(3, "skipped", "未启用备份");
                 ProgressValue = 40;
@@ -1176,7 +1278,7 @@ namespace WinPE_Client.ViewModels
                 SetExec(5, "running", "正在部署镜像...");
                 AddLog("部署镜像：" + SelectedImage.Name);
                 await ReportProgress(60, "正在部署镜像", "部署镜像", "running");
-                var deployOk = await _deploy.DeployWimImage(SelectedImage.FilePath, 1, "C:", autoPart);
+                var deployOk = await _deploy.DeployWimImage(cacheFile, 1, "C:", autoPart);
                 if (!deployOk) { FailAt("部署镜像", "镜像部署失败，请检查镜像文件"); return; }
                 SetExec(5, "completed", "镜像应用完成");
                 ProgressValue = 80;
@@ -1380,6 +1482,75 @@ namespace WinPE_Client.ViewModels
             if (_taskId <= 0) return;
             try { await _api.ReportProgressAsync(_taskId, progress, message, stepName, status); }
             catch { }
+        }
+
+        /// <summary>计算文件 SHA256（校验镜像完整性）</summary>
+        private static string ComputeSha256(string filePath)
+        {
+            using var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+            using var sha = System.Security.Cryptography.SHA256.Create();
+            return Convert.ToHexString(sha.ComputeHash(fs));
+        }
+
+        /// <summary>
+        /// 备份数据（真实 robocopy）：分区格式化前备份原系统盘用户数据目录。
+        /// 返回 "ok" 备份完成 / "none" 无用户数据可备份 / "failed" 备份失败。
+        /// </summary>
+        private async Task<string> BackupData(string location)
+        {
+            try
+            {
+                if (location == "network")
+                {
+                    AddLog("网络备份位置尚未配置，跳过数据备份");
+                    return "none";
+                }
+                if (!Directory.Exists("C:\\Users")) return "none";
+
+                var userDirs = new[] { "C:\\Users\\Public", "C:\\Users\\Administrator", "C:\\Users\\Default" }
+                    .Where(Directory.Exists).ToArray();
+                if (userDirs.Length == 0) return "none";
+
+                string target = location == "auto" ? @"D:\ZS_Backup" : location;
+                Directory.CreateDirectory(target);
+
+                bool copied = false;
+                foreach (var dir in userDirs)
+                {
+                    AddLog("备份 " + dir + " → " + target);
+                    bool ok = await RunRobocopy(dir, Path.Combine(target, new DirectoryInfo(dir).Name));
+                    if (ok) copied = true;
+                }
+                return copied ? "ok" : "failed";
+            }
+            catch (Exception ex)
+            {
+                AddLog("备份失败：" + ex.Message);
+                return "failed";
+            }
+        }
+
+        /// <summary>robocopy 镜像备份（退出码 0-7 视为成功）</summary>
+        private static Task<bool> RunRobocopy(string src, string dst)
+        {
+            return Task.Run(() =>
+            {
+                try
+                {
+                    var psi = new System.Diagnostics.ProcessStartInfo
+                    {
+                        FileName = "robocopy.exe",
+                        Arguments = "\"" + src + "\" \"" + dst + "\" /E /R:1 /W:1 /NFL /NDL /NJH /NJS /NP",
+                        UseShellExecute = false,
+                        CreateNoWindow = true
+                    };
+                    using var p = System.Diagnostics.Process.Start(psi);
+                    if (p == null) return false;
+                    p.WaitForExit();
+                    return p.ExitCode < 8;
+                }
+                catch { return false; }
+            });
         }
 
         // ============ 完成页（设计文档 §9）============

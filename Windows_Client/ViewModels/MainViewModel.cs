@@ -28,6 +28,8 @@ namespace Windows_Client.ViewModels
 
             NavigateCommand = new RelayCommand<string>(Navigate);
             OpenInstallWizardCommand = new RelayCommand(OpenInstallWizard);
+            OpenUDiskCommand = new RelayCommand(OpenUDisk);
+            OpenToolsCommand = new RelayCommand(OpenTools);
             LoginCommand = new RelayCommand(async () => await Login(), () => !IsLoggedIn);
             LogoutCommand = new RelayCommand(async () => await Logout(), () => IsLoggedIn);
             RefreshSoftwareCommand = new RelayCommand(async () => await RefreshSoftware());
@@ -94,6 +96,8 @@ namespace Windows_Client.ViewModels
 
         public ICommand NavigateCommand { get; }
         public ICommand OpenInstallWizardCommand { get; }
+        public ICommand OpenUDiskCommand { get; }
+        public ICommand OpenToolsCommand { get; }
         public ICommand LoginCommand { get; }
         public ICommand LogoutCommand { get; }
         public ICommand RefreshSoftwareCommand { get; }
@@ -251,6 +255,26 @@ namespace Windows_Client.ViewModels
             win.Owner = Application.Current.MainWindow;
             win.ShowDialog();
             await LoadMyTasks();
+        }
+
+        /// <summary>打开 U盘制作四步向导子窗口（真实写盘，带安全护栏）</summary>
+        private void OpenUDisk()
+        {
+            var vm = new UDiskViewModel(_api, new UDiskService(), ServerUrl, AppContext.BaseDirectory);
+            var win = new UDiskWindow { DataContext = vm };
+            vm.RequestClose += () => win.Close();
+            win.Owner = Application.Current.MainWindow;
+            win.ShowDialog();
+        }
+
+        /// <summary>打开工具大全子窗口（53 个维护工具：本地内置 + 服务器同步）</summary>
+        private void OpenTools()
+        {
+            var vm = new ToolsViewModel(_api, ServerUrl, AppContext.BaseDirectory);
+            var win = new ToolsWindow { DataContext = vm };
+            vm.RequestClose += () => win.Close();
+            win.Owner = Application.Current.MainWindow;
+            win.ShowDialog();
         }
 
         public event PropertyChangedEventHandler? PropertyChanged;
