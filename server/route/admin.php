@@ -6,6 +6,10 @@ Route::get('/', function () {
     return redirect('/index.html');
 });
 Route::post('api/v1/auth/login', 'admin.Auth/login');
+// 用户注册接口（客户端公开，无需登录）
+Route::post('api/v1/auth/register', 'admin.Auth/register');
+// 站点信息公开接口（客户端首页品牌信息，无需登录）
+Route::get('api/v1/site/info', 'api.Site/info');
 
 // Auth required routes
 Route::group('api/v1', function () {

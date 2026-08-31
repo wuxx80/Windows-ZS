@@ -8,5 +8,7 @@
         <helpers:ViewConverter x:Key="ViewConverter"/>
         <helpers:BoolToConnectTextConverter x:Key="BoolToConnectText"/>
         <helpers:BoolToStatusBgConverter x:Key="BoolToStatusBg"/>
+        <helpers:BoolToVisibilityConverter x:Key="BoolToVisibility"/>
+        <helpers:BoolToInverseVisibilityConverter x:Key="BoolToInverseVisibility"/>
     </Application.Resources>
 </Application>

@@ -10,6 +10,10 @@
     <SatelliteResourceLanguages>zh-Hans;en</SatelliteResourceLanguages>
     <!-- .NET 程序集版本要求各段 0-65534，268311 拆分为 268.311，语义对应项目版本 0.0.268311 -->
     <Version>0.0.268.311</Version>
+    <!-- 单文件发布：WinPE 客户端采用自包含单文件（PE 环境无 .NET 运行时，必须内置全部依赖） -->
+    <PublishSingleFile>true</PublishSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
   </PropertyGroup>
 
   <ItemGroup>

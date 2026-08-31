@@ -63,7 +63,7 @@ namespace Windows_Client.Models
         [JsonPropertyName("image_count")]
         public int ImageCount { get; set; }
         [JsonPropertyName("version")]
-        public string Version { get; set; } = "";
+        public int Version { get; set; }
         [JsonPropertyName("status")]
         public int Status { get; set; }
         [JsonPropertyName("tags")]
@@ -195,6 +195,35 @@ namespace Windows_Client.Models
         public string ClientId { get; set; } = "";
         [JsonPropertyName("status")]
         public string Status { get; set; } = "";
+    }
+
+    /// <summary>登录/注册接口返回：data 含 token 与用户信息（SetToken 只能取 token，不能取整个对象）</summary>
+    public class LoginResult
+    {
+        [JsonPropertyName("token")]
+        public string Token { get; set; } = "";
+
+        [JsonPropertyName("user")]
+        public UserProfile? User { get; set; }
+    }
+
+    /// <summary>登录用户信息（客户端显示用户名/昵称/角色）</summary>
+    public class UserProfile
+    {
+        [JsonPropertyName("id")]
+        public int Id { get; set; }
+
+        [JsonPropertyName("username")]
+        public string Username { get; set; } = "";
+
+        [JsonPropertyName("nickname")]
+        public string Nickname { get; set; } = "";
+
+        [JsonPropertyName("role_code")]
+        public string RoleCode { get; set; } = "";
+
+        [JsonPropertyName("is_super")]
+        public int IsSuper { get; set; }
     }
 
     /// <summary>装机任务信息：创建任务 / 进度上报返回</summary>
@@ -442,5 +471,37 @@ namespace Windows_Client.Models
         public string Icon { get; set; } = "";
         public string Title { get; set; } = "";
         public string Content { get; set; } = "";
+    }
+
+    /// <summary>站点品牌信息（GET /api/v1/site/info 公开接口，无需登录）。
+    /// 用于客户端首页左上角品牌 + 边框项（版权/版本/联系/关于），由后台系统设置「站点信息」维护。</summary>
+    public class SiteInfo
+    {
+        [JsonPropertyName("site_logo_text")]
+        public string LogoText { get; set; } = "ZS";
+
+        [JsonPropertyName("site_title")]
+        public string Title { get; set; } = "装机助手";
+
+        [JsonPropertyName("site_subtitle")]
+        public string Subtitle { get; set; } = "ZS Install Assistant | www.zs-install.com";
+
+        [JsonPropertyName("site_tagline")]
+        public string Tagline { get; set; } = "— 简单 · 高效 · 一站式系统维护 —";
+
+        [JsonPropertyName("site_website")]
+        public string Website { get; set; } = "www.zs-install.com";
+
+        [JsonPropertyName("site_copyright")]
+        public string Copyright { get; set; } = "© 2026 ZS 装机助手 版权所有";
+
+        [JsonPropertyName("site_version")]
+        public string Version { get; set; } = "v0.0.268311";
+
+        [JsonPropertyName("site_contact")]
+        public string Contact { get; set; } = "";
+
+        [JsonPropertyName("site_about")]
+        public string About { get; set; } = "";
     }
 }

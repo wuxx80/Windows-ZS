@@ -1,10 +1,10 @@
-﻿# ============================================================
-# ZS 装机助手 - 客户端发布脚本
+# ============================================================
+# ZS 装机助手 - 客户端发布脚本（单文件 exe）
 # ============================================================
 # 用法：
 #   .\publish.ps1              # 发布所有客户端
-#   .\publish.ps1 -WinPE       # 仅发布 WinPE 客户端
-#   .\publish.ps1 -Windows     # 仅发布 Windows 客户端
+#   .\publish.ps1 -WinPE       # 仅发布 WinPE 客户端（自包含单文件）
+#   .\publish.ps1 -Windows     # 仅发布 Windows 客户端（框架依赖单文件）
 # ============================================================
 
 param(
@@ -18,8 +18,8 @@ $OUTPUT = Join-Path $ROOT "publish"
 
 if ($Help) {
     Write-Host "用法: .\publish.ps1 [-WinPE] [-Windows] [-Help]" -ForegroundColor Cyan
-    Write-Host "  -WinPE    仅发布 WinPE 客户端（自包含部署）" -ForegroundColor Gray
-    Write-Host "  -Windows  仅发布 Windows 客户端" -ForegroundColor Gray
+    Write-Host "  -WinPE    仅发布 WinPE 客户端（自包含单文件）" -ForegroundColor Gray
+    Write-Host "  -Windows  仅发布 Windows 客户端（框架依赖单文件）" -ForegroundColor Gray
     Write-Host "  不带参数   发布所有客户端" -ForegroundColor Gray
     exit 0
 }
@@ -54,7 +54,7 @@ $publishBoth = -not $WinPE -and -not $Windows
 if ($publishBoth -or $WinPE) {
     Write-Host ""
     Write-Host "========================================" -ForegroundColor Yellow
-    Write-Host "  发布 WinPE 客户端（自包含部署）" -ForegroundColor Yellow
+    Write-Host "  发布 WinPE 客户端（自包含单文件）" -ForegroundColor Yellow
     Write-Host "========================================" -ForegroundColor Yellow
 
     $peProject = Join-Path $ROOT "WinPE_Client\WinPE_Client.csproj"
@@ -69,8 +69,8 @@ if ($publishBoth -or $WinPE) {
         Write-Host "[*] 构建 Release..." -ForegroundColor Cyan
         dotnet build $peProject -c Release --no-restore
 
-        Write-Host "[*] 发布自包含部署..." -ForegroundColor Cyan
-        dotnet publish $peProject -c Release -r win-x64 --self-contained true -o $peOutput
+        Write-Host "[*] 发布自包含单文件..." -ForegroundColor Cyan
+        dotnet publish $peProject -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o $peOutput
 
         if ($LASTEXITCODE -eq 0) {
             Write-Host "[OK] WinPE 客户端发布完成: $peOutput" -ForegroundColor Green
@@ -88,7 +88,7 @@ if ($publishBoth -or $WinPE) {
 if ($publishBoth -or $Windows) {
     Write-Host ""
     Write-Host "========================================" -ForegroundColor Yellow
-    Write-Host "  发布 Windows 客户端（框架依赖）" -ForegroundColor Yellow
+    Write-Host "  发布 Windows 客户端（框架依赖单文件）" -ForegroundColor Yellow
     Write-Host "========================================" -ForegroundColor Yellow
 
     $winProject = Join-Path $ROOT "Windows_Client\Windows_Client.csproj"
@@ -103,8 +103,8 @@ if ($publishBoth -or $Windows) {
         Write-Host "[*] 构建 Release..." -ForegroundColor Cyan
         dotnet build $winProject -c Release --no-restore
 
-        Write-Host "[*] 发布..." -ForegroundColor Cyan
-        dotnet publish $winProject -c Release -r win-x64 --self-contained false -o $winOutput
+        Write-Host "[*] 发布框架依赖单文件..." -ForegroundColor Cyan
+        dotnet publish $winProject -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -o $winOutput
 
         if ($LASTEXITCODE -eq 0) {
             Write-Host "[OK] Windows 客户端发布完成: $winOutput" -ForegroundColor Green

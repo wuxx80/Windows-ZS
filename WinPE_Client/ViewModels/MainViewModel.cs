@@ -51,21 +51,38 @@ namespace WinPE_Client.ViewModels
             BootRepairCommand = new RelayCommand(async () => await BootRepair());
             InjectDriversCommand = new RelayCommand(async () => await InjectDrivers());
             ConnectCommand = new RelayCommand(async () => await Connect(), () => !IsConnected);
+            LoginCommand = new RelayCommand(async () => await Login(), () => !IsConnected);
+            LogoutCommand = new RelayCommand(Logout, () => IsConnected);
+            OpenSettingsCommand = new RelayCommand(OpenSettings);
+            OpenAboutCommand = new RelayCommand(OpenAbout);
+            OpenContactCommand = new RelayCommand(OpenContact);
+            OpenVersionCommand = new RelayCommand(OpenVersion);
             NotifyNotImplementedCommand = new RelayCommand<string>(NotifyNotImplemented);
         }
 
-        private string _serverUrl = "http://localhost";
+        private string _serverUrl = "http://127.0.0.1:8001";
         public string ServerUrl
         {
             get => _serverUrl;
             set { _serverUrl = value; OnPropertyChanged(); }
         }
 
+        /// <summary>站点品牌信息（首页左上角 + 边框 版权/版本/联系/关于，来自后台「站点信息」设置）</summary>
+        private SiteInfo _site = new();
+        public SiteInfo Site
+        {
+            get => _site;
+            set { _site = value; OnPropertyChanged(); }
+        }
+
+        /// <summary>登录按钮文本：未连接显示「登录」，已连接显示「退出」（闭环）</summary>
+        public string LoginButtonText => IsConnected ? "退出" : "登录";
+
         private bool _isConnected;
         public bool IsConnected
         {
             get => _isConnected;
-            set { _isConnected = value; OnPropertyChanged(); OnPropertyChanged(nameof(IsNotConnected)); OnPropertyChanged(nameof(ServerStatusText)); }
+            set { _isConnected = value; OnPropertyChanged(); OnPropertyChanged(nameof(IsNotConnected)); OnPropertyChanged(nameof(ServerStatusText)); OnPropertyChanged(nameof(LoginButtonText)); }
         }
 
         public bool IsNotConnected => !IsConnected;
@@ -154,11 +171,18 @@ namespace WinPE_Client.ViewModels
         public ICommand BootRepairCommand { get; }
         public ICommand InjectDriversCommand { get; }
         public ICommand ConnectCommand { get; }
+        public ICommand LoginCommand { get; }
+        public ICommand LogoutCommand { get; }
+        public ICommand OpenSettingsCommand { get; }
+        public ICommand OpenAboutCommand { get; }
+        public ICommand OpenContactCommand { get; }
+        public ICommand OpenVersionCommand { get; }
         public ICommand NotifyNotImplementedCommand { get; }
 
-        /// <summary>窗口加载完成后自动初始化：连接服务器 → 自注册 → 检测待执行任务 → 启动心跳</summary>
+        /// <summary>窗口加载完成后自动初始化：拉取品牌信息 → 连接服务器 → 自注册 → 检测待执行任务 → 启动心跳</summary>
         public async Task Initialize()
         {
+            await LoadSiteInfo();
             if (IsConnected) return;
             await Connect();
             if (IsConnected)
@@ -168,13 +192,81 @@ namespace WinPE_Client.ViewModels
             }
         }
 
+        /// <summary>拉取站点品牌信息（公开接口，无需登录；失败时保留默认品牌，首页依然可用）</summary>
+        public async Task LoadSiteInfo()
+        {
+            try
+            {
+                _api.SetBaseUrl(ServerUrl);
+                var r = await _api.GetSiteInfoAsync();
+                if (r.IsSuccess && r.Data != null)
+                {
+                    Site = r.Data;
+                }
+            }
+            catch
+            {
+                // 服务器不可用：使用默认品牌信息
+            }
+        }
+
+        /// <summary>登录：连接服务器（WinPE 环境自动以管理员身份登录）</summary>
+        private async Task Login()
+        {
+            await Connect();
+        }
+
+        /// <summary>退出登录：断开连接、停止心跳、清空令牌与本地状态（状态闭环）</summary>
+        private void Logout()
+        {
+            _heartbeatTimer.Stop();
+            _api.SetToken(null);
+            _clientId = "";
+            _serverClientId = 0;
+            _pendingTask = null;
+            IsConnected = false;
+            StatusMessage = "已退出连接";
+            OnPropertyChanged(nameof(HasPendingTask));
+            OnPropertyChanged(nameof(PendingTaskNo));
+            OnPropertyChanged(nameof(PendingTaskStatus));
+            OnPropertyChanged(nameof(PendingTaskImageName));
+        }
+
+        /// <summary>打开设置窗口（服务器地址 / 连接状态 / WinPE 高级工具）</summary>
+        private void OpenSettings()
+        {
+            var win = new SettingsWindow { DataContext = this, Owner = Application.Current.MainWindow };
+            win.ShowDialog();
+        }
+
+        /// <summary>打开关于窗口（品牌 + 版本 + 关于内容，来自后台「站点信息」设置）</summary>
+        private void OpenAbout()
+        {
+            var win = new AboutWindow { DataContext = this, Owner = Application.Current.MainWindow };
+            win.ShowDialog();
+        }
+
+        /// <summary>打开联系窗口（联系信息，来自后台「站点信息」设置）</summary>
+        private void OpenContact()
+        {
+            var win = new ContactWindow { DataContext = this, Owner = Application.Current.MainWindow };
+            win.ShowDialog();
+        }
+
+        /// <summary>打开版本窗口（客户端版本 + 站点版本信息）</summary>
+        private void OpenVersion()
+        {
+            var win = new VersionWindow { DataContext = this, Owner = Application.Current.MainWindow };
+            win.ShowDialog();
+        }
+
         public async Task Connect()
         {
             _api.SetBaseUrl(ServerUrl);
             var result = await _api.LoginAsync("admin", "admin123");
             if (result.IsSuccess)
             {
-                var token = result.Data?.ToString();
+                var token = result.Data?.Token;
                 _api.SetToken(token);
                 IsConnected = true;
                 StatusMessage = "已连接到服务器";
@@ -200,9 +292,7 @@ namespace WinPE_Client.ViewModels
                 {
                     _clientId = reg.Data.ClientId;
                     _serverClientId = reg.Data.Id;
-                    ClientStatusText = reg.Data.Status == "pending"
-                        ? "客户端待后台审核，审核通过后才能派发任务"
-                        : "";
+                    ClientStatusText = "";
                     StatusMessage = "已注册客户端: " + _clientId;
                 }
                 else
@@ -228,12 +318,7 @@ namespace WinPE_Client.ViewModels
                 if (hb.IsSuccess && hb.Data != null)
                 {
                     _serverClientId = hb.Data.Id;
-                    ClientStatusText = hb.Data.Status switch
-                    {
-                        "pending" => "客户端待后台审核，审核通过后才能派发任务",
-                        "blocked" => "客户端已被禁用，请联系管理员",
-                        _ => ""
-                    };
+                    ClientStatusText = "";
                     if (hb.Data.WaitingTaskCount > 0) await CheckWaitingTasks();
                 }
                 else if (hb.Message?.Contains("未注册") == true)

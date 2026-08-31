@@ -260,9 +260,7 @@ class TaskController extends BaseController
             if (!$client) {
                 return $this->error('client_not_found', '客户端不存在');
             }
-            if ($client->status !== 'approved') {
-                return $this->error('auth_client_pending', '客户端未通过审核，无法派发任务');
-            }
+            // 客户端设备自注册即已授权（登录体系为用户注册/登录），无需审批门槛
         }
 
         // 闭环校验：waiting 任务（Windows 下单 → PE 续装）必须关联已注册客户端，

@@ -1,0 +1,124 @@
+<Window x:Class="WinPE_Client.SettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="设置" Height="560" Width="520"
+        WindowStartupLocation="CenterOwner" ResizeMode="NoResize"
+        Background="#F5F7FA" FontFamily="Microsoft YaHei" WindowStyle="ToolWindow">
+    <Grid Margin="24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0" Text="基本设置" FontSize="16" Foreground="#1E293B" Margin="0,0,0,12"/>
+
+        <!-- 服务器地址 -->
+        <Border Grid.Row="1" Background="White" CornerRadius="8" Padding="16" Margin="0,0,0,12">
+            <StackPanel>
+                <TextBlock Text="服务器地址" FontSize="13" Foreground="#334155" Margin="0,0,0,8"/>
+                <TextBox Text="{Binding ServerUrl}" Height="34" FontSize="13" Padding="8,0" VerticalContentAlignment="Center"/>
+                <TextBlock Text="当前为本地测试地址，迁移服务器后在此修改。" FontSize="11" Foreground="#94A3B8" Margin="0,6,0,0"/>
+            </StackPanel>
+        </Border>
+
+        <!-- 连接状态 / 登录退出 -->
+        <Border Grid.Row="2" Background="White" CornerRadius="8" Padding="16" Margin="0,0,0,12">
+            <StackPanel>
+                <TextBlock Text="服务器连接" FontSize="13" Foreground="#334155" Margin="0,0,0,8"/>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock Text="{Binding ServerStatusText}" FontSize="13" Foreground="#1976D2"/>
+                        <TextBlock Text="{Binding ClientStatusText}" FontSize="11" Foreground="#B45309" Margin="0,4,0,0" TextWrapping="Wrap"/>
+                    </StackPanel>
+                    <Button Grid.Column="1" Content="登录" Width="80" Height="32" VerticalAlignment="Center" Margin="12,0,0,0"
+                            Command="{Binding LoginCommand}" Background="#1976D2" Foreground="White" BorderThickness="0" Cursor="Hand"
+                            Visibility="{Binding IsConnected, Converter={StaticResource BoolToInverseVisibility}}"/>
+                    <Button Grid.Column="1" Content="退出" Width="80" Height="32" VerticalAlignment="Center" Margin="12,0,0,0"
+                            Command="{Binding LogoutCommand}" Background="#F1F5F9" Foreground="#334155" BorderThickness="1" BorderBrush="#CBD5E1" Cursor="Hand"
+                            Visibility="{Binding IsConnected, Converter={StaticResource BoolToVisibility}}"/>
+                </Grid>
+            </StackPanel>
+        </Border>
+
+        <!-- 版本信息 -->
+        <Border Grid.Row="3" Background="White" CornerRadius="8" Padding="16" Margin="0,0,0,12">
+            <StackPanel>
+                <TextBlock Text="版本信息" FontSize="13" Foreground="#334155" Margin="0,0,0,8"/>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="100"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="客户端" FontSize="12" Foreground="#64748B"/>
+                    <TextBlock Grid.Column="1" Text="WinPE 客户端 v0.0.268311" FontSize="12" Foreground="#334155"/>
+                </Grid>
+                <Grid Margin="0,6,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="100"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="站点" FontSize="12" Foreground="#64748B"/>
+                    <TextBlock Grid.Column="1" Text="{Binding Site.Version}" FontSize="12" Foreground="#334155"/>
+                </Grid>
+            </StackPanel>
+        </Border>
+
+        <!-- 高级工具（WinPE 专用：磁盘 / 引导 / 驱动） -->
+        <TextBlock Grid.Row="4" Text="高级工具" FontSize="16" Foreground="#1E293B" Margin="0,6,0,12"/>
+        <Border Grid.Row="5" Background="White" CornerRadius="8" Padding="16" Margin="0,0,0,12">
+            <StackPanel>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="磁盘工具" FontSize="13" Foreground="#334155" VerticalAlignment="Center"/>
+                    <Button Grid.Column="1" Content="刷新磁盘列表" Height="30" Padding="14,0"
+                            Command="{Binding RefreshDisksCommand}" Background="#F1F5F9" Foreground="#334155"
+                            BorderThickness="1" BorderBrush="#CBD5E1" Cursor="Hand"/>
+                </Grid>
+                <ListBox ItemsSource="{Binding Disks}" Height="110" Margin="0,10,0,0" FontSize="12"/>
+                <Separator Margin="0,14,0,14"/>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="引导修复（修复 Windows 引导 UEFI+BIOS）" FontSize="13" Foreground="#334155" VerticalAlignment="Center"/>
+                    <Button Grid.Column="1" Content="开始修复" Height="30" Padding="14,0"
+                            Command="{Binding BootRepairCommand}" Background="#F1F5F9" Foreground="#334155"
+                            BorderThickness="1" BorderBrush="#CBD5E1" Cursor="Hand"/>
+                </Grid>
+                <Separator Margin="0,14,0,14"/>
+                <StackPanel>
+                    <TextBlock Text="驱动注入（向已安装系统注入驱动）" FontSize="13" Foreground="#334155" Margin="0,0,0,8"/>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBox Text="{Binding DriverPath}" Height="30" FontSize="12" Padding="8,0" VerticalContentAlignment="Center" ToolTip="驱动文件夹路径"/>
+                        <Button Grid.Column="1" Content="开始注入" Height="30" Padding="14,0" Margin="10,0,0,0"
+                                Command="{Binding InjectDriversCommand}" Background="#F1F5F9" Foreground="#334155"
+                                BorderThickness="1" BorderBrush="#CBD5E1" Cursor="Hand"/>
+                    </Grid>
+                </StackPanel>
+                <ProgressBar Value="{Binding ProgressValue}" Height="4" Margin="0,14,0,0" Foreground="#1976D2" Background="#E2E8F0"
+                             Visibility="{Binding IsInstalling, Converter={StaticResource BoolToVisibility}}"/>
+            </StackPanel>
+        </Border>
+
+        <Button Grid.Row="7" Content="关闭" Width="100" Height="34" Margin="0,6,0,0" HorizontalAlignment="Center"
+                Click="OnCloseClick" Background="#1976D2" Foreground="White" BorderThickness="0" Cursor="Hand"/>
+    </Grid>
+</Window>

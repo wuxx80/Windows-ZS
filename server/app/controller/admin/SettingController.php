@@ -36,18 +36,46 @@ class SettingController extends BaseController
             return $this->error('param_error', '设置数据不能为空');
         }
 
-        foreach ($settings as $key => $value) {
-            $exists = Db::name('settings')->where('key', $key)->find();
+        // 兼容两种提交格式：
+        //   1) 列表：[{group, key, value}, ...]（管理后台标准格式，group 用于分组归属）
+        //   2) 扁平：{key: value}（旧调用方，group 缺省为 basic）
+        $items = [];
+        $isList = array_keys($settings) === range(0, count($settings) - 1);
+        if ($isList) {
+            foreach ($settings as $item) {
+                $items[] = [
+                    'group' => $item['group'] ?? 'basic',
+                    'key'   => (string)($item['key'] ?? ''),
+                    'value' => $item['value'] ?? '',
+                ];
+            }
+        } else {
+            foreach ($settings as $key => $value) {
+                $items[] = [
+                    'group' => 'basic',
+                    'key'   => (string)$key,
+                    'value' => $value,
+                ];
+            }
+        }
+
+        foreach ($items as $item) {
+            if ($item['key'] === '') {
+                continue;
+            }
+            $value = is_array($item['value']) ? json_encode($item['value']) : $item['value'];
+            $exists = Db::name('settings')->where('key', $item['key'])->find();
             if ($exists) {
-                Db::name('settings')->where('key', $key)->update([
-                    'value' => is_array($value) ? json_encode($value) : $value,
-                    'updated_by' => $this->userId,
+                Db::name('settings')->where('key', $item['key'])->update([
+                    'group' => $item['group'],
+                    'value' => $value,
                 ]);
             } else {
                 Db::name('settings')->insert([
-                    'key' => $key,
-                    'value' => is_array($value) ? json_encode($value) : $value,
-                    'created_by' => $this->userId,
+                    'group' => $item['group'],
+                    'key'   => $item['key'],
+                    'value' => $value,
+                    'type'  => 'string',
                 ]);
             }
         }

@@ -44,7 +44,7 @@ namespace WinPE_Client.Models
         public int ImageCount { get; set; }
 
         [JsonPropertyName("version")]
-        public string Version { get; set; } = "";
+        public int Version { get; set; }
 
         [JsonPropertyName("status")]
         public int Status { get; set; }

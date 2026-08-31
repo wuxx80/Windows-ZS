@@ -33,7 +33,7 @@
     <div class="stat-icon orange">⏳</div>
     <div class="stat-info">
       <div class="number" id="statPending">-</div>
-      <div class="label">待处理任务</div>
+      <div class="label">待执行任务</div>
     </div>
   </div>
 </div>
@@ -69,13 +69,13 @@
           <div class="qa-icon blue">💿</div>
           <span class="qa-label">添加镜像</span>
         </a>
-        <a class="quick-action" href="../pages/tasks.html">
-          <div class="qa-icon green">📋</div>
-          <span class="qa-label">任务管理</span>
+        <a class="quick-action" href="../pages/unattend.html">
+          <div class="qa-icon green">🤖</div>
+          <span class="qa-label">无人值守模板</span>
         </a>
-        <a class="quick-action" href="../pages/clients.html">
-          <div class="qa-icon purple">🖥️</div>
-          <span class="qa-label">客户端</span>
+        <a class="quick-action" href="../pages/software.html">
+          <div class="qa-icon purple">📱</div>
+          <span class="qa-label">软件管理</span>
         </a>
         <a class="quick-action" href="../pages/settings.html">
           <div class="qa-icon orange">⚙️</div>
@@ -101,7 +101,7 @@ function loadDashboard() {
       document.getElementById('statImages').textContent = data.total_images || 0;
       document.getElementById('statTasks').textContent = data.today_completed || 0;
       document.getElementById('statClients').textContent = data.online_clients || 0;
-      document.getElementById('statPending').textContent = data.pending_clients || 0;
+      document.getElementById('statPending').textContent = data.waiting_tasks || 0;
       renderTasks(data.recent_tasks || []);
     }
   })
@@ -116,9 +116,9 @@ function renderTasks(tasks) {
   var html = '';
   tasks.forEach(function(task) {
     var statusClass = task.status === 'completed' ? 'completed' : (task.status === 'running' ? 'running' : (task.status === 'failed' ? 'failed' : 'pending'));
-    var statusText = task.status === 'completed' ? '已完成' : (task.status === 'running' ? '运行中' : (task.status === 'failed' ? '失败' : '待处理'));
-    var typeText = task.type === 'install' ? '安装' : (task.type === 'usb' ? 'U盘' : (task.type === 'repair' ? '修复' : task.type || '-'));
-    html += '<tr><td>' + (task.name || '-') + '</td><td>' + typeText + '</td><td><span class="status-badge ' + statusClass + '">' + statusText + '</span></td><td>' + (task.created_at || '-') + '</td></tr>';
+    var statusText = task.status === 'completed' ? '已完成' : (task.status === 'running' ? '运行中' : (task.status === 'waiting' ? '等待PE' : (task.status === 'failed' ? '失败' : (task.status === 'cancelled' ? '已取消' : '待处理'))));
+    var typeText = task.image_id ? ('镜像 #' + task.image_id) : '-';
+    html += '<tr><td>' + (task.task_no || '-') + '</td><td>' + typeText + '</td><td><span class="status-badge ' + statusClass + '">' + statusText + '</span></td><td>' + (task.created_at || '-') + '</td></tr>';
   });
   tbody.innerHTML = html;
 }

@@ -10,6 +10,10 @@
     <SatelliteResourceLanguages>zh-Hans;en</SatelliteResourceLanguages>
     <!-- .NET 程序集版本要求各段 0-65534，268311 拆分为 268.311，语义对应项目版本 0.0.268311 -->
     <Version>0.0.268.311</Version>
+    <!-- 单文件发布：Windows 客户端采用框架依赖单文件（体积小，目标机需安装 .NET 8 运行时）。
+         注意：EnableCompressionInSingleFile 仅支持自包含单文件，框架依赖模式不支持压缩，故不启用。 -->
+    <PublishSingleFile>true</PublishSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
   </PropertyGroup>
 
   <ItemGroup>

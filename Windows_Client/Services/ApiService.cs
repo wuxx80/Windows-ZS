@@ -69,8 +69,12 @@ namespace Windows_Client.Services
             }
         }
 
-        public async Task<ApiResponse<object>> LoginAsync(string username, string password)
-            => await PostAsync<object>("/api/v1/auth/login", new { username, password });
+        public async Task<ApiResponse<LoginResult>> LoginAsync(string username, string password)
+            => await PostAsync<LoginResult>("/api/v1/auth/login", new { username, password });
+
+        /// <summary>用户注册（公开接口）：注册成功即返回 token 自动登录</summary>
+        public async Task<ApiResponse<LoginResult>> RegisterAsync(string username, string password, string? nickname = null)
+            => await PostAsync<LoginResult>("/api/v1/auth/register", new { username, password, nickname });
 
         public async Task<ApiResponse<PaginatedData<T>>> GetPaginatedAsync<T>(string endpoint, int page = 1, int limit = 20)
         {
@@ -131,6 +135,10 @@ namespace Windows_Client.Services
 
         public async Task<ApiResponse<List<DiskInfo>>> GetDiskInfoAsync()
             => await GetAsync<List<DiskInfo>>("/api/v1/devices/disks");
+
+        /// <summary>获取站点品牌信息（公开接口，无需登录；首页左上角品牌 + 边框 版权/版本/联系/关于）</summary>
+        public async Task<ApiResponse<SiteInfo>> GetSiteInfoAsync()
+            => await GetAsync<SiteInfo>("/api/v1/site/info");
 
         /// <summary>
         /// 客户端自注册（幂等）：首次注册由服务端生成 client_id；

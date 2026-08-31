@@ -30,34 +30,63 @@ namespace Windows_Client.ViewModels
             OpenInstallWizardCommand = new RelayCommand(OpenInstallWizard);
             OpenUDiskCommand = new RelayCommand(OpenUDisk);
             OpenToolsCommand = new RelayCommand(OpenTools);
+            OpenSoftwareCommand = new RelayCommand(OpenSoftware);
             LoginCommand = new RelayCommand(async () => await Login(), () => !IsLoggedIn);
             LogoutCommand = new RelayCommand(async () => await Logout(), () => IsLoggedIn);
             RefreshSoftwareCommand = new RelayCommand(async () => await RefreshSoftware());
             RefreshMyTasksCommand = new RelayCommand(async () => await LoadMyTasks());
+            OpenSettingsCommand = new RelayCommand(OpenSettings);
+            OpenAboutCommand = new RelayCommand(OpenAbout);
+            OpenContactCommand = new RelayCommand(OpenContact);
+            OpenVersionCommand = new RelayCommand(OpenVersion);
         }
 
-        private string _serverUrl = "http://localhost";
+        private string _serverUrl = "http://127.0.0.1:8001";
         public string ServerUrl
         {
             get => _serverUrl;
             set { _serverUrl = value; OnPropertyChanged(); }
         }
 
-        private string _username = "admin";
+        private string _username = "";
         public string Username
         {
             get => _username;
             set { _username = value; OnPropertyChanged(); }
         }
 
+        /// <summary>站点品牌信息（首页左上角 + 边框 版权/版本/联系/关于，来自后台「站点信息」设置）</summary>
+        private SiteInfo _site = new();
+        public SiteInfo Site
+        {
+            get => _site;
+            set { _site = value; OnPropertyChanged(); }
+        }
+
+        /// <summary>登录按钮文本：未连接显示「登录」，已连接显示「退出」（闭环）</summary>
+        public string LoginButtonText => IsLoggedIn ? "退出" : "登录";
+
         private bool _isLoggedIn;
         public bool IsLoggedIn
         {
             get => _isLoggedIn;
-            set { _isLoggedIn = value; OnPropertyChanged(); OnPropertyChanged(nameof(IsNotLoggedIn)); }
+            set { _isLoggedIn = value; OnPropertyChanged(); OnPropertyChanged(nameof(IsNotLoggedIn)); OnPropertyChanged(nameof(LoginButtonText)); OnPropertyChanged(nameof(ServerStatusText)); }
         }
 
         public bool IsNotLoggedIn => !IsLoggedIn;
+
+        /// <summary>服务器状态文本（顶部状态点 + 连接信息）</summary>
+        public string ServerStatusText => IsLoggedIn
+            ? (string.IsNullOrEmpty(_clientId) ? "已连接服务器" : "已连接 · " + _clientId)
+            : "未连接服务器";
+
+        /// <summary>客户端审核状态提示（后台未审核时设置页黄色提示）</summary>
+        private string _clientStatusText = "";
+        public string ClientStatusText
+        {
+            get => _clientStatusText;
+            set { _clientStatusText = value; OnPropertyChanged(); }
+        }
 
         private string _statusMessage = "欢迎使用 ZS 装机助手";
         public string StatusMessage
@@ -98,19 +127,73 @@ namespace Windows_Client.ViewModels
         public ICommand OpenInstallWizardCommand { get; }
         public ICommand OpenUDiskCommand { get; }
         public ICommand OpenToolsCommand { get; }
+        public ICommand OpenSoftwareCommand { get; }
         public ICommand LoginCommand { get; }
         public ICommand LogoutCommand { get; }
         public ICommand RefreshSoftwareCommand { get; }
         public ICommand RefreshMyTasksCommand { get; }
+        public ICommand OpenSettingsCommand { get; }
+        public ICommand OpenAboutCommand { get; }
+        public ICommand OpenContactCommand { get; }
+        public ICommand OpenVersionCommand { get; }
 
+        /// <summary>窗口加载完成后自动初始化：拉取品牌信息 → 检测本地已保存登录 → 恢复会话或等待用户登录</summary>
+        public async Task Initialize()
+        {
+            await LoadSiteInfo();
+            // 不再自动 admin 登录：改为用户注册/登录（用户名密码），登录成功后才连接服务器
+            if (!IsLoggedIn && TryRestoreSession())
+            {
+                await RegisterClient();
+                await LoadMyTasks();
+                _heartbeatTimer.Start();
+                StatusMessage = "已恢复登录会话";
+            }
+        }
+
+        /// <summary>尝试从本地恢复上次登录会话（保存 token 与用户名，免重复登录）</summary>
+        private bool TryRestoreSession()
+        {
+            var savedToken = SessionStore.LoadToken();
+            var savedUsername = SessionStore.LoadUsername();
+            if (string.IsNullOrEmpty(savedToken) || string.IsNullOrEmpty(savedUsername))
+                return false;
+            _api.SetBaseUrl(ServerUrl);
+            _api.SetToken(savedToken);
+            Username = savedUsername;
+            IsLoggedIn = true;
+            return true;
+        }
+
+        /// <summary>拉取站点品牌信息（公开接口，无需登录；失败时保留默认品牌，首页依然可用）</summary>
+        public async Task LoadSiteInfo()
+        {
+            try
+            {
+                _api.SetBaseUrl(ServerUrl);
+                var r = await _api.GetSiteInfoAsync();
+                if (r.IsSuccess && r.Data != null)
+                {
+                    Site = r.Data;
+                }
+            }
+            catch
+            {
+                // 服务器不可用：使用默认品牌信息
+            }
+        }
+
+        /// <summary>打开用户注册/登录对话框：登录/注册成功后建立会话（token + 用户信息），连接服务器</summary>
         private async Task Login()
         {
             _api.SetBaseUrl(ServerUrl);
-            var result = await _api.LoginAsync(Username, "admin123");
-            if (result.IsSuccess)
+            var win = new LoginWindow(_api, ServerUrl) { Owner = Application.Current.MainWindow };
+            if (win.ShowDialog() == true && win.Result != null)
             {
-                var token = result.Data?.ToString();
+                var token = win.Result.Token;
                 _api.SetToken(token);
+                Username = win.Result.User?.Username ?? "";
+                SessionStore.Save(token, Username);
                 IsLoggedIn = true;
                 StatusMessage = "登录成功 - 已连接到服务器";
                 await RegisterClient();
@@ -119,7 +202,7 @@ namespace Windows_Client.ViewModels
             }
             else
             {
-                StatusMessage = "登录失败: " + result.Message;
+                StatusMessage = "已取消登录";
             }
         }
 
@@ -135,6 +218,7 @@ namespace Windows_Client.ViewModels
                 {
                     _clientId = reg.Data.ClientId;
                     _serverClientId = reg.Data.Id;
+                    ClientStatusText = "";
                     StatusMessage = "已注册客户端: " + _clientId;
                 }
                 else
@@ -174,6 +258,7 @@ namespace Windows_Client.ViewModels
             _heartbeatTimer.Stop();
             IsLoggedIn = false;
             _api.SetToken(null);
+            SessionStore.Clear();
             StatusMessage = "已退出登录";
         }
 
@@ -246,9 +331,10 @@ namespace Windows_Client.ViewModels
             OnPropertyChanged(nameof(ShowRecentContinue));
         }
 
-        /// <summary>打开一键装机六步向导子窗口（Windows 端仅创建任务，实际装机在 WinPE 执行）</summary>
+        /// <summary>打开一键装机六步向导子窗口（Windows 端仅创建任务，实际装机在 WinPE 执行；需登录）</summary>
         private async void OpenInstallWizard()
         {
+            if (!await EnsureLoggedIn()) return;
             var vm = new InstallWizardViewModel(_api, new DeviceService(), ServerUrl);
             var win = new InstallWizardWindow { DataContext = vm };
             vm.RequestClose += () => win.Close();
@@ -257,9 +343,10 @@ namespace Windows_Client.ViewModels
             await LoadMyTasks();
         }
 
-        /// <summary>打开 U盘制作四步向导子窗口（真实写盘，带安全护栏）</summary>
-        private void OpenUDisk()
+        /// <summary>打开 U盘制作四步向导子窗口（真实写盘，带安全护栏；需登录）</summary>
+        private async void OpenUDisk()
         {
+            if (!await EnsureLoggedIn()) return;
             var vm = new UDiskViewModel(_api, new UDiskService(), ServerUrl, AppContext.BaseDirectory);
             var win = new UDiskWindow { DataContext = vm };
             vm.RequestClose += () => win.Close();
@@ -267,13 +354,61 @@ namespace Windows_Client.ViewModels
             win.ShowDialog();
         }
 
-        /// <summary>打开工具大全子窗口（53 个维护工具：本地内置 + 服务器同步）</summary>
-        private void OpenTools()
+        /// <summary>打开工具大全子窗口（53 个维护工具：本地内置 + 服务器同步；需登录）</summary>
+        private async void OpenTools()
         {
+            if (!await EnsureLoggedIn()) return;
             var vm = new ToolsViewModel(_api, ServerUrl, AppContext.BaseDirectory);
             var win = new ToolsWindow { DataContext = vm };
             vm.RequestClose += () => win.Close();
             win.Owner = Application.Current.MainWindow;
+            win.ShowDialog();
+        }
+
+        /// <summary>打开绿色软件子窗口（在线软件列表；需登录）</summary>
+        private async void OpenSoftware()
+        {
+            if (!await EnsureLoggedIn()) return;
+            var vm = new SoftwareWindowViewModel(_api, ServerUrl);
+            var win = new SoftwareWindow { DataContext = vm };
+            win.Owner = Application.Current.MainWindow;
+            win.ShowDialog();
+        }
+
+        /// <summary>核心功能登录门槛：未登录时先弹出注册/登录对话框，登录成功才放行（状态闭环）</summary>
+        private async Task<bool> EnsureLoggedIn()
+        {
+            if (IsLoggedIn) return true;
+            StatusMessage = "请先登录后再使用该功能";
+            await Login();
+            return IsLoggedIn;
+        }
+
+        /// <summary>打开设置窗口（服务器地址 / 连接状态 / 版本信息）</summary>
+        private void OpenSettings()
+        {
+            var win = new SettingsWindow { DataContext = this, Owner = Application.Current.MainWindow };
+            win.ShowDialog();
+        }
+
+        /// <summary>打开关于窗口（品牌 + 版本 + 关于内容，来自后台「站点信息」设置）</summary>
+        private void OpenAbout()
+        {
+            var win = new AboutWindow { DataContext = this, Owner = Application.Current.MainWindow };
+            win.ShowDialog();
+        }
+
+        /// <summary>打开联系窗口（联系信息，来自后台「站点信息」设置）</summary>
+        private void OpenContact()
+        {
+            var win = new ContactWindow { DataContext = this, Owner = Application.Current.MainWindow };
+            win.ShowDialog();
+        }
+
+        /// <summary>打开版本窗口（客户端版本 + 站点版本信息）</summary>
+        private void OpenVersion()
+        {
+            var win = new VersionWindow { DataContext = this, Owner = Application.Current.MainWindow };
             win.ShowDialog();
         }
 

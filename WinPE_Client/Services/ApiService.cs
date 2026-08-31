@@ -41,6 +41,12 @@ namespace WinPE_Client.Services
             }
         }
 
+        /// <summary>获取站点品牌信息（公开接口，无需登录；首页左上角品牌 + 边框 版权/版本/联系/关于）</summary>
+        public async Task<ApiResponse<SiteInfo>> GetSiteInfoAsync()
+        {
+            return await GetAsync<SiteInfo>("/api/v1/site/info");
+        }
+
         public string? GetToken() => _token;
 
         public async Task<ApiResponse<T>> GetAsync<T>(string endpoint)
@@ -82,9 +88,9 @@ namespace WinPE_Client.Services
             return await GetAsync<PaginatedData<T>>(endpoint + sep + "page=" + page + "&limit=" + limit);
         }
 
-        public async Task<ApiResponse<object>> LoginAsync(string username, string password)
+        public async Task<ApiResponse<LoginResult>> LoginAsync(string username, string password)
         {
-            return await PostAsync<object>("/api/v1/auth/login", new { username, password });
+            return await PostAsync<LoginResult>("/api/v1/auth/login", new { username, password });
         }
 
         public async Task<ApiResponse<object>> LogoutAsync()

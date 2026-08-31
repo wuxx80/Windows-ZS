@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
@@ -18,7 +18,8 @@ h2{margin-bottom:20px;font-size:20px;font-weight:600;color:#334155;}
 .setting-item .setting-info .setting-desc{font-size:12px;color:var(--text-light);}
 .setting-item .setting-control{flex-shrink:0;margin-left:16px;min-width:200px;}
 .setting-item .setting-control input[type="text"],.setting-item .setting-control input[type="number"],.setting-item .setting-control select{padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;outline:none;width:200px;transition:border-color 0.2s;}
-.setting-item .setting-control input:focus,.setting-item .setting-control select:focus{border-color:var(--primary);}
+.setting-item .setting-control textarea{padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;outline:none;width:320px;height:72px;resize:vertical;font-family:inherit;line-height:1.5;transition:border-color 0.2s;}
+.setting-item .setting-control input:focus,.setting-item .setting-control select:focus,.setting-item .setting-control textarea:focus{border-color:var(--primary);}
 .setting-item .setting-control .btn-save-setting{padding:6px 16px;background:var(--primary);color:var(--white);border:none;border-radius:6px;font-size:12px;cursor:pointer;transition:background 0.2s;white-space:nowrap;}
 .setting-item .setting-control .btn-save-setting:hover{background:var(--primary-dark);}
 .setting-item .setting-control .toggle-switch{position:relative;display:inline-block;width:44px;height:24px;vertical-align:middle;}
@@ -41,6 +42,22 @@ h2{margin-bottom:20px;font-size:20px;font-weight:600;color:#334155;}
   var currentSettings = {};
 
   var settingGroups = [
+    {
+      key: "site",
+      title: "站点信息",
+      icon: "🏷️",
+      items: [
+        { key: "site_logo_text", label: "Logo 文字", desc: "客户端左上角 Logo 图标内的文字（建议 1-4 字符）", type: "text", default: "ZS" },
+        { key: "site_title", label: "品牌主标题", desc: "客户端左上角大标题（如：装机助手 · PE）", type: "text", default: "装机助手 · PE" },
+        { key: "site_subtitle", label: "副标题", desc: "客户端左上角副标题（如：ZS Install Assistant | www.zs-install.com）", type: "text", default: "ZS Install Assistant | www.zs-install.com" },
+        { key: "site_tagline", label: "标语", desc: "客户端首页标语（如：简单 · 高效 · 一站式系统维护）", type: "text", default: "简单 · 高效 · 一站式系统维护" },
+        { key: "site_website", label: "官网地址", desc: "官方网址，用于副标题与联系信息展示", type: "text", default: "www.zs-install.com" },
+        { key: "site_version", label: "版本号", desc: "客户端边框底部显示的版本号", type: "text", default: "v0.0.268311" },
+        { key: "site_copyright", label: "版权信息", desc: "客户端边框底部右下角显示的版权文字", type: "text", default: "© 2026 ZS 装机助手 版权所有" },
+        { key: "site_contact", label: "联系信息", desc: "客户端「联系」弹窗内容，每行一条（邮箱/QQ/电话）", type: "textarea", default: "客服邮箱: support@zs-install.com\nQQ 群: 10000001\n客服电话: 400-000-0000" },
+        { key: "site_about", label: "关于内容", desc: "客户端「关于」弹窗展示的产品介绍", type: "textarea", default: "ZS 装机助手是一款集一键系统重装、U盘启动盘制作、系统维护工具、绿色软件安装于一体的系统维护助手。\n\n支持无人值守全自动装机，重启进入 WinPE 后自动认领任务并完成分区、部署、驱动注入、引导修复与首次登录优化，全程无需值守。" }
+      ]
+    },
     {
       key: "basic",
       title: "基本设置",
@@ -144,7 +161,14 @@ h2{margin-bottom:20px;font-size:20px;font-weight:600;color:#334155;}
     api("/settings").then(function(res) {
       loading.style.display = "none";
       if (res.code === 0) {
-        currentSettings = res.data || {};
+        // 将 {list:{group:[{key,value}...]},groups:[...]} 摊平为 {key: value}
+        currentSettings = {};
+        var list = (res.data && res.data.list) ? res.data.list : {};
+        for (var g in list) {
+          for (var i = 0; i < list[g].length; i++) {
+            currentSettings[list[g][i].key] = list[g][i].value;
+          }
+        }
         fillDefaults();
         renderSettings();
       } else {
@@ -195,7 +219,7 @@ h2{margin-bottom:20px;font-size:20px;font-weight:600;color:#334155;}
         html += "<div class=\"setting-control\">";
         if (item.type === "switch") {
           var checked = value === "true" || value === true ? " checked" : "";
-          html += "<label class=\"toggle-switch\"><input type=\"checkbox\" data-key=\"" + esc(item.key) + "\"" + checked + " onchange=\"toggleSetting(this)\"><span class=\"slider\"></span></label>";
+          html += "<label class=\"toggle-switch\"><input type=\"checkbox\" data-key=\"" + esc(item.key) + "\" data-group=\"" + esc(group.key) + "\"" + checked + " onchange=\"toggleSetting(this)\"><span class=\"slider\"></span></label>";
           html += "<span class=\"setting-value-text\" id=\"val_" + esc(item.key) + "\">" + (checked ? "开启" : "关闭") + "</span>";
         } else if (item.type === "select") {
           html += "<select data-key=\"" + esc(item.key) + "\" id=\"sel_" + esc(item.key) + "\">";
@@ -204,10 +228,13 @@ h2{margin-bottom:20px;font-size:20px;font-weight:600;color:#334155;}
             html += "<option value=\"" + esc(opt.value) + "\"" + (String(value) === String(opt.value) ? " selected" : "") + ">" + esc(opt.label) + "</option>";
           }
           html += "</select>";
-          html += "<button class=\"btn-save-setting\" onclick=\"saveSetting(\'" + esc(item.key) + "\')\" style=\"margin-left:8px;\">保存</button>";
+          html += "<button class=\"btn-save-setting\" onclick=\"saveSetting(\'" + esc(group.key) + "\',\'" + esc(item.key) + "\')\" style=\"margin-left:8px;\">保存</button>";
+        } else if (item.type === "textarea") {
+          html += "<textarea id=\"ta_" + esc(item.key) + "\" data-key=\"" + esc(item.key) + "\" style=\"vertical-align:top;\">" + esc(value) + "</textarea>";
+          html += "<button class=\"btn-save-setting\" onclick=\"saveSetting(\'" + esc(group.key) + "\',\'" + esc(item.key) + "\')\" style=\"margin-left:8px;vertical-align:top;\">保存</button>";
         } else {
           html += "<input type=\"" + item.type + "\" id=\"inp_" + esc(item.key) + "\" value=\"" + esc(value) + "\" data-key=\"" + esc(item.key) + "\">";
-          html += "<button class=\"btn-save-setting\" onclick=\"saveSetting(\'" + esc(item.key) + "\')\" style=\"margin-left:8px;\">保存</button>";
+          html += "<button class=\"btn-save-setting\" onclick=\"saveSetting(\'" + esc(group.key) + "\',\'" + esc(item.key) + "\')\" style=\"margin-left:8px;\">保存</button>";
         }
         html += "</div>";
         html += "</div>";
@@ -219,35 +246,40 @@ h2{margin-bottom:20px;font-size:20px;font-weight:600;color:#334155;}
 
   window.toggleSetting = function(el) {
     var key = el.getAttribute("data-key");
+    var group = el.getAttribute("data-group") || "basic";
     var checked = el.checked;
     var valEl = document.getElementById("val_" + key);
     if (valEl) valEl.textContent = checked ? "开启" : "关闭";
 
     currentSettings[key] = checked ? "true" : "false";
-    saveToServer(key, checked ? "true" : "false");
+    saveToServer(group, key, checked ? "true" : "false");
   };
 
-  window.saveSetting = function(key) {
+  window.saveSetting = function(group, key) {
     var value;
     var inp = document.getElementById("inp_" + key);
     var sel = document.getElementById("sel_" + key);
+    var ta = document.getElementById("ta_" + key);
     if (inp) {
       value = inp.value.trim();
     } else if (sel) {
       value = sel.value;
+    } else if (ta) {
+      // textarea 保留换行，仅统一换行符
+      value = ta.value.replace(/\r\n/g, "\n");
     } else {
       return;
     }
 
     currentSettings[key] = value;
-    saveToServer(key, value);
+    saveToServer(group, key, value);
   };
 
-  function saveToServer(key, value) {
-    var body = {};
-    body[key] = value;
+  function saveToServer(group, key, value) {
+    var payload = { settings: [{ group: group, key: key, value: value }] };
 
-    api("/settings", { method: "PUT", body: body }).then(function(res) {
+    // 后端 SettingController::update 读取 input('settings/a')，以 {settings:[{group,key,value}]} 列表格式提交
+    api("/settings", { method: "PUT", body: payload }).then(function(res) {
       if (res.code === 0) {
         toast("设置项 \"" + key + "\" 已保存", "success");
         saveLocalSettings(currentSettings);

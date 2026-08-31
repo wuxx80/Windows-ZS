@@ -13,18 +13,17 @@ ZS 装机助手是一套完整的 Windows 系统安装与维护解决方案，�
 - U 盘制作：本地写盘 + 生成 ISO 双模式，PE 写入、格式化还原、多 PE 启动盘、在线 URL 拉取 PE
 - 工具大全：磁盘管理、系统修复、密码重置、数据恢复
 - 绿色软件：软件分类、在线安装、静默安装
+- 用户登录：客户端支持用户注册/登录（用户名+密码），核心功能登录后使用；WinPE 无人值守环境自动登录
+- 炫彩动效：客户端动态流动渐变背景 + 彩色漂浮光斑 + 星尘粒子 + 入口按钮呼吸光晕
 
 ### 后台管理
 - 控制台仪表盘：统计卡片、装机趋势、镜像排行、快捷操作
 - 镜像管理：上传/下载/格式转换/校验/版本历史/标签系统
-- 客户端管理：注册审核/分组管理/版本管理/远程命令
-- 装机任务：创建/调度/监控/日志/模板
 - 无人值守模板：可视化编辑/JSON 编辑/验证
 - 软件/驱动管理：分类/上传/注入/模板
 - 网络部署：PXE 配置/网络克隆/部署报告
 - PE 定制：壁纸/启动画面/内置工具/构建导出
-- 客户工单：客户信息/维修工单/统计
-- 系统管理：用户权限/存储管理/通知/插件/Webhook/API
+- 系统管理：用户权限/存储管理/通知/定时任务/站点信息（品牌 Logo/标题/标语/版权/联系/关于）
 - 日志审计：操作日志/类型分布/清理
 - 报告统计：装机报表/客户端统计/镜像排行/工单统计
 
@@ -60,6 +59,7 @@ ZS 装机助手是一套完整的 Windows 系统安装与维护解决方案，�
 | U 盘制作与工具大全（B5 联动：写入内置工具，PE 内离线可用） | ✅ 已完成 |
 | 一键安装闭环修复（9 项：真实下载/校验/备份、认领并发保护、身份校验、任务重试复用等） | ✅ 已完成 |
 | U 盘启动制作完善（输出方式：写U盘/生成ISO；在线URL拉取PE；纯C#可引导ISO生成器 + FAT12 efisys.bin 兜底；_iso_logic_test 逻辑自测 + 在线 PE 端到端验证） | ✅ 已完成 |
+| 用户注册/登录体系 + 后台菜单精简 + 客户端炫彩动效（测试账号 wuxx80/a111111；移除客户端管理/任务管理/业务管理菜单；品牌信息对接后台设置；双端动态背景） | ✅ 已完成 |
 | 性能优化（N+1 查询消除） | ✅ 已完成 |
 | 安全审查（认证/CORS/上传/日志） | ✅ 已完成 |
 | 部署文档与打包发布（publish.ps1 / deploy_server.ps1） | ✅ 已完成 |
@@ -104,6 +104,7 @@ Windows-ZS/
 ├── server/                          ← PHP 后端项目
 │   ├── app/
 │   │   ├── controller/admin/        ← 32个后台控制器
+│   │   ├── controller/api/          ← 公开接口控制器（api/Site 站点信息）
 │   │   ├── model/                   ← 36个数据模型
 │   │   ├── service/                 ← 8个服务层
 │   │   ├── middleware/              ← 3个中间件
@@ -116,7 +117,7 @@ Windows-ZS/
 │   │   ├── admin/                   ← 管理后台前端页面
 │   │   │   ├── login.html           ← 登录页
 │   │   │   ├── index.html           ← 主布局（侧边栏+顶部栏+iframe）
-│   │   │   └── pages/               ← 29个功能页面
+│   │   │   └── pages/               ← 功能页面（客户端管理/任务管理/业务管理已移除，保留 22 个）
 │   │   └── assets/                  ← 前端静态资源
 │   │       ├── css/
 │   │       │   ├── admin.css        ← 后台样式
@@ -129,10 +130,12 @@ Windows-ZS/
 ├── WinPE_Client/                    ← WinPE 客户端 (.NET 8 WPF)
 │   ├── WinPE_Client.csproj
 │   ├── App.xaml
-│   ├── MainWindow.xaml
+│   ├── MainWindow.xaml              ← 首页（品牌信息 + 边框 + 炫彩动态背景）
 │   ├── InstallWizardWindow.xaml       ← 一键装机六步向导窗口
 │   ├── UDiskWindow.xaml               ← U 盘制作四步向导窗口
 │   ├── ToolsWindow.xaml               ← 工具大全窗口
+│   ├── SettingsWindow.xaml            ← 设置窗口（服务器地址等）
+│   ├── AboutWindow.xaml / ContactWindow.xaml / VersionWindow.xaml
 │   ├── Models/                       （含 WizardModels.cs 向导模型 / UDiskModels.cs U盘与ISO模型）
 │   ├── Services/                     （含 UDiskService/IsoBuilder/EfiSysGenerator/ToolService）
 │   ├── ViewModels/                   （含 InstallWizardViewModel/UDiskViewModel/ToolsViewModel）
@@ -141,13 +144,17 @@ Windows-ZS/
 ├── Windows_Client/                  ← Windows 客户端 (.NET 8 WPF)
 │   ├── Windows_Client.csproj
 │   ├── App.xaml
-│   ├── MainWindow.xaml
+│   ├── MainWindow.xaml              ← 首页（品牌信息 + 边框 + 炫彩动态背景）
+│   ├── LoginWindow.xaml               ← 用户注册/登录对话框
 │   ├── InstallWizardWindow.xaml       ← 一键装机六步向导窗口（安全版）
 │   ├── UDiskWindow.xaml               ← U 盘制作四步向导窗口（写U盘/生成ISO）
 │   ├── ToolsWindow.xaml               ← 工具大全窗口
+│   ├── SoftwareWindow.xaml            ← 绿色软件窗口
+│   ├── SettingsWindow.xaml            ← 设置窗口（服务器地址等）
+│   ├── AboutWindow.xaml / ContactWindow.xaml / VersionWindow.xaml
 │   ├── Models/
-│   ├── Services/                     （含 Device/DiskPart/ImageDeploy/UDiskService/IsoBuilder/EfiSysGenerator/ToolService）
-│   ├── ViewModels/                   （含 InstallWizardViewModel/UDiskViewModel/ToolsViewModel）
+│   ├── Services/                     （含 Device/DiskPart/ImageDeploy/UDiskService/IsoBuilder/EfiSysGenerator/ToolService/SessionStore）
+│   ├── ViewModels/                   （含 InstallWizardViewModel/UDiskViewModel/ToolsViewModel/SoftwareWindowViewModel）
 │   ├── Data/Tools/tools.json          ← 工具清单（53工具/10分类）
 │   └── Helpers/
 └── publish/                         ← 客户端发布产物（git 忽略）
@@ -205,9 +212,9 @@ composer install
 .\publish.ps1 -Windows
 ```
 
-## 默认管理员
-- 用户名：admin
-- 密码：admin123
+## 默认账号
+- 后台管理员：admin / admin123
+- 客户端测试账号：wuxx80 / a111111（普通用户，客户端注册/登录用）
 
 ## 许可证
 Copyright © 2026 ZS Studio. All rights reserved.

@@ -116,14 +116,15 @@ class ClientController extends BaseController
             'first_ip' => request()->ip(),
             'last_ip' => request()->ip(),
             'last_heartbeat' => date('Y-m-d H:i:s'),
-            'status' => 'pending',
+            // 登录已改为「用户注册/登录」体系，客户端设备自注册即视为已授权，无需后台人工审批
+            'status' => 'approved',
         ]);
 
         return $this->success([
             'id' => $client->id,
             'client_id' => $client->client_id,
             'status' => $client->status,
-        ], '注册成功，等待审核');
+        ], '注册成功');
     }
 
     /**

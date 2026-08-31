@@ -838,7 +838,12 @@ CREATE TABLE `zs_webhook_logs` (
 INSERT IGNORE INTO `zs_roles` (`id`, `name`, `code`, `description`, `permissions`, `status`) VALUES
 (1, '超级管理员', 'admin', '系统超级管理员，拥有所有权限', '["*"]', 1),
 (2, '普通操作员', 'operator', '普通操作员，可执行日常运维操作', '["image:view","image:upload","task:view","task:create","task:execute","client:view","software:view","software:install","report:view"]', 1),
-(3, '只读查看', 'viewer', '只读查看人员，只能查看数据无法操作', '["image:view","task:view","client:view","software:view","report:view"]', 1);
+(3, '只读查看', 'viewer', '只读查看人员，只能查看数据无法操作', '["image:view","task:view","client:view","software:view","report:view"]', 1),
+(4, '普通用户', 'user', '客户端注册的普通用户，仅限客户端登录使用', '["client:use","task:use","software:use"]', 1);
+
+-- zs_users - 客户端测试账号种子（wuxx80 / a111111，普通用户角色）
+INSERT IGNORE INTO `zs_users` (`username`, `password`, `nickname`, `role_id`, `is_super`, `status`) VALUES
+('wuxx80', '$2y$10$erqQoFeg8RmE5ijbM2EqS.7WiprKZdjXSE0uu0nTmns7sMFNG0DNG', '测试用户', 4, 0, 1);
 
 -- zs_image_tags - 镜像标签种子数据
 INSERT IGNORE INTO `zs_image_tags` (`id`, `name`, `color`, `is_auto`, `auto_rule`, `sort_order`) VALUES
