@@ -24,6 +24,7 @@ D:\Users\Desktop\Windows-ZS\
 │
 ├── _b5_logic_test\                     # B5 逻辑测试脚手架（IncludeTools 合并拷贝/空目录不中断等 4 项）
 ├── _b5_ui_harness\                     # B5 UI 自动化测试脚手架（STA WPF 测试 4 项）
+├── _iso_logic_test\                    # ISO 逻辑自测脚手架（FAT12 efisys.bin 生成 + ISO9660 结构校验 + 在线 PE 端到端）
 │
 ├── database\                           # 数据库脚本
 │   ├── install.sql                     # 35 张表建表 SQL + 种子数据
@@ -143,43 +144,67 @@ D:\Users\Desktop\Windows-ZS\
 ├── WinPE_Client\                       # WinPE 客户端（.NET 8 WPF）
 │   ├── WinPE_Client.csproj             # 项目文件
 │   ├── App.xaml                        # 应用程序入口
-│   ├── MainWindow.xaml                 # 主窗口 UI
+│   ├── MainWindow.xaml                 # 主窗口 UI（首页 4 大入口 + 待执行任务卡片）
 │   ├── MainWindow.xaml.cs              # 主窗口代码
 │   ├── InstallWizardWindow.xaml        # 一键装机六步向导窗口 UI
 │   ├── InstallWizardWindow.xaml.cs     # 向导窗口代码（拖拽/关闭）
+│   ├── UDiskWindow.xaml                # U盘制作四步向导窗口 UI（输出方式：写U盘/生成ISO）
+│   ├── UDiskWindow.xaml.cs             # U盘制作窗口代码
+│   ├── ToolsWindow.xaml                # 工具大全窗口 UI
+│   ├── ToolsWindow.xaml.cs             # 工具大全窗口代码
 │   ├── Models\                         # 数据模型
 │   │   ├── ApiResponse.cs              # API 响应模型
 │   │   ├── ImageInfo.cs                # 镜像信息模型（含缓存状态）
 │   │   ├── DiskInfo.cs                 # 磁盘/分区模型
+│   │   ├── UDiskModels.cs              # U盘制作模型（RemovableDisk/WritePlan/IsoBuildPlan/PeVersionInfo）
 │   │   └── WizardModels.cs             # 六步向导模型（环境检测/选项/步骤/冲突/分区编辑）
 │   ├── Services\                       # 服务层
 │   │   ├── ApiService.cs               # HTTP API 通信服务（含分页/过滤/任务控制）
 │   │   ├── DeviceService.cs            # 设备信息采集（WMI）
 │   │   ├── ImageDeployService.cs       # 镜像部署引擎
-│   │   └── DiskPartService.cs          # DiskPart 分区工具
+│   │   ├── DiskPartService.cs          # DiskPart 分区工具
+│   │   ├── UDiskService.cs             # U盘制作服务（枚举/校验/PE下载/写盘/ISO构建/在线URL拉取）
+│   │   ├── IsoBuilder.cs               # 可引导ISO生成器（ISO9660+Joliet+El Torito 双引导）
+│   │   ├── EfiSysGenerator.cs          # UEFI引导镜像生成（FAT12 efisys.bin 兜底）
+│   │   └── ToolService.cs              # 工具大全服务
 │   ├── ViewModels\                     # 视图模型
 │   │   ├── MainViewModel.cs            # 主视图模型
+│   │   ├── UDiskViewModel.cs           # U盘制作视图模型（输出方式/USB与ISO双流程）
+│   │   ├── ToolsViewModel.cs           # 工具大全视图模型
 │   │   └── InstallWizardViewModel.cs   # 六步向导视图模型（完整装机执行）
+│   ├── Data\Tools\tools.json           # 工具清单（53工具/10分类）
 │   └── Helpers\                        # 辅助类
 │       └── Converters.cs               # 值转换器（含 StringToBrush/分区方案单选）
 │
 ├── Windows_Client\                     # Windows 客户端（.NET 8 WPF）
 │   ├── Windows_Client.csproj           # 项目文件
 │   ├── App.xaml                        # 应用程序入口
-│   ├── MainWindow.xaml                 # 主窗口 UI（四大入口）
+│   ├── MainWindow.xaml                 # 主窗口 UI（四大入口 + 最近任务卡片）
 │   ├── MainWindow.xaml.cs              # 主窗口代码
 │   ├── InstallWizardWindow.xaml        # 一键装机六步向导窗口 UI（安全版）
 │   ├── InstallWizardWindow.xaml.cs     # 向导窗口代码（拖拽/关闭）
+│   ├── UDiskWindow.xaml                # U盘制作四步向导窗口 UI（输出方式：写U盘/生成ISO）
+│   ├── UDiskWindow.xaml.cs             # U盘制作窗口代码
+│   ├── ToolsWindow.xaml                # 工具大全窗口 UI
+│   ├── ToolsWindow.xaml.cs             # 工具大全窗口代码
 │   ├── Models\                         # 数据模型
-│   │   └── ApiModels.cs                # API 数据模型（含向导相关模型）
+│   │   ├── ApiModels.cs                # API 数据模型（含向导相关模型）
+│   │   └── UDiskModels.cs              # U盘制作模型（RemovableDisk/WritePlan/IsoBuildPlan/PeVersionInfo）
 │   ├── Services\                       # 服务层
 │   │   ├── ApiService.cs               # HTTP API 通信服务（含分页/过滤/任务控制）
 │   │   ├── DeviceService.cs            # 设备信息采集（WMI，自 WinPE 迁移）
 │   │   ├── ImageDeployService.cs       # 镜像部署引擎（自 WinPE 迁移）
-│   │   └── DiskPartService.cs          # DiskPart 分区工具（自 WinPE 迁移）
+│   │   ├── DiskPartService.cs          # DiskPart 分区工具（自 WinPE 迁移）
+│   │   ├── UDiskService.cs             # U盘制作服务（枚举/校验/PE下载/写盘/ISO构建/在线URL拉取）
+│   │   ├── IsoBuilder.cs               # 可引导ISO生成器（ISO9660+Joliet+El Torito 双引导）
+│   │   ├── EfiSysGenerator.cs          # UEFI引导镜像生成（FAT12 efisys.bin 兜底）
+│   │   └── ToolService.cs              # 工具大全服务
 │   ├── ViewModels\                     # 视图模型
 │   │   ├── MainViewModel.cs            # 主视图模型
+│   │   ├── UDiskViewModel.cs           # U盘制作视图模型（输出方式/USB与ISO双流程）
+│   │   ├── ToolsViewModel.cs           # 工具大全视图模型
 │   │   └── InstallWizardViewModel.cs   # 六步向导视图模型（安全版：仅建任务，装机在 WinPE 执行）
+│   ├── Data\Tools\tools.json           # 工具清单（53工具/10分类）
 │   └── Helpers\                        # 辅助类
 │       └── Converters.cs               # 值转换器（含 StringToBrush/分区方案单选）
 │
@@ -190,7 +215,9 @@ D:\Users\Desktop\Windows-ZS\
 
 # 版本更新
 
-当前版本：v0.0.268311（含闭环整理轮 R1）
+当前版本：v0.0.268311（含增补轮 R1~R4）
 API 联调验证 + 性能优化 + 安全审查 + 部署文档 + 打包发布 已完成
 一键装机六步向导（WinPE 完整版 + Windows 安全版）已完成并同步
 全功能流程闭环整理已完成：WinPE 首页 4 大入口 + 待执行任务续装卡片、Windows 首页最近任务卡片、双端 30 秒心跳、无人值守 XML 写入 + 首次登录脚本生成、后端仪表盘智能统计 + 任务停滞检测（详见 设计文档\全功能流程闭环清单.md）
+U盘制作与工具大全已完成（R2）：四步向导 + 53工具/10分类 + B5 工具联动；一键安装 9 项闭环修复完成（R3）
+U盘启动制作完善完成（R4）：输出方式支持「写U盘 / 生成ISO镜像」双模式；在线 URL 直接拉取 PE；纯 C# 可引导 ISO 生成器（ISO9660+Joliet+El Torito 双引导）+ FAT12 efisys.bin 兜底；_iso_logic_test 逻辑自测 + 在线 PE 端到端验证通过

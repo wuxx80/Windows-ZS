@@ -50,6 +50,17 @@ namespace Windows_Client.Models
         public bool IncludeTools { get; set; }
     }
 
+    /// <summary>ISO 镜像构建计划（生成启动 ISO）</summary>
+    public class IsoBuildPlan
+    {
+        public string PeFilePath { get; set; } = "";   // 源 PE：.iso / 目录
+        public string OutputPath { get; set; } = "";    // 目标 .iso 完整路径
+        public string IsoLabel { get; set; } = "ZS_PE";
+        public bool IncludeClient { get; set; } = true;
+        public bool IncludeTools { get; set; }
+        public string ClientDir { get; set; } = "";     // 客户端发布目录（含 Tools）
+    }
+
     /// <summary>PE 版本信息（服务器来源）</summary>
     public class PeVersionInfo
     {

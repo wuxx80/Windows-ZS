@@ -31,6 +31,12 @@ namespace Windows_Client.ViewModels
 
             InitSteps();
             InitCommands();
+            // 默认选中项（避免首屏空白）
+            SelectedOutputMode = OutputModes[0];
+            SelectedPeSource = PeSources[0];
+            SelectedFileSystem = FileSystems[0];
+            SelectedBootType = BootTypes[0];
+            SelectedPartition = PartitionSchemes[0];
             RefreshDisksCommand.Execute(null);
         }
 
@@ -53,7 +59,32 @@ namespace Windows_Client.ViewModels
 
         public ObservableCollection<StepNav> Steps { get; } = new();
 
+        // ==================== 步骤①a 输出方式（写U盘 / 生成ISO） ====================
+        public ObservableCollection<RadioOption> OutputModes { get; } = new()
+        {
+            new RadioOption { Key = "udisk", Name = "写入 U 盘", Sub = "直接制作可启动 U 盘" },
+            new RadioOption { Key = "iso", Name = "生成 ISO 镜像", Sub = "打包成可启动镜像" },
+        };
+        private RadioOption? _selectedOutputMode;
+        public RadioOption? SelectedOutputMode
+        {
+            get => _selectedOutputMode;
+            set { _selectedOutputMode = value; OnPropertyChanged(); OnPropertyChanged(nameof(IsUDiskMode)); OnPropertyChanged(nameof(IsIsoMode)); OnPropertyChanged(nameof(ConfirmPrompt)); OnPropertyChanged(nameof(ConfirmPassed)); OnPropertyChanged(nameof(DestructiveWarnText)); OnPropertyChanged(nameof(StartButtonText)); }
+        }
+        public bool IsUDiskMode => SelectedOutputMode?.Key == "udisk";
+        public bool IsIsoMode => SelectedOutputMode?.Key == "iso";
+        public string StartButtonText => IsIsoMode ? "开始生成" : "开始制作";
+
         // ==================== 步骤① U盘 ====================
+
+        // ==================== ISO 输出路径（生成 ISO 模式） ====================
+        private string _isoOutputPath = "";
+        public string IsoOutputPath
+        {
+            get => _isoOutputPath;
+            set { _isoOutputPath = value; OnPropertyChanged(); OnPropertyChanged(nameof(IsoStatusText)); OnPropertyChanged(nameof(ConfirmPassed)); }
+        }
+        public string IsoStatusText => string.IsNullOrEmpty(IsoOutputPath) ? "请选择 ISO 输出路径" : "输出到: " + IsoOutputPath;
         public ObservableCollection<RemovableDisk> UDisks { get; } = new();
         private RemovableDisk? _selectedUDisk;
         public RemovableDisk? SelectedUDisk
@@ -71,15 +102,17 @@ namespace Windows_Client.ViewModels
         {
             new PeSourceItem { Key = "server", Name = "服务器 PE 版本", Desc = "在线拉取" },
             new PeSourceItem { Key = "local", Name = "本地文件", Desc = "选择 .iso/.wim" },
+            new PeSourceItem { Key = "url", Name = "在线 URL", Desc = "直接拉取 PE 镜像" },
         };
         private PeSourceItem? _selectedPeSource;
         public PeSourceItem? SelectedPeSource
         {
             get => _selectedPeSource;
-            set { _selectedPeSource = value; OnPropertyChanged(); OnPropertyChanged(nameof(IsServerSource)); OnPropertyChanged(nameof(IsLocalSource)); }
+            set { _selectedPeSource = value; OnPropertyChanged(); OnPropertyChanged(nameof(IsServerSource)); OnPropertyChanged(nameof(IsLocalSource)); OnPropertyChanged(nameof(IsUrlSource)); }
         }
         public bool IsServerSource => SelectedPeSource?.Key == "server";
         public bool IsLocalSource => SelectedPeSource?.Key == "local";
+        public bool IsUrlSource => SelectedPeSource?.Key == "url";
 
         public ObservableCollection<PeVersionInfo> PeVersions { get; } = new();
         private PeVersionInfo? _selectedPeVersion;
@@ -90,10 +123,13 @@ namespace Windows_Client.ViewModels
         }
         private string _peFilePath = "";
         public string PeFilePath { get => _peFilePath; set { _peFilePath = value; OnPropertyChanged(); OnPropertyChanged(nameof(PeStatusText)); } }
+        private string _peUrl = "";
+        public string PeUrl { get => _peUrl; set { _peUrl = value; OnPropertyChanged(); OnPropertyChanged(nameof(PeStatusText)); OnPropertyChanged(nameof(ConfirmPassed)); } }
         public string PeStatusText
         {
             get
             {
+                if (IsUrlSource) return string.IsNullOrEmpty(PeUrl) ? "请输入 PE 文件的直接下载 URL" : "在线 URL: " + PeUrl;
                 if (IsLocalSource) return string.IsNullOrEmpty(PeFilePath) ? "请选择 PE 文件" : "已选: " + PeFilePath;
                 return SelectedPeVersion == null ? "请选择 PE 版本" : SelectedPeVersion.DisplayText;
             }
@@ -168,8 +204,9 @@ namespace Windows_Client.ViewModels
         public ObservableCollection<SummaryItem> SummaryItems { get; } = new();
         private string _confirmInput = "";
         public string ConfirmInput { get => _confirmInput; set { _confirmInput = value; OnPropertyChanged(); OnPropertyChanged(nameof(ConfirmPassed)); } }
-        public bool ConfirmPassed => _confirmInput.Trim() == (SelectedUDisk?.Index.ToString() ?? "-1");
-        public string ConfirmPrompt => "请输入目标盘号（磁盘 " + SelectedUDisk?.Index + "）以确认:";
+        public bool ConfirmPassed => IsIsoMode ? !string.IsNullOrEmpty(IsoOutputPath) : _confirmInput.Trim() == (SelectedUDisk?.Index.ToString() ?? "-1");
+        public string ConfirmPrompt => IsIsoMode ? "即将基于所选 PE 生成可启动 ISO 镜像（不会格式化任何磁盘）：" : "请输入目标盘号（磁盘 " + SelectedUDisk?.Index + "）以确认:";
+        public string DestructiveWarnText => IsIsoMode ? "将解包所选 PE 并按需写入客户端/工具，打包成可启动 ISO：" : "以下操作将【清空并格式化】该 U 盘，请确认：";
 
         public ObservableCollection<UdiskExecStep> ExecSteps { get; } = new();
         public ObservableCollection<LogLine> Logs { get; } = new();
@@ -202,6 +239,7 @@ namespace Windows_Client.ViewModels
         public ICommand RefreshPeCommand { get; private set; } = null!;
         public ICommand SelectSourceCommand { get; private set; } = null!;
         public ICommand BrowsePeCommand { get; private set; } = null!;
+        public ICommand BrowseIsoOutputCommand { get; private set; } = null!;
         public ICommand SelectFsCommand { get; private set; } = null!;
         public ICommand SelectBootCommand { get; private set; } = null!;
         public ICommand SelectPartitionCommand { get; private set; } = null!;
@@ -218,6 +256,7 @@ namespace Windows_Client.ViewModels
             RefreshPeCommand = new RelayCommand(async () => await RefreshPe());
             SelectSourceCommand = new RelayCommand<PeSourceItem>(s => { SelectedPeSource = s; });
             BrowsePeCommand = new RelayCommand(BrowsePe);
+            BrowseIsoOutputCommand = new RelayCommand(BrowseIsoOutput);
             SelectFsCommand = new RelayCommand<RadioOption>(o => SelectedFileSystem = o);
             SelectBootCommand = new RelayCommand<RadioOption>(o => SelectedBootType = o);
             SelectPartitionCommand = new RelayCommand<RadioOption>(o => SelectedPartition = o);
@@ -250,11 +289,16 @@ namespace Windows_Client.ViewModels
 
         private async Task GoNext()
         {
-            if (CurrentStep == 0 && SelectedUDisk == null) { StatusText = "请先选择 U 盘"; return; }
+            if (CurrentStep == 0)
+            {
+                if (IsUDiskMode && SelectedUDisk == null) { StatusText = "请先选择 U 盘"; return; }
+                if (IsIsoMode && string.IsNullOrEmpty(IsoOutputPath)) { StatusText = "请选择 ISO 输出路径"; return; }
+            }
             if (CurrentStep == 1)
             {
                 if (IsLocalSource && string.IsNullOrEmpty(PeFilePath)) { StatusText = "请选择 PE 文件"; return; }
                 if (IsServerSource && SelectedPeVersion == null) { StatusText = "请选择 PE 版本"; return; }
+                if (IsUrlSource && string.IsNullOrEmpty(PeUrl)) { StatusText = "请输入 PE 下载 URL"; return; }
             }
             if (CurrentStep == 2) { BuildSummary(); CurrentStep = 3; return; }
             if (CurrentStep < 3) CurrentStep++;
@@ -296,17 +340,162 @@ namespace Windows_Client.ViewModels
                 PeFilePath = dlg.FileName;
         }
 
+        private void BrowseIsoOutput()
+        {
+            var dlg = new SaveFileDialog
+            {
+                Filter = "ISO 镜像 (*.iso)|*.iso",
+                Title = "选择 ISO 输出路径",
+                FileName = "ZS_PE.iso"
+            };
+            if (dlg.ShowDialog() == true)
+                IsoOutputPath = dlg.FileName;
+        }
+
         private void BuildSummary()
         {
             SummaryItems.Clear();
+            if (IsIsoMode)
+            {
+                SummaryItems.Add(new SummaryItem { Icon = "\uD83D\uDCDA", Title = "输出方式", Content = "生成 ISO 镜像" });
+                SummaryItems.Add(new SummaryItem { Icon = "\uD83D\uDCE6", Title = "PE 源", Content = PeDisplayText });
+                SummaryItems.Add(new SummaryItem { Icon = "\uD83D\uDCC1", Title = "输出路径", Content = IsoOutputPath });
+                SummaryItems.Add(new SummaryItem { Icon = "\uD83D\uDDA5\uFE0F", Title = "附加", Content = (IncludeClient ? "写入装机助手客户端" : "不写入客户端") + (IncludeTools ? " · 写入内置工具" : "") });
+                return;
+            }
             SummaryItems.Add(new SummaryItem { Icon = "\uD83D\uDCBE", Title = "目标盘", Content = SelectedUDisk?.Model + "  " + SelectedUDisk?.CapacityText + "（磁盘 " + SelectedUDisk?.Index + "）" });
-            SummaryItems.Add(new SummaryItem { Icon = "\uD83D\uDCE6", Title = "PE 源", Content = IsLocalSource ? PeFilePath : (SelectedPeVersion?.DisplayText ?? "") });
+            SummaryItems.Add(new SummaryItem { Icon = "\uD83D\uDCE6", Title = "PE 源", Content = PeDisplayText });
             SummaryItems.Add(new SummaryItem { Icon = "\u2699\uFE0F", Title = "文件系统", Content = SelectedFileSystem?.Name + " · " + SelectedBootType?.Name });
             SummaryItems.Add(new SummaryItem { Icon = "\uD83C\uDFF7\uFE0F", Title = "卷标", Content = VolumeLabel });
             SummaryItems.Add(new SummaryItem { Icon = "\uD83D\uDDA5\uFE0F", Title = "附加", Content = (IncludeClient ? "写入装机助手客户端" : "不写入客户端") + (ApplyCustomize ? " · 应用 PE 定制" : "") + (IncludeTools ? " · 写入内置工具" : "") });
         }
 
+        /// <summary>PE 源显示文本（确认页复用）</summary>
+        private string PeDisplayText
+        {
+            get
+            {
+                if (IsUrlSource) return "在线 URL: " + PeUrl;
+                if (IsLocalSource) return PeFilePath;
+                return SelectedPeVersion?.DisplayText ?? "";
+            }
+        }
+
         private async Task StartExecution()
+        {
+            if (IsIsoMode) { await StartIsoBuild(); return; }
+            await StartUdiskWrite();
+        }
+
+        /// <summary>生成 ISO 镜像（无需管理员、无需选中 U 盘、无写盘锁）</summary>
+        private async Task StartIsoBuild()
+        {
+            if (string.IsNullOrEmpty(IsoOutputPath)) return;
+            _cts = new CancellationTokenSource();
+
+            IsExecuting = true;
+            IsFinished = false;
+            ResultKind = "";
+            Logs.Clear();
+            ExecSteps.Clear();
+            AddExecStep("下载/准备 PE 文件");
+            ProgressValue = 0;
+            Log("开始生成 ISO 镜像...");
+
+            try
+            {
+                // ① 准备 PE 文件（服务器源 / 在线URL / 本地文件）
+                var peFile = "";
+                if (IsServerSource && SelectedPeVersion != null)
+                {
+                    if (string.IsNullOrEmpty(SelectedPeVersion.DownloadUrl))
+                    {
+                        UpdateExecStep(new UdiskExecStep { Name = "下载/准备 PE 文件", Status = "failed", Detail = "服务器未托管文件" });
+                        Fail("PE 不可下载", "服务器未托管该 PE 文件，请先在后台上传");
+                        return;
+                    }
+                    var cacheDir = Path.Combine(Path.GetTempPath(), "ZS_Cache", "pe");
+                    Log("下载 PE: " + SelectedPeVersion.Name + " ...");
+                    var dl = await _udisk.DownloadPeAsync(SelectedPeVersion, SelectedPeVersion.DownloadUrl, cacheDir,
+                        new Progress<int>(p => ProgressValue = p / 2), _cts.Token);
+                    if (_cts.IsCancellationRequested) { FinishCanceled(); return; }
+                    if (!dl.Ok) { UpdateExecStep(new UdiskExecStep { Name = "下载/准备 PE 文件", Status = "failed", Detail = dl.Error }); Fail("PE 下载失败", dl.Error); return; }
+                    UpdateExecStep(new UdiskExecStep { Name = "下载/准备 PE 文件", Status = "completed", Detail = "下载完成" });
+                    peFile = dl.Path;
+                }
+                else if (IsUrlSource)
+                {
+                    var cacheDir = Path.Combine(Path.GetTempPath(), "ZS_Cache", "pe");
+                    Log("在线拉取 PE: " + PeUrl);
+                    var dl = await _udisk.DownloadPeUrlAsync(PeUrl, cacheDir,
+                        new Progress<int>(p => ProgressValue = p / 2), _cts.Token);
+                    if (_cts.IsCancellationRequested) { FinishCanceled(); return; }
+                    if (!dl.Ok) { UpdateExecStep(new UdiskExecStep { Name = "下载/准备 PE 文件", Status = "failed", Detail = dl.Error }); Fail("PE 下载失败", dl.Error); return; }
+                    UpdateExecStep(new UdiskExecStep { Name = "下载/准备 PE 文件", Status = "completed", Detail = "下载完成" });
+                    peFile = dl.Path;
+                }
+                else
+                {
+                    peFile = PeFilePath;
+                    UpdateExecStep(new UdiskExecStep { Name = "下载/准备 PE 文件", Status = "completed", Detail = "使用本地文件" });
+                }
+                ProgressValue = 5;
+
+                // ② 校验 PE 源存在
+                if (string.IsNullOrEmpty(peFile) || !File.Exists(peFile))
+                {
+                    UpdateExecStep(new UdiskExecStep { Name = "下载/准备 PE 文件", Status = "failed", Detail = "PE 文件不存在" });
+                    Fail("PE 文件无效", "所选 PE 文件不存在或下载失败");
+                    return;
+                }
+
+                // ③ 构建 ISO
+                var plan = new IsoBuildPlan
+                {
+                    PeFilePath = peFile,
+                    OutputPath = IsoOutputPath,
+                    IsoLabel = SanitizeLabel(VolumeLabel),
+                    IncludeClient = IncludeClient,
+                    IncludeTools = IncludeTools,
+                    ClientDir = _clientDir,
+                };
+                AddExecStep("解包 PE 并写入客户端/工具");
+                AddExecStep("构建 ISO 镜像");
+                var build = await _udisk.BuildIsoAsync(plan, Log,
+                    new Progress<int>(p => ProgressValue = 5 + p * 90 / 100), _cts.Token);
+                if (_cts.IsCancellationRequested) { FinishCanceled(); return; }
+                if (!build.Ok)
+                {
+                    UpdateExecStep(new UdiskExecStep { Name = "构建 ISO 镜像", Status = "failed", Detail = build.Error });
+                    Fail("ISO 生成失败", build.Error);
+                    return;
+                }
+                UpdateExecStep(new UdiskExecStep { Name = "解包 PE 并写入客户端/工具", Status = "completed", Detail = "完成" });
+                UpdateExecStep(new UdiskExecStep { Name = "构建 ISO 镜像", Status = "completed", Detail = "生成完成" });
+
+                ResultKind = "success";
+                IsFinished = true;
+                ProgressValue = 100;
+                StatusText = "ISO 镜像生成完成";
+            }
+            catch (OperationCanceledException)
+            {
+                FinishCanceled();
+            }
+            catch (Exception ex)
+            {
+                Fail("生成异常", ex.Message);
+            }
+            finally
+            {
+                IsExecuting = false;
+                _cts?.Dispose();
+                _cts = null;
+            }
+        }
+
+        /// <summary>写入 U 盘（管理员权限预检 + 全局写锁 + 四步执行）</summary>
+        private async Task StartUdiskWrite()
         {
             if (SelectedUDisk == null) return;
             _cts = new CancellationTokenSource();
@@ -336,13 +525,13 @@ namespace Windows_Client.ViewModels
             ResultKind = "";
             Logs.Clear();
             ExecSteps.Clear();
-            if (IsServerSource) AddExecStep("下载 PE 文件");
+            if (IsServerSource || IsUrlSource) AddExecStep("下载 PE 文件");
             ProgressValue = 0;
             Log("开始制作 U 盘，目标磁盘 " + SelectedUDisk.Index + " ...");
 
             try
             {
-                // 下载 PE（服务器源且未缓存）
+                // 下载 PE（服务器源 / 在线URL / 本地文件）
                 var peFile = "";
                 if (IsServerSource && SelectedPeVersion != null)
                 {
@@ -355,6 +544,22 @@ namespace Windows_Client.ViewModels
                     var cacheDir = Path.Combine(Path.GetTempPath(), "ZS_Cache", "pe");
                     Log("下载 PE: " + SelectedPeVersion.Name + " ...");
                     var dl = await _udisk.DownloadPeAsync(SelectedPeVersion, SelectedPeVersion.DownloadUrl, cacheDir,
+                        new Progress<int>(p => ProgressValue = p / 2), _cts.Token);
+                    if (_cts.IsCancellationRequested) { FinishCanceled(); return; }
+                    if (!dl.Ok)
+                    {
+                        UpdateExecStep(new UdiskExecStep { Name = "下载 PE 文件", Status = "failed", Detail = dl.Error });
+                        Fail("PE 下载失败", dl.Error);
+                        return;
+                    }
+                    UpdateExecStep(new UdiskExecStep { Name = "下载 PE 文件", Status = "completed", Detail = "下载完成" });
+                    peFile = dl.Path;
+                }
+                else if (IsUrlSource)
+                {
+                    var cacheDir = Path.Combine(Path.GetTempPath(), "ZS_Cache", "pe");
+                    Log("在线拉取 PE: " + PeUrl);
+                    var dl = await _udisk.DownloadPeUrlAsync(PeUrl, cacheDir,
                         new Progress<int>(p => ProgressValue = p / 2), _cts.Token);
                     if (_cts.IsCancellationRequested) { FinishCanceled(); return; }
                     if (!dl.Ok)
@@ -379,10 +584,10 @@ namespace Windows_Client.ViewModels
                     BootType = SelectedBootType?.Key ?? "both",
                     PartitionScheme = SelectedBootType?.Key == "legacy" ? "single" : (SelectedPartition?.Key ?? "single"),
                     VolumeLabel = SanitizeLabel(VolumeLabel),
-                    PeSource = IsLocalSource ? "local" : "server",
+                    PeSource = IsLocalSource ? "local" : (IsUrlSource ? "url" : "server"),
                     PeVersion = SelectedPeVersion,
                     PeFilePath = peFile,
-                    PeDisplay = IsLocalSource ? Path.GetFileName(peFile) : (SelectedPeVersion?.Name ?? ""),
+                    PeDisplay = Path.GetFileName(peFile),
                     IncludeClient = IncludeClient,
                     ApplyCustomize = ApplyCustomize,
                     IncludeTools = IncludeTools,

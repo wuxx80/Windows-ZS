@@ -241,7 +241,7 @@
 
         <!-- ===== 内容区域 ===== -->
         <Grid Grid.Row="2">
-            <!-- 步骤① 选择 U 盘 -->
+            <!-- 步骤① 输出方式 + 目标 -->
             <Grid Visibility="{Binding IsStep0, Converter={StaticResource BoolToVis}}" Margin="24">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
@@ -250,34 +250,75 @@
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
                 <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,10">
-                    <TextBlock Text="选择 U 盘" FontSize="18" Foreground="#333" VerticalAlignment="Center"/>
-                    <Button Grid.Column="1" Content="刷新" Style="{StaticResource SecondaryButton}" Margin="12,0,0,0" Command="{Binding RefreshDisksCommand}"/>
+                    <TextBlock Text="选择输出方式" FontSize="18" Foreground="#333" VerticalAlignment="Center"/>
                 </StackPanel>
-                <TextBlock Grid.Row="1" Text="{Binding StatusText}" FontSize="13" Foreground="#8C8C8C" Margin="0,0,0,10"/>
-                <ListBox Grid.Row="2" ItemsSource="{Binding UDisks}" SelectedItem="{Binding SelectedUDisk}"
-                         ItemContainerStyle="{StaticResource CardListBoxItem}"
-                         ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                         Visibility="{Binding HasNoUDisk, Converter={StaticResource InvBoolToVis}}">
-                    <ListBox.ItemTemplate>
-                        <DataTemplate>
-                            <StackPanel>
-                                <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="磁盘 " FontSize="14" Foreground="#333"/>
-                                    <TextBlock Text="{Binding Index}" FontSize="14" Foreground="#333"/>
-                                    <TextBlock Text="{Binding Model}" FontSize="14" Foreground="#333" Margin="10,0,0,0"/>
-                                    <TextBlock Text="{Binding CapacityText}" FontSize="12" Foreground="#666" Margin="10,1,0,0" VerticalAlignment="Center"/>
-                                </StackPanel>
-                                <TextBlock Text="{Binding DetailText}" FontSize="12" Foreground="#8C8C8C" Margin="0,4,0,0"/>
-                            </StackPanel>
-                        </DataTemplate>
-                    </ListBox.ItemTemplate>
+                <ListBox Grid.Row="1" ItemsSource="{Binding OutputModes}" SelectedItem="{Binding SelectedOutputMode}"
+                         ItemContainerStyle="{StaticResource PillItem}" Height="64" Margin="0,0,0,14">
+                    <ListBox.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <StackPanel Orientation="Horizontal"/>
+                        </ItemsPanelTemplate>
+                    </ListBox.ItemsPanel>
                 </ListBox>
-                <StackPanel Grid.Row="2" VerticalAlignment="Center" HorizontalAlignment="Center"
-                            Visibility="{Binding HasNoUDisk, Converter={StaticResource BoolToVis}}">
-                    <TextBlock Text="💾" FontSize="40" HorizontalAlignment="Center"/>
-                    <TextBlock Text="未检测到 U 盘" FontSize="15" Foreground="#666" Margin="0,10,0,4" HorizontalAlignment="Center"/>
-                    <TextBlock Text="请插入 U 盘后点击「刷新」" FontSize="12" Foreground="#999" HorizontalAlignment="Center"/>
-                </StackPanel>
+                <!-- 写入 U 盘模式 -->
+                <Grid Grid.Row="2" Visibility="{Binding IsUDiskMode, Converter={StaticResource BoolToVis}}">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,10">
+                        <TextBlock Text="选择 U 盘" FontSize="13" Foreground="#333" VerticalAlignment="Center"/>
+                        <Button Content="刷新" Style="{StaticResource SecondaryButton}" Margin="12,0,0,0" Command="{Binding RefreshDisksCommand}"/>
+                    </StackPanel>
+                    <ListBox Grid.Row="1" ItemsSource="{Binding UDisks}" SelectedItem="{Binding SelectedUDisk}"
+                             ItemContainerStyle="{StaticResource CardListBoxItem}"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                             Visibility="{Binding HasNoUDisk, Converter={StaticResource InvBoolToVis}}">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel>
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="磁盘 " FontSize="14" Foreground="#333"/>
+                                        <TextBlock Text="{Binding Index}" FontSize="14" Foreground="#333"/>
+                                        <TextBlock Text="{Binding Model}" FontSize="14" Foreground="#333" Margin="10,0,0,0"/>
+                                        <TextBlock Text="{Binding CapacityText}" FontSize="12" Foreground="#666" Margin="10,1,0,0" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                    <TextBlock Text="{Binding DetailText}" FontSize="12" Foreground="#8C8C8C" Margin="0,4,0,0"/>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                    <StackPanel Grid.Row="1" VerticalAlignment="Center" HorizontalAlignment="Center"
+                                Visibility="{Binding HasNoUDisk, Converter={StaticResource BoolToVis}}">
+                        <TextBlock Text="💾" FontSize="40" HorizontalAlignment="Center"/>
+                        <TextBlock Text="未检测到 U 盘" FontSize="15" Foreground="#666" Margin="0,10,0,4" HorizontalAlignment="Center"/>
+                        <TextBlock Text="请插入 U 盘后点击「刷新」" FontSize="12" Foreground="#999" HorizontalAlignment="Center"/>
+                    </StackPanel>
+                    <Grid Grid.Row="2">
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Stretch">
+                            <TextBlock Text="{Binding StatusText}" FontSize="13" Foreground="#8C8C8C" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Grid>
+                </Grid>
+
+                <!-- 生成 ISO 镜像模式 -->
+                <Grid Grid.Row="2" Visibility="{Binding IsIsoMode, Converter={StaticResource BoolToVis}}">
+                    <StackPanel VerticalAlignment="Top">
+                        <TextBlock Text="选择 ISO 输出路径" FontSize="13" Foreground="#333" Margin="0,0,0,10"/>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBox Grid.Column="0" Text="{Binding IsoOutputPath}" IsReadOnly="True" Height="36" FontSize="13" Padding="8,0" Background="#FAFAFA" ToolTip="{Binding IsoOutputPath}"/>
+                            <Button Grid.Column="1" Content="浏览" Style="{StaticResource SecondaryButton}" Margin="10,0,0,0" Command="{Binding BrowseIsoOutputCommand}"/>
+                        </Grid>
+                        <TextBlock Text="{Binding IsoStatusText}" FontSize="12" Foreground="#8C8C8C" Margin="0,8,0,0"/>
+                        <TextBlock Text="生成的 ISO 支持 UEFI + Legacy 双引导，可直接刻录或用于虚拟机" FontSize="12" Foreground="#8C8C8C" Margin="0,4,0,0"/>
+                    </StackPanel>
+                </Grid>
+
                 <TextBlock Grid.Row="3" Text="{Binding UDiskWarnText}" FontSize="13" Foreground="#FF4D4F" Margin="0,8,0,0"/>
             </Grid>
 
@@ -352,6 +393,16 @@
                         <TextBlock Text="支持 .iso / .wim 格式" FontSize="12" Foreground="#8C8C8C" Margin="0,8,0,0"/>
                     </StackPanel>
                 </Grid>
+
+                <!-- 在线 URL 来源 -->
+                <Grid Grid.Row="2" Visibility="{Binding IsUrlSource, Converter={StaticResource BoolToVis}}" Margin="0,8,0,0">
+                    <StackPanel VerticalAlignment="Top">
+                        <TextBlock Text="输入 PE 镜像直链" FontSize="13" Foreground="#333" Margin="0,0,0,10"/>
+                        <TextBox Text="{Binding PeUrl, UpdateSourceTrigger=PropertyChanged}" Height="36" FontSize="13" Padding="8,0"
+                                 VerticalContentAlignment="Center" AcceptsReturn="False"/>
+                        <TextBlock Text="例如 https://example.com/path/WPE10.iso，程序将直接下载该镜像用于制作" FontSize="12" Foreground="#8C8C8C" Margin="0,8,0,0" TextWrapping="Wrap"/>
+                    </StackPanel>
+                </Grid>
             </Grid>
 
             <!-- 步骤③ 制作选项 -->
@@ -410,7 +461,7 @@
                     <TextBlock Grid.Row="0" Text="确认与执行" FontSize="18" Foreground="#333" Margin="0,0,0,12"/>
                     <Border Grid.Row="1" Background="White" CornerRadius="8" Padding="14">
                         <StackPanel>
-                            <TextBlock Text="以下操作将【清空并格式化】该 U 盘，请确认：" FontSize="13" Foreground="#FF4D4F" Margin="0,0,0,10"/>
+                            <TextBlock Text="{Binding DestructiveWarnText}" FontSize="13" Foreground="#FF4D4F" Margin="0,0,0,10" TextWrapping="Wrap"/>
                             <ItemsControl ItemsSource="{Binding SummaryItems}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
@@ -476,10 +527,11 @@
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
                         <StackPanel Grid.Column="0" Visibility="{Binding IsExecuting, Converter={StaticResource InvBoolToVis}}">
-                            <TextBlock Text="{Binding ConfirmPrompt}" FontSize="13" Foreground="#333" Margin="0,0,0,6"/>
-                            <TextBox Text="{Binding ConfirmInput}" Width="120" Height="32" FontSize="14" Padding="8,0" HorizontalAlignment="Left"/>
+                            <TextBlock Text="{Binding ConfirmPrompt}" FontSize="13" Foreground="#333" Margin="0,0,0,6" TextWrapping="Wrap"/>
+                            <TextBox Text="{Binding ConfirmInput}" Width="120" Height="32" FontSize="14" Padding="8,0" HorizontalAlignment="Left"
+                                     Visibility="{Binding IsUDiskMode, Converter={StaticResource BoolToVis}}"/>
                         </StackPanel>
-                        <Button Grid.Column="1" Content="开始制作" Style="{StaticResource DangerButton}" Command="{Binding StartCommand}" Margin="12,0,0,0"/>
+                        <Button Grid.Column="1" Content="{Binding StartButtonText}" Style="{StaticResource DangerButton}" Command="{Binding StartCommand}" Margin="12,0,0,0"/>
                     </Grid>
                     <TextBlock Grid.Row="4" Text="{Binding StatusText}" FontSize="13" Foreground="#666" Margin="0,8,0,0"/>
                     <TextBlock Grid.Row="5" Text="{Binding FailReason}" FontSize="13" Foreground="#FF4D4F" Margin="0,4,0,0" TextWrapping="Wrap"/>

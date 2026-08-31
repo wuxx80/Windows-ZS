@@ -52,3 +52,9 @@ zs_server_deploy.zip
 # Build output
 bin/
 obj/
+
+# UI 测试截图残留
+_tools_shot.png
+_tools_search_shot.png
+_tools_filter_shot.png
+360截图*.jpg

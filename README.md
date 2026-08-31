@@ -10,7 +10,7 @@ ZS 装机助手是一套完整的 Windows 系统安装与维护解决方案，�
 
 ### 核心功能
 - 一键装机：镜像选择、磁盘分区、驱动注入、无人值守、引导修复全自动完成
-- U 盘制作：PE 写入、格式化还原、多 PE 启动盘
+- U 盘制作：本地写盘 + 生成 ISO 双模式，PE 写入、格式化还原、多 PE 启动盘、在线 URL 拉取 PE
 - 工具大全：磁盘管理、系统修复、密码重置、数据恢复
 - 绿色软件：软件分类、在线安装、静默安装
 
@@ -59,6 +59,7 @@ ZS 装机助手是一套完整的 Windows 系统安装与维护解决方案，�
 | 全功能流程闭环整理（首页 + 一键装机 + 无人值守全链路，见 设计文档/全功能流程闭环清单.md） | ✅ 已完成 |
 | U 盘制作与工具大全（B5 联动：写入内置工具，PE 内离线可用） | ✅ 已完成 |
 | 一键安装闭环修复（9 项：真实下载/校验/备份、认领并发保护、身份校验、任务重试复用等） | ✅ 已完成 |
+| U 盘启动制作完善（输出方式：写U盘/生成ISO；在线URL拉取PE；纯C#可引导ISO生成器 + FAT12 efisys.bin 兜底；_iso_logic_test 逻辑自测 + 在线 PE 端到端验证） | ✅ 已完成 |
 | 性能优化（N+1 查询消除） | ✅ 已完成 |
 | 安全审查（认证/CORS/上传/日志） | ✅ 已完成 |
 | 部署文档与打包发布（publish.ps1 / deploy_server.ps1） | ✅ 已完成 |
@@ -96,6 +97,7 @@ Windows-ZS/
 │   └── U盘制作与工具大全详细设计.md     ← U盘四步向导 + 工具大全（53工具/10分类）+ B5 工具联动
 ├── _b5_logic_test/                  ← B5 逻辑测试脚手架（IncludeTools 合并拷贝等 4 项）
 ├── _b5_ui_harness/                  ← B5 UI 自动化测试脚手架（STA WPF 测试 4 项）
+├── _iso_logic_test/                 ← ISO 逻辑自测脚手架（FAT12 efisys.bin + ISO 结构 + 在线 PE 端到端）
 ├── database/
 │   ├── install.sql                  ← 35张表建表SQL
 │   └── migration_closure.sql        ← 闭环轮增量迁移（waiting 状态等）
@@ -131,8 +133,8 @@ Windows-ZS/
 │   ├── InstallWizardWindow.xaml       ← 一键装机六步向导窗口
 │   ├── UDiskWindow.xaml               ← U 盘制作四步向导窗口
 │   ├── ToolsWindow.xaml               ← 工具大全窗口
-│   ├── Models/                       （含 WizardModels.cs 向导模型）
-│   ├── Services/                     （含 UDiskService/ToolService）
+│   ├── Models/                       （含 WizardModels.cs 向导模型 / UDiskModels.cs U盘与ISO模型）
+│   ├── Services/                     （含 UDiskService/IsoBuilder/EfiSysGenerator/ToolService）
 │   ├── ViewModels/                   （含 InstallWizardViewModel/UDiskViewModel/ToolsViewModel）
 │   ├── Data/Tools/tools.json          ← 工具清单（53工具/10分类）
 │   └── Helpers/
@@ -141,10 +143,10 @@ Windows-ZS/
 │   ├── App.xaml
 │   ├── MainWindow.xaml
 │   ├── InstallWizardWindow.xaml       ← 一键装机六步向导窗口（安全版）
-│   ├── UDiskWindow.xaml               ← U 盘制作四步向导窗口
+│   ├── UDiskWindow.xaml               ← U 盘制作四步向导窗口（写U盘/生成ISO）
 │   ├── ToolsWindow.xaml               ← 工具大全窗口
 │   ├── Models/
-│   ├── Services/                     （含 Device/DiskPart/ImageDeploy/UDiskService/ToolService）
+│   ├── Services/                     （含 Device/DiskPart/ImageDeploy/UDiskService/IsoBuilder/EfiSysGenerator/ToolService）
 │   ├── ViewModels/                   （含 InstallWizardViewModel/UDiskViewModel/ToolsViewModel）
 │   ├── Data/Tools/tools.json          ← 工具清单（53工具/10分类）
 │   └── Helpers/

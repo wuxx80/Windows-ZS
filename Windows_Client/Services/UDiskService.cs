@@ -6,6 +6,7 @@ using System.Linq;
 using System.Management;
 using System.Net.Http;
 using System.Security.Principal;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Windows_Client.Models;
@@ -148,6 +149,170 @@ namespace Windows_Client.Services
             {
                 return (false, "", "下载失败: " + ex.Message);
             }
+        }
+
+        /// <summary>从任意 HTTP(S) URL 直接下载话 PE 文件（在线镜像源，不依赖服务器托管，无需预设哈希）</summary>
+        public async Task<(bool Ok, string Path, string Error)> DownloadPeUrlAsync(
+            string url, string cacheDir, IProgress<int>? progress = null, CancellationToken ct = default)
+        {
+            try
+            {
+                Directory.CreateDirectory(cacheDir);
+                var uri = new Uri(url);
+                var fileName = SafeFileName(Path.GetFileName(uri.AbsolutePath));
+                if (string.IsNullOrEmpty(fileName)) fileName = "pe_" + DateTime.Now.ToString("HHmmss") + ".iso";
+                var savePath = Path.Combine(cacheDir, fileName);
+
+                if (File.Exists(savePath)) return (true, savePath, "");
+
+                using var client = new HttpClient { Timeout = TimeSpan.FromMinutes(120) };
+                using (var response = await client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, ct))
+                {
+                    response.EnsureSuccessStatusCode();
+                    var total = response.Content.Headers.ContentLength ?? -1L;
+                    var tmp = savePath + ".part";
+                    await using (var fs = new FileStream(tmp, FileMode.Create, FileAccess.Write, FileShare.None))
+                    await using (var stream = await response.Content.ReadAsStreamAsync(ct))
+                    {
+                        var buffer = new byte[1024 * 256];
+                        long written = 0;
+                        int read;
+                        while ((read = await stream.ReadAsync(buffer, ct)) > 0)
+                        {
+                            await fs.WriteAsync(buffer.AsMemory(0, read), ct);
+                            written += read;
+                            progress?.Report(total > 0 ? (int)(written * 100 / total) : 0);
+                        }
+                    }
+                    File.Move(tmp, savePath, true);
+                }
+                return (true, savePath, "");
+            }
+            catch (OperationCanceledException)
+            {
+                return (false, "", "已取消下载");
+            }
+            catch (Exception ex)
+            {
+                return (false, "", "下载失败: " + ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// 生成可引导 ISO：解包 PE（ISO 挂载/目录）到临时目录 → 覆盖写引导镜像 → 写入客户端/工具 → IsoBuilder 打包。
+        /// 返回输出 ISO 路径。支持 UEFI + Legacy 双引导（取决于 PE 自带的 efi 引导镜像）。
+        /// </summary>
+        public async Task<(bool Ok, string Error, string OutPath)> BuildIsoAsync(
+            IsoBuildPlan plan, Action<string>? log, IProgress<int>? progress = null, CancellationToken ct = default)
+        {
+            void Log(string m) => log?.Invoke(m);
+            try
+            {
+                var staging = Path.Combine(Path.GetTempPath(), "ZS_IsoBuild_" + Guid.NewGuid().ToString("N"));
+                Directory.CreateDirectory(staging);
+                try
+                {
+                    // ① PE 内容 → staging
+                    Log("准备 PE 内容...");
+                    var ext = Path.GetExtension(plan.PeFilePath).ToLowerInvariant();
+                    if (ext == ".iso")
+                    {
+                        var mounted = await MountIsoAsync(plan.PeFilePath);
+                        if (string.IsNullOrEmpty(mounted))
+                            return (false, "无法挂载 PE 镜像（ISO 挂载失败）", "");
+                        try { await CopyDirectoryAsync(mounted, staging, log, null, ct); }
+                        finally { await DismountIsoAsync(plan.PeFilePath); }
+                    }
+                    else if (Directory.Exists(plan.PeFilePath))
+                    {
+                        await CopyDirectoryAsync(plan.PeFilePath, staging, log, null, ct);
+                    }
+                    else
+                    {
+                        return (false, "PE 源不是有效的 ISO 或文件夹", "");
+                    }
+                    progress?.Report(25);
+
+                    // ② 写入装机助手客户端 + 内置工具
+                    if (plan.IncludeClient && !string.IsNullOrEmpty(plan.ClientDir) && Directory.Exists(plan.ClientDir))
+                    {
+                        Log("写入装机助手客户端到 ZS_Client...");
+                        CopyDirectoryRecursive(plan.ClientDir, Path.Combine(staging, "ZS_Client"), log);
+                    }
+                    if (plan.IncludeTools)
+                    {
+                        Log("写入内置工具到 ZS_Tools...");
+                        var toolRoot = Path.Combine(plan.ClientDir, "Tools");
+                        var toolCache = Path.Combine(plan.ClientDir, "ZS_Cache", "tools");
+                        CopyToolsToDrive(toolRoot, toolCache, Path.Combine(staging, "ZS_Tools"), log, ct);
+                    }
+                    progress?.Report(35);
+
+                    // ③ 检测/兜底生成引导镜像
+                    var (efiRel, legacyRel) = DetectAndPrepareBoot(staging, log);
+
+                    // ④ IsoBuilder 打包
+                    Log("构建 ISO 镜像...");
+                    var req = new IsoBuilder.BuildRequest
+                    {
+                        OutputPath = plan.OutputPath,
+                        Label = string.IsNullOrEmpty(plan.IsoLabel) ? "ZS_PE" : plan.IsoLabel,
+                        SourceDir = staging,
+                        EfiBootRel = efiRel,
+                        LegacyBootRel = legacyRel,
+                    };
+                    await IsoBuilder.BuildAsync(req,
+                        new Progress<double>(d => progress?.Report((int)(35 + d * 65))), ct);
+                    Log("ISO 生成完成: " + plan.OutputPath);
+                    return (true, "", plan.OutputPath);
+                }
+                finally
+                {
+                    try { Directory.Delete(staging, true); } catch { }
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                return (false, "已取消生成", "");
+            }
+            catch (Exception ex)
+            {
+                Log("生成失败: " + ex.Message);
+                return (false, "生成失败: " + ex.Message, "");
+            }
+        }
+
+        /// <summary>从 staging 目录查找 UEFI/Legacy 引导镜像；缺少 efisys.bin 时用 bootx64.efi 生成 FAT12 镜像兜底。</summary>
+        private static (string? EfiRel, string? LegacyRel) DetectAndPrepareBoot(string staging, Action<string>? log)
+        {
+            string? FindFirst(params string[] names)
+            {
+                foreach (var n in names)
+                {
+                    var hit = Directory.GetFiles(staging, n, SearchOption.AllDirectories)
+                        .FirstOrDefault(f => File.Exists(f));
+                    if (hit != null)
+                        return "/" + Path.GetRelativePath(staging, hit).Replace('\\', '/');
+                }
+                return null;
+            }
+
+            // UEFI：efisys.bin 原生，其次 bootx64.efi
+            var efi = FindFirst("EFISYS.BIN", "BOOTX64.EFI");
+            if (efi != null && !efi.EndsWith("/EFISYS.BIN", StringComparison.OrdinalIgnoreCase))
+            {
+                // 只有 BOOTX64.EFI（无 efisys.bin）：生成 efisys.bin 兜底
+                var bootx64 = Path.Combine(staging, efi.TrimStart('/').Replace('/', Path.DirectorySeparatorChar));
+                var generated = Path.Combine(staging, "EFI", "BOOT", "efisys.bin");
+                if (EfiSysGenerator.TryCreate(bootx64, generated, log))
+                    efi = "/EFI/BOOT/efisys.bin";
+            }
+
+            var legacy = FindFirst("ETFSYS.COM", "ETFSBOOT.COM", "ETFSYS.BIN");
+            log?.Invoke(efi != null ? "已配置 UEFI 引导镜像: " + efi : "未检测到 UEFI 引导镜像（将生成仅 Legacy/无引导 ISO）");
+            if (legacy != null) log?.Invoke("已配置 Legacy 引导镜像: " + legacy);
+
+            return (efi, legacy);
         }
 
         /// <summary>执行写盘：格式化 → 挂载PE拷贝 → 写引导 → 拷入客户端（逐步骤回调）</summary>
@@ -407,17 +572,35 @@ namespace Windows_Client.Services
             }
         }
 
+        /// <summary>挂载 ISO 并返回盘符（用 -EncodedCommand 规避引号转义；轮询等待盘符分配）</summary>
         private static async Task<string> MountIsoAsync(string isoPath)
         {
             try
             {
+                var safePath = isoPath.Replace("'", "''");
+                // 单引号路径已转义，避免命令注入；脚本用 UTF-16LE Base64 编码彻底规避 shell 转义问题
+                // 挂载后通过 Win32_LogicalDisk(DriveType=5 CD-ROM) 前后对比精确取新盘符，避免误取系统盘/物理光驱
+                var script = "$before = @(Get-CimInstance Win32_LogicalDisk -Filter 'DriveType=5' | ForEach-Object { $_.DeviceID }); " +
+                             "$m = Mount-DiskImage -ImagePath '" + safePath + "' -PassThru; " +
+                             "if ($m -and $m.Attached) { " +
+                             "$drv = $null; " +
+                             "for ($i = 0; $i -lt 20 -and -not $drv; $i++) { " +
+                             "  $now = Get-CimInstance Win32_LogicalDisk -Filter 'DriveType=5' -ErrorAction SilentlyContinue | Where-Object { $before -notcontains $_.DeviceID }; " +
+                             "  if ($now) { $drv = $now | Select-Object -First 1 -ExpandProperty DeviceID } " +
+                             "  if (-not $drv) { Start-Sleep -Milliseconds 500 } " +
+                             "} " +
+                             "if ($drv) { Write-Output $drv.TrimEnd(':') } }";
+                var encoded = Convert.ToBase64String(Encoding.Unicode.GetBytes(script));
                 var psi = new ProcessStartInfo
                 {
                     FileName = "powershell.exe",
-                    Arguments = "-NoProfile -Command \"$m = Mount-DiskImage -ImagePath '\" + isoPath + \"' -PassThru; $m | Get-Volume | Select-Object -ExpandProperty DriveLetter\"",
+                    Arguments = "-NoProfile -ExecutionPolicy Bypass -EncodedCommand " + encoded,
                     UseShellExecute = false,
                     CreateNoWindow = true,
-                    RedirectStandardOutput = true
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    StandardOutputEncoding = Encoding.UTF8,
+                    StandardErrorEncoding = Encoding.UTF8
                 };
                 using var p = Process.Start(psi);
                 if (p == null) return "";
@@ -432,13 +615,19 @@ namespace Windows_Client.Services
         {
             try
             {
+                var safePath = isoPath.Replace("'", "''");
+                var script = "Dismount-DiskImage -ImagePath '" + safePath + "' -ErrorAction SilentlyContinue";
+                var encoded = Convert.ToBase64String(Encoding.Unicode.GetBytes(script));
                 var psi = new ProcessStartInfo
                 {
                     FileName = "powershell.exe",
-                    Arguments = "-NoProfile -Command \"Dismount-DiskImage -ImagePath '\" + isoPath + \"'\"",
+                    Arguments = "-NoProfile -ExecutionPolicy Bypass -EncodedCommand " + encoded,
                     UseShellExecute = false,
                     CreateNoWindow = true,
-                    RedirectStandardOutput = true
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    StandardOutputEncoding = Encoding.UTF8,
+                    StandardErrorEncoding = Encoding.UTF8
                 };
                 using var p = Process.Start(psi);
                 if (p != null) await p.WaitForExitAsync();
@@ -448,6 +637,8 @@ namespace Windows_Client.Services
 
         private static async Task CopyDirectoryAsync(string src, string dst, Action<string>? log, IProgress<int>? progress, CancellationToken ct)
         {
+            // 裸盘符（如 "E"）规范化为 "E:\"，避免被当作相对路径
+            if (src.Length == 1 && char.IsLetter(src[0])) src = src + ":\\";
             Directory.CreateDirectory(dst);
             foreach (var dir in Directory.GetDirectories(src, "*", SearchOption.AllDirectories))
                 Directory.CreateDirectory(Path.Combine(dst, Path.GetRelativePath(src, dir)));

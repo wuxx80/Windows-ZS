@@ -6,6 +6,7 @@ using System.Linq;
 using System.Management;
 using System.Net.Http;
 using System.Security.Principal;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using WinPE_Client.Models;
@@ -21,6 +22,7 @@ namespace WinPE_Client.Services
             var result = new List<RemovableDisk>();
             try
             {
+                // 逻辑盘(可移动 DriveType=2) → 磁盘号/型号 关联映射
                 var diskByLogical = new Dictionary<string, (int Index, string Model, long Size)>();
                 using (var searcher = new ManagementObjectSearcher("SELECT * FROM Win32_DiskDrive"))
                 {
@@ -75,6 +77,7 @@ namespace WinPE_Client.Services
                     }
                 }
 
+                // 系统盘过滤 + 磁盘号排序
                 result = result.Where(r => !r.IsSystem).OrderBy(r => r.Index >= 0 ? 0 : 1).ThenBy(r => r.Index).ToList();
             }
             catch { }
@@ -148,6 +151,170 @@ namespace WinPE_Client.Services
             }
         }
 
+        /// <summary>从任意 HTTP(S) URL 直接下载话 PE 文件（在线镜像源，不依赖服务器托管，无需预设哈希）</summary>
+        public async Task<(bool Ok, string Path, string Error)> DownloadPeUrlAsync(
+            string url, string cacheDir, IProgress<int>? progress = null, CancellationToken ct = default)
+        {
+            try
+            {
+                Directory.CreateDirectory(cacheDir);
+                var uri = new Uri(url);
+                var fileName = SafeFileName(Path.GetFileName(uri.AbsolutePath));
+                if (string.IsNullOrEmpty(fileName)) fileName = "pe_" + DateTime.Now.ToString("HHmmss") + ".iso";
+                var savePath = Path.Combine(cacheDir, fileName);
+
+                if (File.Exists(savePath)) return (true, savePath, "");
+
+                using var client = new HttpClient { Timeout = TimeSpan.FromMinutes(120) };
+                using (var response = await client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, ct))
+                {
+                    response.EnsureSuccessStatusCode();
+                    var total = response.Content.Headers.ContentLength ?? -1L;
+                    var tmp = savePath + ".part";
+                    await using (var fs = new FileStream(tmp, FileMode.Create, FileAccess.Write, FileShare.None))
+                    await using (var stream = await response.Content.ReadAsStreamAsync(ct))
+                    {
+                        var buffer = new byte[1024 * 256];
+                        long written = 0;
+                        int read;
+                        while ((read = await stream.ReadAsync(buffer, ct)) > 0)
+                        {
+                            await fs.WriteAsync(buffer.AsMemory(0, read), ct);
+                            written += read;
+                            progress?.Report(total > 0 ? (int)(written * 100 / total) : 0);
+                        }
+                    }
+                    File.Move(tmp, savePath, true);
+                }
+                return (true, savePath, "");
+            }
+            catch (OperationCanceledException)
+            {
+                return (false, "", "已取消下载");
+            }
+            catch (Exception ex)
+            {
+                return (false, "", "下载失败: " + ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// 生成可引导 ISO：解包 PE（ISO 挂载/目录）到临时目录 → 覆盖写引导镜像 → 写入客户端/工具 → IsoBuilder 打包。
+        /// 返回输出 ISO 路径。支持 UEFI + Legacy 双引导（取决于 PE 自带的 efi 引导镜像）。
+        /// </summary>
+        public async Task<(bool Ok, string Error, string OutPath)> BuildIsoAsync(
+            IsoBuildPlan plan, Action<string>? log, IProgress<int>? progress = null, CancellationToken ct = default)
+        {
+            void Log(string m) => log?.Invoke(m);
+            try
+            {
+                var staging = Path.Combine(Path.GetTempPath(), "ZS_IsoBuild_" + Guid.NewGuid().ToString("N"));
+                Directory.CreateDirectory(staging);
+                try
+                {
+                    // ① PE 内容 → staging
+                    Log("准备 PE 内容...");
+                    var ext = Path.GetExtension(plan.PeFilePath).ToLowerInvariant();
+                    if (ext == ".iso")
+                    {
+                        var mounted = await MountIsoAsync(plan.PeFilePath);
+                        if (string.IsNullOrEmpty(mounted))
+                            return (false, "无法挂载 PE 镜像（ISO 挂载失败）", "");
+                        try { await CopyDirectoryAsync(mounted, staging, log, null, ct); }
+                        finally { await DismountIsoAsync(plan.PeFilePath); }
+                    }
+                    else if (Directory.Exists(plan.PeFilePath))
+                    {
+                        await CopyDirectoryAsync(plan.PeFilePath, staging, log, null, ct);
+                    }
+                    else
+                    {
+                        return (false, "PE 源不是有效的 ISO 或文件夹", "");
+                    }
+                    progress?.Report(25);
+
+                    // ② 写入装机助手客户端 + 内置工具
+                    if (plan.IncludeClient && !string.IsNullOrEmpty(plan.ClientDir) && Directory.Exists(plan.ClientDir))
+                    {
+                        Log("写入装机助手客户端到 ZS_Client...");
+                        CopyDirectoryRecursive(plan.ClientDir, Path.Combine(staging, "ZS_Client"), log);
+                    }
+                    if (plan.IncludeTools)
+                    {
+                        Log("写入内置工具到 ZS_Tools...");
+                        var toolRoot = Path.Combine(plan.ClientDir, "Tools");
+                        var toolCache = Path.Combine(plan.ClientDir, "ZS_Cache", "tools");
+                        CopyToolsToDrive(toolRoot, toolCache, Path.Combine(staging, "ZS_Tools"), log, ct);
+                    }
+                    progress?.Report(35);
+
+                    // ③ 检测/兜底生成引导镜像
+                    var (efiRel, legacyRel) = DetectAndPrepareBoot(staging, log);
+
+                    // ④ IsoBuilder 打包
+                    Log("构建 ISO 镜像...");
+                    var req = new IsoBuilder.BuildRequest
+                    {
+                        OutputPath = plan.OutputPath,
+                        Label = string.IsNullOrEmpty(plan.IsoLabel) ? "ZS_PE" : plan.IsoLabel,
+                        SourceDir = staging,
+                        EfiBootRel = efiRel,
+                        LegacyBootRel = legacyRel,
+                    };
+                    await IsoBuilder.BuildAsync(req,
+                        new Progress<double>(d => progress?.Report((int)(35 + d * 65))), ct);
+                    Log("ISO 生成完成: " + plan.OutputPath);
+                    return (true, "", plan.OutputPath);
+                }
+                finally
+                {
+                    try { Directory.Delete(staging, true); } catch { }
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                return (false, "已取消生成", "");
+            }
+            catch (Exception ex)
+            {
+                Log("生成失败: " + ex.Message);
+                return (false, "生成失败: " + ex.Message, "");
+            }
+        }
+
+        /// <summary>从 staging 目录查找 UEFI/Legacy 引导镜像；缺少 efisys.bin 时用 bootx64.efi 生成 FAT12 镜像兜底。</summary>
+        private static (string? EfiRel, string? LegacyRel) DetectAndPrepareBoot(string staging, Action<string>? log)
+        {
+            string? FindFirst(params string[] names)
+            {
+                foreach (var n in names)
+                {
+                    var hit = Directory.GetFiles(staging, n, SearchOption.AllDirectories)
+                        .FirstOrDefault(f => File.Exists(f));
+                    if (hit != null)
+                        return "/" + Path.GetRelativePath(staging, hit).Replace('\\', '/');
+                }
+                return null;
+            }
+
+            // UEFI：efisys.bin 原生，其次 bootx64.efi
+            var efi = FindFirst("EFISYS.BIN", "BOOTX64.EFI");
+            if (efi != null && !efi.EndsWith("/EFISYS.BIN", StringComparison.OrdinalIgnoreCase))
+            {
+                // 只有 BOOTX64.EFI（无 efisys.bin）：生成 efisys.bin 兜底
+                var bootx64 = Path.Combine(staging, efi.TrimStart('/').Replace('/', Path.DirectorySeparatorChar));
+                var generated = Path.Combine(staging, "EFI", "BOOT", "efisys.bin");
+                if (EfiSysGenerator.TryCreate(bootx64, generated, log))
+                    efi = "/EFI/BOOT/efisys.bin";
+            }
+
+            var legacy = FindFirst("ETFSYS.COM", "ETFSBOOT.COM", "ETFSYS.BIN");
+            log?.Invoke(efi != null ? "已配置 UEFI 引导镜像: " + efi : "未检测到 UEFI 引导镜像（将生成仅 Legacy/无引导 ISO）");
+            if (legacy != null) log?.Invoke("已配置 Legacy 引导镜像: " + legacy);
+
+            return (efi, legacy);
+        }
+
         /// <summary>执行写盘：格式化 → 挂载PE拷贝 → 写引导 → 拷入客户端（逐步骤回调）</summary>
         public async Task<(bool Ok, string Error)> WriteAsync(
             WritePlan plan, string peFilePath, string clientDir,
@@ -160,6 +327,7 @@ namespace WinPE_Client.Services
 
             try
             {
+                // ① 格式化 + 分区（DiskPart）
                 SetStep("清空并格式化目标盘", "running", "DiskPart 执行中...");
                 Log("正在对磁盘 " + plan.DiskIndex + " 执行分区与格式化...");
                 if (!await RunDiskPartAsync(BuildDiskPartScript(plan)))
@@ -172,6 +340,7 @@ namespace WinPE_Client.Services
                 progress?.Report(10);
                 ct.ThrowIfCancellationRequested();
 
+                // 目标盘符（格式化后由 assign 分配，通过卷标反查）
                 var targetDrive = await FindDriveByLabel(plan.VolumeLabel, TimeSpan.FromSeconds(15));
                 if (string.IsNullOrEmpty(targetDrive))
                 {
@@ -182,6 +351,7 @@ namespace WinPE_Client.Services
                 Log("目标盘符: " + targetDrive + ":");
                 progress?.Report(15);
 
+                // ② 拷贝 PE 内容
                 SetStep("写入 PE 系统", "running", "正在拷贝...");
                 Log("开始拷贝 PE 到 " + targetDrive + ": ...");
                 var peProgress = new Progress<int>(p => progress?.Report(15 + p * 30 / 100));
@@ -196,6 +366,7 @@ namespace WinPE_Client.Services
                 progress?.Report(50);
                 ct.ThrowIfCancellationRequested();
 
+                // ③ 写引导
                 if (plan.BootType == "uefi" || plan.BootType == "both")
                 {
                     SetStep("写入 UEFI 引导", "running", "创建 EFI\\BOOT");
@@ -215,6 +386,7 @@ namespace WinPE_Client.Services
                 progress?.Report(60);
                 ct.ThrowIfCancellationRequested();
 
+                // ④ 拷入装机助手客户端
                 if (plan.IncludeClient && !string.IsNullOrEmpty(clientDir) && Directory.Exists(clientDir))
                 {
                     SetStep("写入装机助手客户端", "running", "拷贝客户端...");
@@ -370,6 +542,7 @@ namespace WinPE_Client.Services
                 var ext = Path.GetExtension(peFilePath).ToLowerInvariant();
                 if (ext == ".iso")
                 {
+                    // PowerShell 挂载 ISO
                     var mounted = await MountIsoAsync(peFilePath);
                     if (string.IsNullOrEmpty(mounted)) return (false, "ISO 挂载失败", "");
                     try
@@ -386,6 +559,7 @@ namespace WinPE_Client.Services
                 }
                 else if (ext == ".wim" || ext == ".esd")
                 {
+                    // 裸 WIM 无法直接引导，作为数据拷入 PE 目录
                     Directory.CreateDirectory(Path.Combine(targetDrive + ":\\", "PE"));
                     File.Copy(peFilePath, Path.Combine(targetDrive + ":\\PE", Path.GetFileName(peFilePath)), true);
                     return (true, "", "");
@@ -398,17 +572,35 @@ namespace WinPE_Client.Services
             }
         }
 
+        /// <summary>挂载 ISO 并返回盘符（用 -EncodedCommand 规避引号转义；轮询等待盘符分配）</summary>
         private static async Task<string> MountIsoAsync(string isoPath)
         {
             try
             {
+                var safePath = isoPath.Replace("'", "''");
+                // 单引号路径已转义，避免命令注入；脚本用 UTF-16LE Base64 编码彻底规避 shell 转义问题
+                // 挂载后通过 Win32_LogicalDisk(DriveType=5 CD-ROM) 前后对比精确取新盘符，避免误取系统盘/物理光驱
+                var script = "$before = @(Get-CimInstance Win32_LogicalDisk -Filter 'DriveType=5' | ForEach-Object { $_.DeviceID }); " +
+                             "$m = Mount-DiskImage -ImagePath '" + safePath + "' -PassThru; " +
+                             "if ($m -and $m.Attached) { " +
+                             "$drv = $null; " +
+                             "for ($i = 0; $i -lt 20 -and -not $drv; $i++) { " +
+                             "  $now = Get-CimInstance Win32_LogicalDisk -Filter 'DriveType=5' -ErrorAction SilentlyContinue | Where-Object { $before -notcontains $_.DeviceID }; " +
+                             "  if ($now) { $drv = $now | Select-Object -First 1 -ExpandProperty DeviceID } " +
+                             "  if (-not $drv) { Start-Sleep -Milliseconds 500 } " +
+                             "} " +
+                             "if ($drv) { Write-Output $drv.TrimEnd(':') } }";
+                var encoded = Convert.ToBase64String(Encoding.Unicode.GetBytes(script));
                 var psi = new ProcessStartInfo
                 {
                     FileName = "powershell.exe",
-                    Arguments = "-NoProfile -Command \"$m = Mount-DiskImage -ImagePath '\" + isoPath + \"' -PassThru; $m | Get-Volume | Select-Object -ExpandProperty DriveLetter\"",
+                    Arguments = "-NoProfile -ExecutionPolicy Bypass -EncodedCommand " + encoded,
                     UseShellExecute = false,
                     CreateNoWindow = true,
-                    RedirectStandardOutput = true
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    StandardOutputEncoding = Encoding.UTF8,
+                    StandardErrorEncoding = Encoding.UTF8
                 };
                 using var p = Process.Start(psi);
                 if (p == null) return "";
@@ -423,13 +615,19 @@ namespace WinPE_Client.Services
         {
             try
             {
+                var safePath = isoPath.Replace("'", "''");
+                var script = "Dismount-DiskImage -ImagePath '" + safePath + "' -ErrorAction SilentlyContinue";
+                var encoded = Convert.ToBase64String(Encoding.Unicode.GetBytes(script));
                 var psi = new ProcessStartInfo
                 {
                     FileName = "powershell.exe",
-                    Arguments = "-NoProfile -Command \"Dismount-DiskImage -ImagePath '\" + isoPath + \"'\"",
+                    Arguments = "-NoProfile -ExecutionPolicy Bypass -EncodedCommand " + encoded,
                     UseShellExecute = false,
                     CreateNoWindow = true,
-                    RedirectStandardOutput = true
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    StandardOutputEncoding = Encoding.UTF8,
+                    StandardErrorEncoding = Encoding.UTF8
                 };
                 using var p = Process.Start(psi);
                 if (p != null) await p.WaitForExitAsync();
@@ -439,6 +637,8 @@ namespace WinPE_Client.Services
 
         private static async Task CopyDirectoryAsync(string src, string dst, Action<string>? log, IProgress<int>? progress, CancellationToken ct)
         {
+            // 裸盘符（如 "E"）规范化为 "E:\"，避免被当作相对路径
+            if (src.Length == 1 && char.IsLetter(src[0])) src = src + ":\\";
             Directory.CreateDirectory(dst);
             foreach (var dir in Directory.GetDirectories(src, "*", SearchOption.AllDirectories))
                 Directory.CreateDirectory(Path.Combine(dst, Path.GetRelativePath(src, dir)));
@@ -513,6 +713,7 @@ namespace WinPE_Client.Services
                 var srcEfi = Path.Combine(peRoot, "EFI", "BOOT", "bootx64.efi");
                 if (!File.Exists(srcEfi))
                 {
+                    // 兼容 efi/boot 小写路径
                     srcEfi = Path.Combine(peRoot, "efi", "boot", "bootx64.efi");
                 }
                 if (!File.Exists(srcEfi)) return false;
@@ -521,6 +722,7 @@ namespace WinPE_Client.Services
                 Directory.CreateDirectory(dst);
                 File.Copy(srcEfi, Path.Combine(dst, "bootx64.efi"), true);
 
+                // 一并拷贝 efi\microsoft（部分 PE 依赖 BCD）
                 var srcMs = Path.Combine(peRoot, "EFI", "Microsoft");
                 if (Directory.Exists(srcMs))
                     CopyDirectoryRecursive(srcMs, Path.Combine(targetDrive + ":\\", "EFI", "Microsoft"), _ => { });
