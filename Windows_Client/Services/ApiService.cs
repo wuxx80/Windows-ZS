@@ -126,6 +126,14 @@ namespace Windows_Client.Services
         public async Task<ApiResponse<TaskInfo>> RetryTaskAsync(int taskId)
             => await PostAsync<TaskInfo>("/api/v1/tasks/" + taskId + "/retry");
 
+        /// <summary>获取任务关联的无人值守 XML（方案B 预下载阶段提前取回，离线注入 zs_task.json）</summary>
+        public async Task<ApiResponse<UnattendPayload>> GetTaskUnattendAsync(int taskId)
+            => await GetAsync<UnattendPayload>("/api/v1/tasks/" + taskId + "/unattend");
+
+        /// <summary>获取任务首次登录脚本（方案B 预下载阶段提前取回，离线注入 zs_task.json）</summary>
+        public async Task<ApiResponse<FirstLogonPayload>> GetTaskFirstLogonAsync(int taskId)
+            => await GetAsync<FirstLogonPayload>("/api/v1/tasks/" + taskId + "/firstLogon");
+
         public async Task<ApiResponse<PaginatedData<SoftwareInfo>>> GetSoftwareAsync(int page = 1, int limit = 20, int? categoryId = null)
         {
             var ep = "/api/v1/software?page=" + page + "&limit=" + limit;

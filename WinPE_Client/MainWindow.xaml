@@ -241,11 +241,30 @@
                         <Button Style="{StaticResource CircleEntryButton}" Command="{Binding OpenInstallWizardCommand}">
                             <StackPanel Width="128">
                                 <Grid Width="96" Height="96">
-                                    <Ellipse x:Name="HaloInstall" Width="92" Height="92" Fill="#666FA8FF" IsHitTestVisible="False" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                    <Ellipse x:Name="HaloInstall" Width="96" Height="96" Fill="#886FA8FF" IsHitTestVisible="False" HorizontalAlignment="Center" VerticalAlignment="Center">
                                         <Ellipse.RenderTransform><ScaleTransform x:Name="HaloInstallScale"/></Ellipse.RenderTransform>
                                     </Ellipse>
-                                    <Border Width="92" Height="92" CornerRadius="46" BorderBrush="#6FA8FF" BorderThickness="1.5" Background="#1A2B4A">
-                                        <TextBlock Text="&#x1F4BD;" FontSize="34" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    <Border Width="92" Height="92" CornerRadius="46">
+                                        <Border.Effect>
+                                            <DropShadowEffect BlurRadius="16" ShadowDepth="5" Direction="270" Color="#662E5AAC" Opacity="0.55"/>
+                                        </Border.Effect>
+                                        <Border.Background>
+                                            <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                                <GradientStop Color="#7FB0FF" Offset="0"/>
+                                                <GradientStop Color="#2E5AAC" Offset="1"/>
+                                            </LinearGradientBrush>
+                                        </Border.Background>
+                                        <Grid>
+                                            <Ellipse Width="92" Height="46" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,-2,0,0">
+                                                <Ellipse.Fill>
+                                                    <RadialGradientBrush>
+                                                        <GradientStop Color="#55FFFFFF" Offset="0"/>
+                                                        <GradientStop Color="#00FFFFFF" Offset="1"/>
+                                                    </RadialGradientBrush>
+                                                </Ellipse.Fill>
+                                            </Ellipse>
+                                            <TextBlock Text="&#x1F4BD;" FontSize="34" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        </Grid>
                                     </Border>
                                 </Grid>
                                 <TextBlock Text="一键装机" FontSize="15" Foreground="White" HorizontalAlignment="Center" Margin="0,10,0,0"/>
@@ -257,11 +276,30 @@
                         <Button Style="{StaticResource CircleEntryButton}" Command="{Binding OpenUDiskCommand}">
                             <StackPanel Width="128">
                                 <Grid Width="96" Height="96">
-                                    <Ellipse x:Name="HaloUsb" Width="92" Height="92" Fill="#664FCEA8" IsHitTestVisible="False" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                    <Ellipse x:Name="HaloUsb" Width="96" Height="96" Fill="#884FCEA8" IsHitTestVisible="False" HorizontalAlignment="Center" VerticalAlignment="Center">
                                         <Ellipse.RenderTransform><ScaleTransform x:Name="HaloUsbScale"/></Ellipse.RenderTransform>
                                     </Ellipse>
-                                    <Border Width="92" Height="92" CornerRadius="46" BorderBrush="#6FA8FF" BorderThickness="1.5" Background="#1A2B4A">
-                                        <TextBlock Text="&#x1F4BF;" FontSize="34" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    <Border Width="92" Height="92" CornerRadius="46">
+                                        <Border.Effect>
+                                            <DropShadowEffect BlurRadius="16" ShadowDepth="5" Direction="270" Color="#660E9B7F" Opacity="0.55"/>
+                                        </Border.Effect>
+                                        <Border.Background>
+                                            <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                                <GradientStop Color="#4FE0B8" Offset="0"/>
+                                                <GradientStop Color="#0E9B7F" Offset="1"/>
+                                            </LinearGradientBrush>
+                                        </Border.Background>
+                                        <Grid>
+                                            <Ellipse Width="92" Height="46" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,-2,0,0">
+                                                <Ellipse.Fill>
+                                                    <RadialGradientBrush>
+                                                        <GradientStop Color="#55FFFFFF" Offset="0"/>
+                                                        <GradientStop Color="#00FFFFFF" Offset="1"/>
+                                                    </RadialGradientBrush>
+                                                </Ellipse.Fill>
+                                            </Ellipse>
+                                            <TextBlock Text="&#x1F4BF;" FontSize="34" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        </Grid>
                                     </Border>
                                 </Grid>
                                 <TextBlock Text="U盘制作" FontSize="15" Foreground="White" HorizontalAlignment="Center" Margin="0,10,0,0"/>
@@ -273,11 +311,30 @@
                         <Button Style="{StaticResource CircleEntryButton}" Command="{Binding OpenToolsCommand}">
                             <StackPanel Width="128">
                                 <Grid Width="96" Height="96">
-                                    <Ellipse x:Name="HaloTools" Width="92" Height="92" Fill="#669C6BFF" IsHitTestVisible="False" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                    <Ellipse x:Name="HaloTools" Width="96" Height="96" Fill="#889C6BFF" IsHitTestVisible="False" HorizontalAlignment="Center" VerticalAlignment="Center">
                                         <Ellipse.RenderTransform><ScaleTransform x:Name="HaloToolsScale"/></Ellipse.RenderTransform>
                                     </Ellipse>
-                                    <Border Width="92" Height="92" CornerRadius="46" BorderBrush="#6FA8FF" BorderThickness="1.5" Background="#1A2B4A">
-                                        <TextBlock Text="&#x1F527;" FontSize="34" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    <Border Width="92" Height="92" CornerRadius="46">
+                                        <Border.Effect>
+                                            <DropShadowEffect BlurRadius="16" ShadowDepth="5" Direction="270" Color="#66663DB8" Opacity="0.55"/>
+                                        </Border.Effect>
+                                        <Border.Background>
+                                            <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                                <GradientStop Color="#B78BFF" Offset="0"/>
+                                                <GradientStop Color="#663DB8" Offset="1"/>
+                                            </LinearGradientBrush>
+                                        </Border.Background>
+                                        <Grid>
+                                            <Ellipse Width="92" Height="46" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,-2,0,0">
+                                                <Ellipse.Fill>
+                                                    <RadialGradientBrush>
+                                                        <GradientStop Color="#55FFFFFF" Offset="0"/>
+                                                        <GradientStop Color="#00FFFFFF" Offset="1"/>
+                                                    </RadialGradientBrush>
+                                                </Ellipse.Fill>
+                                            </Ellipse>
+                                            <TextBlock Text="&#x1F527;" FontSize="34" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        </Grid>
                                     </Border>
                                 </Grid>
                                 <TextBlock Text="工具大全" FontSize="15" Foreground="White" HorizontalAlignment="Center" Margin="0,10,0,0"/>
@@ -289,11 +346,30 @@
                         <Button Style="{StaticResource CircleEntryButton}" Command="{Binding NotifyNotImplementedCommand}" CommandParameter="绿色软件">
                             <StackPanel Width="128">
                                 <Grid Width="96" Height="96">
-                                    <Ellipse x:Name="HaloSoft" Width="92" Height="92" Fill="#66FFB86C" IsHitTestVisible="False" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                    <Ellipse x:Name="HaloSoft" Width="96" Height="96" Fill="#88FFB86C" IsHitTestVisible="False" HorizontalAlignment="Center" VerticalAlignment="Center">
                                         <Ellipse.RenderTransform><ScaleTransform x:Name="HaloSoftScale"/></Ellipse.RenderTransform>
                                     </Ellipse>
-                                    <Border Width="92" Height="92" CornerRadius="46" BorderBrush="#6FA8FF" BorderThickness="1.5" Background="#1A2B4A">
-                                        <TextBlock Text="&#x1F4E6;" FontSize="34" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    <Border Width="92" Height="92" CornerRadius="46">
+                                        <Border.Effect>
+                                            <DropShadowEffect BlurRadius="16" ShadowDepth="5" Direction="270" Color="#66E08A2E" Opacity="0.55"/>
+                                        </Border.Effect>
+                                        <Border.Background>
+                                            <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                                <GradientStop Color="#FFC97A" Offset="0"/>
+                                                <GradientStop Color="#E08A2E" Offset="1"/>
+                                            </LinearGradientBrush>
+                                        </Border.Background>
+                                        <Grid>
+                                            <Ellipse Width="92" Height="46" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,-2,0,0">
+                                                <Ellipse.Fill>
+                                                    <RadialGradientBrush>
+                                                        <GradientStop Color="#55FFFFFF" Offset="0"/>
+                                                        <GradientStop Color="#00FFFFFF" Offset="1"/>
+                                                    </RadialGradientBrush>
+                                                </Ellipse.Fill>
+                                            </Ellipse>
+                                            <TextBlock Text="&#x1F4E6;" FontSize="34" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        </Grid>
                                     </Border>
                                 </Grid>
                                 <TextBlock Text="绿色软件" FontSize="15" Foreground="White" HorizontalAlignment="Center" Margin="0,10,0,0"/>

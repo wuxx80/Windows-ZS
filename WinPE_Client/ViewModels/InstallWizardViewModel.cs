@@ -30,6 +30,12 @@ namespace WinPE_Client.ViewModels
         private bool _isPaused;
         private DateTime _startTime;
 
+        // 离线无人值守模式（PE 无网）：镜像/无人值守/首登脚本全部来自本地 zs_task.json（方案C）
+        private bool _isOffline;
+        private string _offlineImagePath = "";
+        private string _offlineUnattendXml = "";
+        private string _offlineFirstLogonCmd = "";
+
         /// <summary>本地镜像缓存目录（设计文档 §4.5：PE 环境默认 D:\ZS_Cache\images）</summary>
         private readonly string _localCacheDir = @"D:\ZS_Cache\images";
 
@@ -357,6 +363,92 @@ namespace WinPE_Client.ViewModels
         }
 
         /// <summary>
+        /// 载入离线无人值守任务（PE 无网时由 U盘/ISO 或 Windows 预下载注入的 zs_task.json，方案C）。
+        /// 全程不依赖服务器：镜像直接使用本地文件，无人值守应答/首登脚本直接写入新系统。
+        /// </summary>
+        public async Task LoadOfflineTask(OfflineTask task, string imagePath)
+        {
+            _isOffline = true;
+            _isContinuation = true;
+            _offlineImagePath = imagePath;
+            _offlineUnattendXml = task.UnattendXml ?? "";
+            _offlineFirstLogonCmd = task.FirstLogonCmd ?? "";
+            StatusText = "已载入离线无人值守任务，无需网络，可确认后开始装机";
+
+            if (Disks.Count == 0) await RefreshDisks();
+
+            // 用离线任务镜像信息合成 ImageInfo（不依赖服务器镜像列表）
+            if (task.Image != null)
+            {
+                SelectedImage = new ImageInfo
+                {
+                    Id = 0,
+                    Name = task.Image.Name,
+                    FileName = string.IsNullOrEmpty(task.Image.FileName) ? Path.GetFileName(imagePath) : task.Image.FileName,
+                    FilePath = imagePath,
+                    FileHash = task.Image.FileHash ?? "",
+                    FileSize = task.Image.FileSize,
+                    SizeDisplay = task.Image.SizeDisplay,
+                    Format = (Path.GetExtension(imagePath) ?? ".wim").TrimStart('.').ToUpperInvariant()
+                };
+            }
+
+            // 目标磁盘：优先按磁盘序号，退而按 size/model 物理特征模糊匹配（PE 磁盘序号不稳定）
+            SelectedDisk = MatchTargetDiskBySizeModel(task.Disk);
+            if (SelectedDisk == null)
+                StatusText = "已载入离线任务，但未匹配到目标磁盘，请手动选择";
+
+            // 预填分区方案
+            PartitionScheme = task.PartitionScheme switch
+            {
+                "custom" => 2,
+                "keep" => 1,
+                _ => 0
+            };
+
+            // 预填全部安装选项（复用 options 契约回填）
+            ApplyOptionsFromJson(System.Text.Json.JsonSerializer.Serialize(task.Options));
+
+            // 直接进入确认页，方便用户快速核对后开始执行
+            CurrentStep = 4;
+            BuildSummary();
+            BuildConfirm();
+        }
+
+        /// <summary>
+        /// 离线任务目标磁盘匹配：优先按注入的磁盘序号精确匹配；
+        /// 序号未命中时用 size/model 物理特征模糊匹配（大小 ±5% 容差，优先同时命中，退而仅匹配 size）。
+        /// </summary>
+        private DiskInfo? MatchTargetDiskBySizeModel(OfflineDiskInfo? info)
+        {
+            if (Disks.Count == 0 || info == null) return null;
+
+            if (info.Index >= 0)
+            {
+                var byIndex = Disks.FirstOrDefault(d => d.Index == info.Index);
+                if (byIndex != null) return byIndex;
+            }
+
+            long expectSize = info.Size;
+            string expectModel = info.Model ?? "";
+            if (expectSize > 0)
+            {
+                long min = (long)(expectSize * 0.95);
+                long max = (long)(expectSize * 1.05);
+                var sizeMatches = Disks.Where(d => d.Size >= min && d.Size <= max).ToList();
+                if (!string.IsNullOrEmpty(expectModel))
+                {
+                    var m = sizeMatches.FirstOrDefault(d => d.Model.Contains(expectModel, StringComparison.OrdinalIgnoreCase));
+                    if (m != null) return m;
+                }
+                return sizeMatches.FirstOrDefault();
+            }
+            if (!string.IsNullOrEmpty(expectModel))
+                return Disks.FirstOrDefault(d => d.Model.Contains(expectModel, StringComparison.OrdinalIgnoreCase));
+            return null;
+        }
+
+        /// <summary>
         /// 续装目标磁盘匹配（r8 跨环境兜底）：
         /// 1) 优先按服务端磁盘序号精确匹配；
         /// 2) 序号未命中时，用 options 中记录的 disk_size/disk_model 物理特征模糊匹配
@@ -418,13 +510,14 @@ namespace WinPE_Client.ViewModels
             {
                 using var doc = System.Text.Json.JsonDocument.Parse(json);
                 var root = doc.RootElement;
-                SetOptionBool("auto_partition", root);
-                SetOptionBool("auto_repair_boot", root, "boot_fix");
-                SetOptionBool("auto_inject_drivers", root, "driver_inject");
-                SetOptionBool("unattended", root);
-                SetOptionBool("install_software", root);
-                SetOptionBool("optimize", root);
-                SetOptionBool("backup_data", root);
+                SetOptionBool(new[] { "auto_partition" }, root);
+                // boot_fix/driver_inject 双契约兼容：服务器用 auto_* 键，离线任务用 boot_fix/driver_inject 键
+                SetOptionBool(new[] { "auto_repair_boot", "boot_fix" }, root, "boot_fix");
+                SetOptionBool(new[] { "auto_inject_drivers", "driver_inject" }, root, "driver_inject");
+                SetOptionBool(new[] { "unattended" }, root);
+                SetOptionBool(new[] { "install_software" }, root);
+                SetOptionBool(new[] { "optimize" }, root);
+                SetOptionBool(new[] { "backup_data" }, root);
 
                 var ut = GetProp(root, "unattend_template_id");
                 if (!string.IsNullOrEmpty(ut))
@@ -455,12 +548,19 @@ namespace WinPE_Client.ViewModels
             catch { /* options 解析失败不阻塞续装 */ }
         }
 
-        private void SetOptionBool(string key, System.Text.Json.JsonElement root, string? optionKey = null)
+        /// <summary>
+        /// 按候选 JSON 键回填安装选项开关（键缺失时不覆盖当前值）。
+        /// optionKey 指定 Options 中的实际键；默认取第一个候选键。
+        /// </summary>
+        private void SetOptionBool(string[] keys, System.Text.Json.JsonElement root, string? optionKey = null)
         {
-            var opt = Options.FirstOrDefault(o => o.Key == (optionKey ?? key));
+            var opt = Options.FirstOrDefault(o => o.Key == (optionKey ?? keys[0]));
             if (opt == null) return;
-            var v = GetProp(root, key);
-            if (bool.TryParse(v, out var b)) opt.IsOn = b;
+            foreach (var key in keys)
+            {
+                var v = GetProp(root, key);
+                if (bool.TryParse(v, out var b)) { opt.IsOn = b; return; }
+            }
         }
 
         private static string GetProp(System.Text.Json.JsonElement el, string key)
@@ -1150,8 +1250,14 @@ namespace WinPE_Client.ViewModels
 
             try
             {
-                SetExec(0, "running", "正在创建任务...");
-                if (_taskId > 0)
+                if (_isOffline)
+                {
+                    // 离线无人值守（方案C）：无需创建/认领服务器任务，直接本地执行
+                    SetExec(0, "completed", "离线任务已就绪（无需网络）");
+                    AddLog("离线无人值守模式：跳过服务器任务创建，直接本地执行");
+                    ProgressValue = 5;
+                }
+                else if (_taskId > 0)
                 {
                     // r9 闭环：复用已有任务订单（不重复创建新任务）
                     if (!_isContinuation)
@@ -1199,12 +1305,18 @@ namespace WinPE_Client.ViewModels
                     ProgressValue = 5;
                 }
 
-                // 下载镜像（真实下载：服务端 clientDownload 流式接口，支持断点续传）
-                string cacheFile = Path.Combine(_localCacheDir, SelectedImage.FileName);
-                bool cached = File.Exists(cacheFile);
-                SetExec(1, "running", cached ? "已缓存，跳过下载" : "正在下载镜像...");
-                if (!cached)
+                // 定位/下载镜像：在线从服务器流式下载（断点续传）；离线直接用注入的本地镜像文件（方案C）
+                string cacheFile = _isOffline
+                    ? _offlineImagePath
+                    : Path.Combine(_localCacheDir, SelectedImage.FileName);
+                if (_isOffline)
                 {
+                    SetExec(1, "completed", "本地镜像已就绪");
+                    AddLog("离线模式：使用本地注入镜像 " + cacheFile);
+                }
+                else if (!File.Exists(cacheFile))
+                {
+                    SetExec(1, "running", "正在下载镜像...");
                     AddLog("下载镜像：" + SelectedImage.FileName);
                     var dlProgress = new Progress<int>(p =>
                     {
@@ -1218,7 +1330,7 @@ namespace WinPE_Client.ViewModels
                     AddLog("镜像下载完成：" + cacheFile);
                 }
                 else AddLog("镜像已缓存，跳过下载");
-                SetExec(1, "completed", cached ? "已缓存" : "下载完成");
+                SetExec(1, "completed", _isOffline ? "本地镜像" : (File.Exists(cacheFile) ? "已缓存" : "下载完成"));
                 ProgressValue = 20;
 
                 // 校验镜像（真实 SHA256：与后端 file_hash 比对）
@@ -1310,24 +1422,41 @@ namespace WinPE_Client.ViewModels
                 bool unattended = Options.First(o => o.Key == "unattended").IsOn;
                 if (unattended)
                 {
-                    SetExec(8, "running", "正在获取无人值守应答...");
+                    SetExec(8, "running", _isOffline ? "正在写入离线应答..." : "正在获取无人值守应答...");
                     await ReportProgress(96, "正在写入无人值守应答", "写入无人值守", "running");
                     await WaitIfPausedOrCanceled();
                     try
                     {
-                        var ur = await _api.GetTaskUnattendAsync(_taskId);
-                        if (ur.IsSuccess && ur.Data != null && !string.IsNullOrEmpty(ur.Data.Xml))
+                        string xml = _isOffline ? _offlineUnattendXml : "";
+                        if (_isOffline && !string.IsNullOrEmpty(xml))
                         {
                             var panther = @"C:\Windows\Panther";
                             Directory.CreateDirectory(panther);
-                            File.WriteAllText(Path.Combine(panther, "unattend.xml"), ur.Data.Xml, new System.Text.UTF8Encoding(false));
+                            File.WriteAllText(Path.Combine(panther, "unattend.xml"), xml, new System.Text.UTF8Encoding(false));
                             SetExec(8, "completed", "unattend.xml 已写入");
-                            AddLog("无人值守应答已写入 C:\\Windows\\Panther\\unattend.xml");
+                            AddLog("离线无人值守应答已写入 C:\\Windows\\Panther\\unattend.xml");
+                        }
+                        else if (!_isOffline)
+                        {
+                            var ur = await _api.GetTaskUnattendAsync(_taskId);
+                            if (ur.IsSuccess && ur.Data != null && !string.IsNullOrEmpty(ur.Data.Xml))
+                            {
+                                var panther = @"C:\Windows\Panther";
+                                Directory.CreateDirectory(panther);
+                                File.WriteAllText(Path.Combine(panther, "unattend.xml"), ur.Data.Xml, new System.Text.UTF8Encoding(false));
+                                SetExec(8, "completed", "unattend.xml 已写入");
+                                AddLog("无人值守应答已写入 C:\\Windows\\Panther\\unattend.xml");
+                            }
+                            else
+                            {
+                                SetExec(8, "skipped", "服务端无应答文件");
+                                AddLog("无人值守应答为空，已跳过");
+                            }
                         }
                         else
                         {
-                            SetExec(8, "skipped", "服务端无应答文件");
-                            AddLog("无人值守应答为空，已跳过");
+                            SetExec(8, "skipped", "离线任务无应答文件");
+                            AddLog("离线任务未包含无人值守应答，已跳过");
                         }
                     }
                     catch (Exception ex)
@@ -1343,24 +1472,41 @@ namespace WinPE_Client.ViewModels
                 bool optimize = Options.First(o => o.Key == "optimize").IsOn;
                 if (unattended && (installSw || optimize))
                 {
-                    SetExec(9, "running", "正在生成首次登录脚本...");
+                    SetExec(9, "running", _isOffline ? "正在写入离线首登脚本..." : "正在生成首次登录脚本...");
                     await ReportProgress(98, "正在生成首次登录脚本", "首次登录脚本", "running");
                     await WaitIfPausedOrCanceled();
                     try
                     {
-                        var fr = await _api.GetTaskFirstLogonAsync(_taskId);
-                        if (fr.IsSuccess && fr.Data != null && !string.IsNullOrEmpty(fr.Data.Cmd))
+                        string cmd = _isOffline ? _offlineFirstLogonCmd : "";
+                        if (_isOffline && !string.IsNullOrEmpty(cmd))
                         {
                             var setup = @"C:\Windows\Setup\Scripts";
                             Directory.CreateDirectory(setup);
-                            File.WriteAllText(Path.Combine(setup, "SetupComplete.cmd"), fr.Data.Cmd, new System.Text.UTF8Encoding(false));
+                            File.WriteAllText(Path.Combine(setup, "SetupComplete.cmd"), cmd, new System.Text.UTF8Encoding(false));
                             SetExec(9, "completed", "SetupComplete.cmd 已生成");
-                            AddLog("首次登录脚本已写入 C:\\Windows\\Setup\\Scripts\\SetupComplete.cmd");
+                            AddLog("离线首登脚本已写入 C:\\Windows\\Setup\\Scripts\\SetupComplete.cmd");
+                        }
+                        else if (!_isOffline)
+                        {
+                            var fr = await _api.GetTaskFirstLogonAsync(_taskId);
+                            if (fr.IsSuccess && fr.Data != null && !string.IsNullOrEmpty(fr.Data.Cmd))
+                            {
+                                var setup = @"C:\Windows\Setup\Scripts";
+                                Directory.CreateDirectory(setup);
+                                File.WriteAllText(Path.Combine(setup, "SetupComplete.cmd"), fr.Data.Cmd, new System.Text.UTF8Encoding(false));
+                                SetExec(9, "completed", "SetupComplete.cmd 已生成");
+                                AddLog("首次登录脚本已写入 C:\\Windows\\Setup\\Scripts\\SetupComplete.cmd");
+                            }
+                            else
+                            {
+                                SetExec(9, "skipped", "服务端无脚本");
+                                AddLog("首次登录脚本为空，已跳过");
+                            }
                         }
                         else
                         {
-                            SetExec(9, "skipped", "服务端无脚本");
-                            AddLog("首次登录脚本为空，已跳过");
+                            SetExec(9, "skipped", "离线任务无首登脚本");
+                            AddLog("离线任务未包含首登脚本，已跳过");
                         }
                     }
                     catch (Exception ex)
@@ -1415,13 +1561,13 @@ namespace WinPE_Client.ViewModels
             if (_isPaused)
             {
                 AddLog("已暂停");
-                _ = _api.PauseTaskAsync(_taskId);
+                if (_taskId > 0) _ = _api.PauseTaskAsync(_taskId);
                 ProgressValue = ProgressValue; // 触发颜色更新为黄色暂停态
             }
             else
             {
                 AddLog("已继续");
-                _ = _api.ResumeTaskAsync(_taskId);
+                if (_taskId > 0) _ = _api.ResumeTaskAsync(_taskId);
             }
         }
 
@@ -1430,7 +1576,7 @@ namespace WinPE_Client.ViewModels
             if (!IsExecuting) return;
             AddLog("正在取消...");
             _isPaused = false; IsPausedFlag = false;
-            _ = _api.CancelTaskAsync(_taskId);
+            if (_taskId > 0) _ = _api.CancelTaskAsync(_taskId);
             await Task.Delay(100);
             FailAt("执行", "已由用户取消");
             StatusText = "装机已取消，可返回重新配置";

@@ -45,9 +45,13 @@ namespace Windows_Client.Models
         public PeVersionInfo? PeVersion { get; set; }
         public string PeFilePath { get; set; } = "";
         public string PeDisplay { get; set; } = "";
-        public bool IncludeClient { get; set; } = true;
-        public bool ApplyCustomize { get; set; }
-        public bool IncludeTools { get; set; }
+
+        // ===== 方案A：写入装机镜像 + 离线无人值守任务（PE 无网也可装机）=====
+        public bool IncludeOfflineImage { get; set; }
+        public string OfflineImagePath { get; set; } = "";       // 系统镜像 .wim/.esd
+        public string OfflineUnattendPath { get; set; } = "";    // 无人值守应答文件 .xml（可选）
+        public string OfflineFirstLogonPath { get; set; } = "";  // 首次登录脚本 .cmd（可选）
+        public string OfflineAdminPassword { get; set; } = "";   // 新系统管理员密码（未选应答文件时生成默认模板用）
     }
 
     /// <summary>ISO 镜像构建计划（生成启动 ISO）</summary>
@@ -56,9 +60,13 @@ namespace Windows_Client.Models
         public string PeFilePath { get; set; } = "";   // 源 PE：.iso / 目录
         public string OutputPath { get; set; } = "";    // 目标 .iso 完整路径
         public string IsoLabel { get; set; } = "ZS_PE";
-        public bool IncludeClient { get; set; } = true;
-        public bool IncludeTools { get; set; }
-        public string ClientDir { get; set; } = "";     // 客户端发布目录（含 Tools）
+
+        // ===== 方案A：写入装机镜像 + 离线无人值守任务（PE 无网也可装机）=====
+        public bool IncludeOfflineImage { get; set; }
+        public string OfflineImagePath { get; set; } = "";       // 系统镜像 .wim/.esd
+        public string OfflineUnattendPath { get; set; } = "";    // 无人值守应答文件 .xml（可选）
+        public string OfflineFirstLogonPath { get; set; } = "";  // 首次登录脚本 .cmd（可选）
+        public string OfflineAdminPassword { get; set; } = "";   // 新系统管理员密码（未选应答文件时生成默认模板用）
     }
 
     /// <summary>PE 版本信息（服务器来源）</summary>

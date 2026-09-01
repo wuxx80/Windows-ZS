@@ -326,83 +326,31 @@
             <Grid Visibility="{Binding IsStep1, Converter={StaticResource BoolToVis}}" Margin="24">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
                 <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,10">
-                    <TextBlock Text="选择 PE 源" FontSize="18" Foreground="#333" VerticalAlignment="Center"/>
+                    <TextBlock Text="选择 PE 版本" FontSize="18" Foreground="#333" VerticalAlignment="Center"/>
+                    <TextBlock Text="（固定定制 PE，含装机助手）" FontSize="12" Foreground="#8C8C8C" VerticalAlignment="Center" Margin="10,0,0,0"/>
+                    <Button Content="刷新" Style="{StaticResource LinkButton}" Command="{Binding RefreshPeCommand}" VerticalAlignment="Center" Margin="8,0,0,0"/>
                 </StackPanel>
-                <ListBox Grid.Row="1" ItemsSource="{Binding PeSources}" SelectedItem="{Binding SelectedPeSource}"
-                         Margin="0,0,0,12" Height="34">
-                    <ListBox.ItemsPanel>
-                        <ItemsPanelTemplate>
-                            <StackPanel Orientation="Horizontal"/>
-                        </ItemsPanelTemplate>
-                    </ListBox.ItemsPanel>
+                <ListBox Grid.Row="1" ItemsSource="{Binding PeVersions}" SelectedItem="{Binding SelectedPeVersion}"
+                         ItemContainerStyle="{StaticResource CardListBoxItem}"
+                         Visibility="{Binding HasNoPeVersions, Converter={StaticResource InvBoolToVis}}">
                     <ListBox.ItemTemplate>
                         <DataTemplate>
-                            <Border CornerRadius="6" Padding="14,6" Background="#F0F0F0" BorderThickness="1" BorderBrush="#E8E8E8" Margin="0,0,8,0">
-                                <StackPanel>
-                                    <TextBlock Text="{Binding Name}" FontSize="13"/>
-                                    <TextBlock Text="{Binding Desc}" FontSize="10" Foreground="#8C8C8C" HorizontalAlignment="Center"/>
-                                </StackPanel>
-                            </Border>
+                            <StackPanel>
+                                <TextBlock Text="{Binding DisplayText}" FontSize="13" Foreground="#333"/>
+                            </StackPanel>
                         </DataTemplate>
                     </ListBox.ItemTemplate>
                 </ListBox>
-
-                <!-- 服务器来源 -->
-                <Grid Grid.Row="2" Visibility="{Binding IsServerSource, Converter={StaticResource BoolToVis}}">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="*"/>
-                        <RowDefinition Height="Auto"/>
-                    </Grid.RowDefinitions>
-                    <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,10">
-                        <TextBlock Text="PE 版本列表" FontSize="13" Foreground="#333" VerticalAlignment="Center"/>
-                        <Button Content="刷新" Style="{StaticResource LinkButton}" Command="{Binding RefreshPeCommand}"/>
-                    </StackPanel>
-                    <ListBox Grid.Row="1" ItemsSource="{Binding PeVersions}" SelectedItem="{Binding SelectedPeVersion}"
-                             ItemContainerStyle="{StaticResource CardListBoxItem}"
-                             Visibility="{Binding HasNoPeVersions, Converter={StaticResource InvBoolToVis}}">
-                        <ListBox.ItemTemplate>
-                            <DataTemplate>
-                                <TextBlock Text="{Binding DisplayText}" FontSize="13" Foreground="#333"/>
-                            </DataTemplate>
-                        </ListBox.ItemTemplate>
-                    </ListBox>
-                    <StackPanel Grid.Row="1" VerticalAlignment="Center" HorizontalAlignment="Center"
-                                Visibility="{Binding HasNoPeVersions, Converter={StaticResource BoolToVis}}">
-                        <TextBlock Text="暂无 PE 版本" FontSize="14" Foreground="#666" HorizontalAlignment="Center"/>
-                        <TextBlock Text="请先在管理后台「PE版本」中添加并启用" FontSize="12" Foreground="#999" Margin="0,6,0,0" HorizontalAlignment="Center"/>
-                    </StackPanel>
-                </Grid>
-
-                <!-- 本地来源 -->
-                <Grid Grid.Row="2" Visibility="{Binding IsLocalSource, Converter={StaticResource BoolToVis}}" Margin="0,8,0,0">
-                    <StackPanel VerticalAlignment="Top">
-                        <TextBlock Text="选择本地 PE 文件" FontSize="13" Foreground="#333" Margin="0,0,0,10"/>
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBox Grid.Column="0" Text="{Binding PeFilePath}" IsReadOnly="True" Height="36" FontSize="13" Padding="8,0" Background="#FAFAFA"/>
-                            <Button Grid.Column="1" Content="浏览" Style="{StaticResource SecondaryButton}" Margin="10,0,0,0" Command="{Binding BrowsePeCommand}"/>
-                        </Grid>
-                        <TextBlock Text="支持 .iso / .wim 格式" FontSize="12" Foreground="#8C8C8C" Margin="0,8,0,0"/>
-                    </StackPanel>
-                </Grid>
-
-                <!-- 在线 URL 来源 -->
-                <Grid Grid.Row="2" Visibility="{Binding IsUrlSource, Converter={StaticResource BoolToVis}}" Margin="0,8,0,0">
-                    <StackPanel VerticalAlignment="Top">
-                        <TextBlock Text="输入 PE 镜像直链" FontSize="13" Foreground="#333" Margin="0,0,0,10"/>
-                        <TextBox Text="{Binding PeUrl, UpdateSourceTrigger=PropertyChanged}" Height="36" FontSize="13" Padding="8,0"
-                                 VerticalContentAlignment="Center" AcceptsReturn="False"/>
-                        <TextBlock Text="例如 https://example.com/path/WPE10.iso，程序将直接下载该镜像用于制作" FontSize="12" Foreground="#8C8C8C" Margin="0,8,0,0" TextWrapping="Wrap"/>
-                    </StackPanel>
-                </Grid>
+                <StackPanel Grid.Row="1" VerticalAlignment="Center" HorizontalAlignment="Center"
+                            Visibility="{Binding HasNoPeVersions, Converter={StaticResource BoolToVis}}">
+                    <TextBlock Text="暂无 PE 版本" FontSize="14" Foreground="#666" HorizontalAlignment="Center"/>
+                    <TextBlock Text="请先在管理后台「PE版本」中添加并启用" FontSize="12" Foreground="#999" Margin="0,6,0,0" HorizontalAlignment="Center"/>
+                </StackPanel>
+                <TextBlock Grid.Row="2" Text="{Binding PeStatusText}" FontSize="13" Foreground="#333" Margin="0,12,0,0"/>
             </Grid>
 
             <!-- 步骤③ 制作选项 -->
@@ -438,9 +386,44 @@
                     </ListBox>
                     <TextBlock Text="卷标" FontSize="13" Foreground="#333" Margin="0,10,0,8"/>
                     <TextBox Text="{Binding VolumeLabel}" Width="200" Height="32" FontSize="13" Padding="8,0" HorizontalAlignment="Left"/>
-                    <CheckBox Content="同时写入「装机助手客户端」（进 PE 自动续装）" IsChecked="{Binding IncludeClient}" FontSize="13" Margin="0,14,0,0"/>
-                    <CheckBox Content="应用 PE 定制（壁纸/内置工具，需服务器配合）" IsChecked="{Binding ApplyCustomize}" FontSize="13" Margin="0,8,0,0"/>
-                    <CheckBox Content="同时写入「内置工具大全」（进 PE 离线可用）" IsChecked="{Binding IncludeTools}" FontSize="13" Margin="0,8,0,0"/>
+                    <CheckBox Content="写入「装机镜像 + 离线无人值守任务」（PE 无网可无人值守装机）" IsChecked="{Binding IncludeOfflineImage}" FontSize="13" Margin="0,14,0,0"/>
+                    <StackPanel Visibility="{Binding IncludeOfflineImage, Converter={StaticResource BoolToVis}}" Margin="14,12,0,0">
+                        <TextBlock Text="装机镜像 (.wim/.esd)" FontSize="12" Foreground="#666" Margin="0,0,0,4"/>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBox Grid.Column="0" Text="{Binding OfflineImagePath}" IsReadOnly="True" Height="32" FontSize="12" Padding="8,0" Background="#FAFAFA" ToolTip="{Binding OfflineImagePath}"/>
+                            <Button Grid.Column="1" Content="浏览" Style="{StaticResource SecondaryButton}" Height="32" Margin="8,0,0,0" Command="{Binding BrowseInstallImageCommand}"/>
+                        </Grid>
+                        <TextBlock Text="写入 U盘/ISO 的 ZS_Images 目录，PE 启动后自动识别并续装，无需联网" FontSize="11" Foreground="#8C8C8C" Margin="0,4,0,0" TextWrapping="Wrap"/>
+                        <TextBlock Text="无人值守应答文件（可选）" FontSize="12" Foreground="#666" Margin="0,12,0,4"/>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBox Grid.Column="0" Text="{Binding OfflineUnattendPath}" IsReadOnly="True" Height="32" FontSize="12" Padding="8,0" Background="#FAFAFA"/>
+                            <Button Grid.Column="1" Content="浏览" Style="{StaticResource SecondaryButton}" Height="32" Margin="8,0,0,0" Command="{Binding BrowseUnattendCommand}"/>
+                        </Grid>
+                        <TextBlock Text="{Binding OfflineUnattendStatusText}" FontSize="11" Foreground="#8C8C8C" Margin="0,4,0,0"/>
+                        <TextBlock Text="首次登录脚本（可选）" FontSize="12" Foreground="#666" Margin="0,12,0,4"/>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBox Grid.Column="0" Text="{Binding OfflineFirstLogonPath}" IsReadOnly="True" Height="32" FontSize="12" Padding="8,0" Background="#FAFAFA"/>
+                            <Button Grid.Column="1" Content="浏览" Style="{StaticResource SecondaryButton}" Height="32" Margin="8,0,0,0" Command="{Binding BrowseFirstLogonCommand}"/>
+                        </Grid>
+                        <TextBlock Text="{Binding OfflineFirstLogonStatusText}" FontSize="11" Foreground="#8C8C8C" Margin="0,4,0,0"/>
+                        <TextBlock Text="新系统管理员密码（使用默认无人值守模板时生效）" FontSize="12" Foreground="#666" Margin="0,12,0,4"/>
+                        <TextBox Text="{Binding OfflineAdminPassword, UpdateSourceTrigger=PropertyChanged}" Width="200" Height="32" FontSize="12" Padding="8,0" HorizontalAlignment="Left"/>
+                    </StackPanel>
+                    <Border Visibility="{Binding IncludeOfflineImage, Converter={StaticResource BoolToVis}}" Background="{Binding OfflineWarnText, Converter={StaticResource StrToBrush}}" CornerRadius="6" Padding="12,8" Margin="0,14,0,0">
+                        <TextBlock Text="{Binding OfflineWarnText}" FontSize="13" Foreground="#D46B08"/>
+                    </Border>
                     <Border Background="{Binding ConflictText, Converter={StaticResource StrToBrush}}" CornerRadius="6" Padding="12,8" Margin="0,14,0,0">
                         <TextBlock Text="{Binding ConflictText}" FontSize="13" Foreground="#D46B08"/>
                     </Border>

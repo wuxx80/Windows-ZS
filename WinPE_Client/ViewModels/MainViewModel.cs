@@ -25,6 +25,12 @@ namespace WinPE_Client.ViewModels
         // 本机待执行任务（首页「待执行任务」卡片 + 立即继续）
         private TaskInfo? _pendingTask;
 
+        // 离线无人值守任务（PE 无网时从磁盘 zs_task.json 注入，方案C）
+        private readonly OfflineTaskService _offlineService = new();
+        private OfflineTask? _offlineTask;
+        private string _offlineTaskFilePath = "";
+        private string? _offlineImagePath;
+
         public MainViewModel()
         {
             _api = new ApiService();
@@ -132,21 +138,32 @@ namespace WinPE_Client.ViewModels
         public ObservableCollection<ImageInfo> Images { get; } = new();
         public ObservableCollection<DiskInfo> Disks { get; } = new();
 
-        // ============ 首页待执行任务（Windows 下单 → PE 续装 闭环）============
-        /// <summary>是否存在待执行任务（首页显示「待执行任务」卡片）</summary>
-        public bool HasPendingTask => _pendingTask != null;
-        public string PendingTaskNo => _pendingTask?.TaskNo ?? "";
-        public string PendingTaskStatus => _pendingTask?.Status ?? "";
-        /// <summary>待执行任务对应的镜像名（从已加载镜像列表中反查）</summary>
+        /// <summary>是否离线模式（PE 无网络：登录无效，仅走磁盘注入的离线任务）</summary>
+        public bool IsOfflineMode => !IsConnected && _offlineTask != null;
+
+        // ============ 首页待执行任务（Windows 下单 → PE 续装 闭环；或 离线任务 注入）============
+        /// <summary>是否存在待执行任务（在线任务或离线任务）</summary>
+        public bool HasPendingTask => _pendingTask != null || _offlineTask != null;
+        public string PendingTaskNo => _pendingTask?.TaskNo ?? (_offlineTask?.TaskNo ?? "");
+        public string PendingTaskStatus => _pendingTask?.Status ?? (_offlineTask != null ? "offline" : "");
+        /// <summary>待执行任务对应的镜像名（在线反查列表 / 离线直接读取）</summary>
         public string PendingTaskImageName
         {
             get
             {
-                if (_pendingTask == null || _pendingTask.ImageId <= 0) return "";
-                var img = Images.FirstOrDefault(i => i.Id == _pendingTask.ImageId);
-                return img?.Name ?? ("镜像 #" + _pendingTask.ImageId);
+                if (_pendingTask != null && _pendingTask.ImageId > 0)
+                {
+                    var img = Images.FirstOrDefault(i => i.Id == _pendingTask.ImageId);
+                    return img?.Name ?? ("镜像 #" + _pendingTask.ImageId);
+                }
+                if (_offlineTask?.Image != null) return _offlineTask.Image.Name;
+                return "";
             }
         }
+        /// <summary>待执行任务来源提示（首页横幅）</summary>
+        public string PendingTaskHint => _offlineTask != null
+            ? "离线无人值守任务（无需网络，自动完成装机）"
+            : "任务已创建，重启进入 WinPE 后自动继续装机";
 
         /// <summary>客户端审核状态提示（后台未审核时首页黄色提示）</summary>
         private string _clientStatusText = "";
@@ -179,7 +196,7 @@ namespace WinPE_Client.ViewModels
         public ICommand OpenVersionCommand { get; }
         public ICommand NotifyNotImplementedCommand { get; }
 
-        /// <summary>窗口加载完成后自动初始化：拉取品牌信息 → 连接服务器 → 自注册 → 检测待执行任务 → 启动心跳</summary>
+        /// <summary>窗口加载完成后自动初始化：拉取品牌信息 → 连接服务器 → 自注册 → 检测待执行任务 → 启动心跳；无网则扫描离线任务</summary>
         public async Task Initialize()
         {
             await LoadSiteInfo();
@@ -190,6 +207,50 @@ namespace WinPE_Client.ViewModels
                 _heartbeatTimer.Start();
                 await CheckWaitingTasks();
             }
+            else
+            {
+                // 无网络（PE 常见）：登录无效，改为扫描磁盘中的离线无人值守任务（方案C）
+                await ScanOfflineTasks();
+            }
+        }
+
+        /// <summary>
+        /// 扫描磁盘中的离线任务（zs_task.json）：PE 无网时由 U盘/ISO 或 Windows 预下载注入。
+        /// 命中后首页显示「待执行任务」卡片，可直接进入向导离线完成装机。
+        /// </summary>
+        public async Task ScanOfflineTasks()
+        {
+            try
+            {
+                var found = await Task.Run(() => _offlineService.ScanAllDrives());
+                var hit = found.FirstOrDefault(f => _offlineService.ResolveImagePath(f.Path, f.Task) != null);
+                if (hit != null)
+                {
+                    _offlineTask = hit.Task;
+                    _offlineTaskFilePath = hit.Path;
+                    _offlineImagePath = _offlineService.ResolveImagePath(hit.Path, hit.Task);
+                    StatusMessage = "检测到离线无人值守任务：" + _offlineTask.TaskNo + "，可立即继续装机（无需网络）";
+                }
+                else
+                {
+                    _offlineTask = null;
+                    _offlineTaskFilePath = "";
+                    _offlineImagePath = null;
+                    StatusMessage = found.Count > 0
+                        ? "检测到离线任务但本地镜像缺失，请在 Windows 端预下载镜像后重试"
+                        : "未连接到服务器，且未检测到离线任务（可插入含镜像的U盘或先在 Windows 下单）";
+                }
+            }
+            catch
+            {
+                _offlineTask = null;
+            }
+            OnPropertyChanged(nameof(HasPendingTask));
+            OnPropertyChanged(nameof(PendingTaskNo));
+            OnPropertyChanged(nameof(PendingTaskStatus));
+            OnPropertyChanged(nameof(PendingTaskImageName));
+            OnPropertyChanged(nameof(PendingTaskHint));
+            OnPropertyChanged(nameof(IsOfflineMode));
         }
 
         /// <summary>拉取站点品牌信息（公开接口，无需登录；失败时保留默认品牌，首页依然可用）</summary>
@@ -224,12 +285,17 @@ namespace WinPE_Client.ViewModels
             _clientId = "";
             _serverClientId = 0;
             _pendingTask = null;
+            _offlineTask = null;
+            _offlineTaskFilePath = "";
+            _offlineImagePath = null;
             IsConnected = false;
             StatusMessage = "已退出连接";
             OnPropertyChanged(nameof(HasPendingTask));
             OnPropertyChanged(nameof(PendingTaskNo));
             OnPropertyChanged(nameof(PendingTaskStatus));
             OnPropertyChanged(nameof(PendingTaskImageName));
+            OnPropertyChanged(nameof(PendingTaskHint));
+            OnPropertyChanged(nameof(IsOfflineMode));
         }
 
         /// <summary>打开设置窗口（服务器地址 / 连接状态 / WinPE 高级工具）</summary>
@@ -269,6 +335,9 @@ namespace WinPE_Client.ViewModels
                 var token = result.Data?.Token;
                 _api.SetToken(token);
                 IsConnected = true;
+                _offlineTask = null;
+                _offlineTaskFilePath = "";
+                _offlineImagePath = null;
                 StatusMessage = "已连接到服务器";
                 await RegisterClient();
                 await RefreshImages();
@@ -424,10 +493,23 @@ namespace WinPE_Client.ViewModels
             await CheckWaitingTasks();
         }
 
-        /// <summary>打开一键装机向导（续装模式）：预填本机待执行任务，跳过配置直接确认执行</summary>
+        /// <summary>打开一键装机向导（续装模式）：预填本机待执行任务，跳过配置直接确认执行；离线任务优先</summary>
         private async Task OpenInstallWizardContinuation()
         {
             if (!IsConnected) await Connect();
+
+            // 离线无人值守任务优先：无网时由 U盘/ISO 或 Windows 预下载注入，无需服务器
+            if (_offlineTask != null && !string.IsNullOrEmpty(_offlineImagePath))
+            {
+                var offlineVm = new InstallWizardViewModel(_api, _device, ServerUrl);
+                await offlineVm.LoadOfflineTask(_offlineTask, _offlineImagePath);
+                var offlineWin = new InstallWizardWindow { DataContext = offlineVm };
+                offlineVm.RequestClose += () => offlineWin.Close();
+                offlineWin.Owner = Application.Current.MainWindow;
+                offlineWin.ShowDialog();
+                return;
+            }
+
             if (_pendingTask == null) await CheckWaitingTasks();
             if (_pendingTask == null)
             {

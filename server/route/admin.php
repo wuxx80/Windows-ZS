@@ -175,6 +175,13 @@ Route::group('api/v1', function () {
     Route::get('networkDeploys', 'admin.NetworkDeploy/index');
     Route::post('networkDeploys', 'admin.NetworkDeploy/create');
 
+    // Roles（角色 CRUD，供用户管理下拉选择）
+    Route::get('roles/:id', 'admin.Role/detail');
+    Route::put('roles/:id', 'admin.Role/edit');
+    Route::delete('roles/:id', 'admin.Role/delete');
+    Route::get('roles', 'admin.Role/index');
+    Route::post('roles', 'admin.Role/create');
+
     // Users
     Route::get('users/:id', 'admin.User/detail');
     Route::put('users/:id', 'admin.User/edit');

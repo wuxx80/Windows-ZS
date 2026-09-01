@@ -151,55 +151,8 @@ namespace WinPE_Client.Services
             }
         }
 
-        /// <summary>从任意 HTTP(S) URL 直接下载话 PE 文件（在线镜像源，不依赖服务器托管，无需预设哈希）</summary>
-        public async Task<(bool Ok, string Path, string Error)> DownloadPeUrlAsync(
-            string url, string cacheDir, IProgress<int>? progress = null, CancellationToken ct = default)
-        {
-            try
-            {
-                Directory.CreateDirectory(cacheDir);
-                var uri = new Uri(url);
-                var fileName = SafeFileName(Path.GetFileName(uri.AbsolutePath));
-                if (string.IsNullOrEmpty(fileName)) fileName = "pe_" + DateTime.Now.ToString("HHmmss") + ".iso";
-                var savePath = Path.Combine(cacheDir, fileName);
-
-                if (File.Exists(savePath)) return (true, savePath, "");
-
-                using var client = new HttpClient { Timeout = TimeSpan.FromMinutes(120) };
-                using (var response = await client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, ct))
-                {
-                    response.EnsureSuccessStatusCode();
-                    var total = response.Content.Headers.ContentLength ?? -1L;
-                    var tmp = savePath + ".part";
-                    await using (var fs = new FileStream(tmp, FileMode.Create, FileAccess.Write, FileShare.None))
-                    await using (var stream = await response.Content.ReadAsStreamAsync(ct))
-                    {
-                        var buffer = new byte[1024 * 256];
-                        long written = 0;
-                        int read;
-                        while ((read = await stream.ReadAsync(buffer, ct)) > 0)
-                        {
-                            await fs.WriteAsync(buffer.AsMemory(0, read), ct);
-                            written += read;
-                            progress?.Report(total > 0 ? (int)(written * 100 / total) : 0);
-                        }
-                    }
-                    File.Move(tmp, savePath, true);
-                }
-                return (true, savePath, "");
-            }
-            catch (OperationCanceledException)
-            {
-                return (false, "", "已取消下载");
-            }
-            catch (Exception ex)
-            {
-                return (false, "", "下载失败: " + ex.Message);
-            }
-        }
-
         /// <summary>
-        /// 生成可引导 ISO：解包 PE（ISO 挂载/目录）到临时目录 → 覆盖写引导镜像 → 写入客户端/工具 → IsoBuilder 打包。
+        /// 生成可引导 ISO：解包 PE（ISO 挂载/目录）到临时目录 → 覆盖写引导镜像 → IsoBuilder 打包。
         /// 返回输出 ISO 路径。支持 UEFI + Legacy 双引导（取决于 PE 自带的 efi 引导镜像）。
         /// </summary>
         public async Task<(bool Ok, string Error, string OutPath)> BuildIsoAsync(
@@ -233,22 +186,20 @@ namespace WinPE_Client.Services
                     }
                     progress?.Report(25);
 
-                    // ② 写入装机助手客户端 + 内置工具
-                    if (plan.IncludeClient && !string.IsNullOrEmpty(plan.ClientDir) && Directory.Exists(plan.ClientDir))
+                    // ② 写入装机镜像 + 离线无人值守任务（方案A：PE 无网也可无人值守装机）
+                    if (plan.IncludeOfflineImage)
                     {
-                        Log("写入装机助手客户端到 ZS_Client...");
-                        CopyDirectoryRecursive(plan.ClientDir, Path.Combine(staging, "ZS_Client"), log);
+                        Log("写入装机镜像与离线无人值守任务...");
+                        if (string.IsNullOrEmpty(plan.OfflineImagePath) || !File.Exists(plan.OfflineImagePath))
+                            return (false, "未选择有效的装机镜像文件", "");
+                        if (!InjectOfflineImageAndTask(staging, plan.OfflineImagePath,
+                                plan.OfflineUnattendPath, plan.OfflineFirstLogonPath,
+                                plan.OfflineAdminPassword, "usb", Log))
+                            return (false, "写入装机镜像/离线任务失败", "");
+                        progress?.Report(38);
                     }
-                    if (plan.IncludeTools)
-                    {
-                        Log("写入内置工具到 ZS_Tools...");
-                        var toolRoot = Path.Combine(plan.ClientDir, "Tools");
-                        var toolCache = Path.Combine(plan.ClientDir, "ZS_Cache", "tools");
-                        CopyToolsToDrive(toolRoot, toolCache, Path.Combine(staging, "ZS_Tools"), log, ct);
-                    }
-                    progress?.Report(35);
 
-                    // ③ 检测/兜底生成引导镜像
+                    // ④ 检测/兜底生成引导镜像
                     var (efiRel, legacyRel) = DetectAndPrepareBoot(staging, log);
 
                     // ④ IsoBuilder 打包
@@ -386,50 +337,26 @@ namespace WinPE_Client.Services
                 progress?.Report(60);
                 ct.ThrowIfCancellationRequested();
 
-                // ④ 拷入装机助手客户端
-                if (plan.IncludeClient && !string.IsNullOrEmpty(clientDir) && Directory.Exists(clientDir))
+                // ④ 写入装机镜像 + 离线无人值守任务（方案A：PE 无网也可无人值守装机）
+                if (plan.IncludeOfflineImage)
                 {
-                    SetStep("写入装机助手客户端", "running", "拷贝客户端...");
-                    Log("拷贝装机助手客户端...");
-                    try
+                    SetStep("写入装机镜像+无人值守", "running", "拷贝镜像到 ZS_Images");
+                    Log("写入装机镜像与离线无人值守任务...");
+                    if (string.IsNullOrEmpty(plan.OfflineImagePath) || !File.Exists(plan.OfflineImagePath))
                     {
-                        var dest = Path.Combine(targetDrive + ":\\", "ZS_Client");
-                        Directory.CreateDirectory(dest);
-                        var clientProgress = new Progress<int>(p => progress?.Report(60 + p * 20 / 100));
-                        CopyDirectoryRecursive(clientDir, dest, log, clientProgress);
-                        progress?.Report(80);
-                        SetStep("写入装机助手客户端", "completed", "客户端已写入 ZS_Client");
-                        Log("客户端写入完成");
+                        SetStep("写入装机镜像+无人值守", "failed", "未选择有效的装机镜像文件");
+                        return (false, "未选择有效的装机镜像文件");
                     }
-                    catch (Exception ex)
+                    var offlineOk = InjectOfflineImageAndTask(targetDrive + ":\\", plan.OfflineImagePath,
+                        plan.OfflineUnattendPath, plan.OfflineFirstLogonPath,
+                        plan.OfflineAdminPassword, "usb", Log);
+                    if (!offlineOk)
                     {
-                        SetStep("写入装机助手客户端", "failed", ex.Message);
-                        return (false, "写入客户端失败: " + ex.Message);
+                        SetStep("写入装机镜像+无人值守", "failed", "写入失败");
+                        return (false, "写入装机镜像/离线任务失败");
                     }
-                }
-                ct.ThrowIfCancellationRequested();
-
-                // ⑤ 拷入内置工具（进 PE 离线可用）
-                if (plan.IncludeTools)
-                {
-                    SetStep("写入内置工具", "running", "拷贝工具到 ZS_Tools");
-                    Log("拷贝内置工具到 " + targetDrive + ":\\ZS_Tools ...");
-                    var toolRoot = Path.Combine(clientDir, "Tools");
-                    var toolCache = Path.Combine(clientDir, "ZS_Cache", "tools");
-                    var toolProgress = new Progress<int>(p => progress?.Report(80 + p * 15 / 100));
-                    var toolCount = CopyToolsToDrive(toolRoot, toolCache, Path.Combine(targetDrive + ":\\", "ZS_Tools"), log, ct, toolProgress);
-                    progress?.Report(95);
-                    if (toolCount > 0)
-                    {
-                        SetStep("写入内置工具", "completed", "已写入 " + toolCount + " 个工具文件");
-                        Log("内置工具写入完成（" + toolCount + " 个文件）");
-                    }
-                    else
-                    {
-                        // 未找到工具目录：不中断制作，明确提示跳过
-                        SetStep("写入内置工具", "completed", "未检测到工具文件（已跳过）");
-                        Log("未检测到内置工具文件，已跳过（可在「工具大全」放置或下载后重做）");
-                    }
+                    SetStep("写入装机镜像+无人值守", "completed", "镜像与 zs_task.json 已写入");
+                    progress?.Report(97);
                     ct.ThrowIfCancellationRequested();
                 }
 
@@ -676,35 +603,6 @@ namespace WinPE_Client.Services
             }
         }
 
-        /// <summary>拷贝内置工具到 U 盘（内置 Tools 目录 + 下载缓存合并，进 PE 离线可用）</summary>
-        private static int CopyToolsToDrive(string toolRoot, string toolCache, string destRoot, Action<string>? log, CancellationToken ct, IProgress<int>? progress = null)
-        {
-            var count = 0;
-            foreach (var src in new[] { toolRoot, toolCache })
-            {
-                if (string.IsNullOrEmpty(src) || !Directory.Exists(src)) continue;
-                try
-                {
-                    var files = Directory.GetFiles(src, "*", SearchOption.AllDirectories);
-                    var done = 0;
-                    foreach (var file in files)
-                    {
-                        ct.ThrowIfCancellationRequested();
-                        var rel = Path.GetRelativePath(src, file);
-                        var target = Path.Combine(destRoot, rel);
-                        Directory.CreateDirectory(Path.GetDirectoryName(target)!);
-                        File.Copy(file, target, true);
-                        count++;
-                        done++;
-                        progress?.Report(done * 100 / Math.Max(1, files.Length));
-                    }
-                    log?.Invoke("已拷贝工具目录: " + src);
-                }
-                catch { }
-            }
-            return count;
-        }
-
         /// <summary>写入 UEFI 引导：拷贝 PE 的 EFI\BOOT\bootx64.efi 到 U 盘标准路径</summary>
         private static bool EnsureUefiBoot(string targetDrive, string peRoot)
         {
@@ -783,6 +681,157 @@ namespace WinPE_Client.Services
                 return new WindowsPrincipal(identity).IsInRole(WindowsBuiltInRole.Administrator);
             }
             catch { return false; }
+        }
+
+        // ==================== 方案A：离线无人值守注入 ====================
+
+        /// <summary>
+        /// 把装机镜像 + 离线无人值守任务（zs_task.json）写入目标根目录（U盘/ISO staging 共用）。
+        /// 镜像拷贝到 ZS_Images\，任务文件写到根目录，PE 端 OfflineTaskService 扫描到后即可无网装机。
+        /// 无人值守应答：优先使用用户选择的 .xml；未选时按管理员密码生成默认模板。
+        /// </summary>
+        public bool InjectOfflineImageAndTask(
+            string destRoot, string imagePath, string? unattendPath, string? firstLogonPath,
+            string adminPassword, string source, Action<string>? log)
+        {
+            try
+            {
+                log?.Invoke("拷贝装机镜像到 ZS_Images...");
+                var imageDir = Path.Combine(destRoot, "ZS_Images");
+                Directory.CreateDirectory(imageDir);
+                var imageName = Path.GetFileName(imagePath);
+                var targetImage = Path.Combine(imageDir, imageName);
+                File.Copy(imagePath, targetImage, true);
+
+                // 无人值守应答：用户文件优先，否则默认模板（基于管理员密码）
+                string unattendXml = "";
+                if (!string.IsNullOrEmpty(unattendPath) && File.Exists(unattendPath))
+                    unattendXml = File.ReadAllText(unattendPath);
+                else if (!string.IsNullOrEmpty(adminPassword))
+                    unattendXml = DefaultUnattendXml(adminPassword);
+
+                // 首次登录脚本（可选）
+                string firstLogonCmd = "";
+                if (!string.IsNullOrEmpty(firstLogonPath) && File.Exists(firstLogonPath))
+                    firstLogonCmd = File.ReadAllText(firstLogonPath);
+
+                var info = new FileInfo(targetImage);
+                var task = new OfflineTask
+                {
+                    Version = 1,
+                    Source = source,
+                    CreatedAt = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"),
+                    TaskNo = OfflineTaskService.NewTaskNo(),
+                    Image = new OfflineImageInfo
+                    {
+                        Name = imageName,
+                        FileName = imageName,
+                        FilePath = "ZS_Images\\" + imageName,
+                        FileHash = ComputeSha256(targetImage),
+                        FileSize = info.Length,
+                        SizeDisplay = FormatSize(info.Length),
+                    },
+                    Disk = null,
+                    TargetPartition = "C:",
+                    PartitionScheme = "auto",
+                    Options = new OfflineOptions
+                    {
+                        BackupData = true,
+                        AutoPartition = true,
+                        DriverInject = true,
+                        BootFix = true,
+                        Unattended = !string.IsNullOrEmpty(unattendXml),
+                        InstallSoftware = false,
+                        Optimize = true,
+                    },
+                    UnattendXml = unattendXml,
+                    FirstLogonCmd = firstLogonCmd,
+                };
+
+                var taskPath = Path.Combine(destRoot, "zs_task.json");
+                if (!OfflineTaskService.Write(taskPath, task))
+                {
+                    log?.Invoke("写入 zs_task.json 失败");
+                    return false;
+                }
+                log?.Invoke("离线无人值守任务已写入 " + taskPath);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                log?.Invoke("离线任务注入失败: " + ex.Message);
+                return false;
+            }
+        }
+
+        /// <summary>生成默认无人值守应答模板（标准 OOBE 跳过 + 本地管理员自动登录）</summary>
+        public static string DefaultUnattendXml(string adminPassword)
+        {
+            var safePwd = (adminPassword ?? "").Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;");
+            return "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n" +
+                "<unattend xmlns=\"urn:schemas-microsoft-com:unattend\">\n" +
+                "    <settings pass=\"specialize\">\n" +
+                "        <component name=\"Microsoft-Windows-Shell-Setup\" processorArchitecture=\"amd64\" publicKeyToken=\"31bf3856ad364e35\" language=\"neutral\" versionScope=\"nonSxS\" xmlns:wcm=\"http://schemas.microsoft.com/WMIConfig/2002/State\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\">\n" +
+                "            <ComputerName>ZS-PC</ComputerName>\n" +
+                "            <TimeZone>China Standard Time</TimeZone>\n" +
+                "        </component>\n" +
+                "    </settings>\n" +
+                "    <settings pass=\"oobeSystem\">\n" +
+                "        <component name=\"Microsoft-Windows-International-Core\" processorArchitecture=\"amd64\" publicKeyToken=\"31bf3856ad364e35\" language=\"neutral\" versionScope=\"nonSxS\" xmlns:wcm=\"http://schemas.microsoft.com/WMIConfig/2002/State\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\">\n" +
+                "            <InputLocale>zh-CN</InputLocale>\n" +
+                "            <SystemLocale>zh-CN</SystemLocale>\n" +
+                "            <UILanguage>zh-CN</UILanguage>\n" +
+                "            <UserLocale>zh-CN</UserLocale>\n" +
+                "        </component>\n" +
+                "        <component name=\"Microsoft-Windows-Shell-Setup\" processorArchitecture=\"amd64\" publicKeyToken=\"31bf3856ad364e35\" language=\"neutral\" versionScope=\"nonSxS\" xmlns:wcm=\"http://schemas.microsoft.com/WMIConfig/2002/State\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\">\n" +
+                "            <OOBE>\n" +
+                "                <HideEULAPage>true</HideEULAPage>\n" +
+                "                <HideLocalAccountScreen>true</HideLocalAccountScreen>\n" +
+                "                <HideOnlineAccountScreens>true</HideOnlineAccountScreens>\n" +
+                "                <HideWirelessSetupInOOBE>true</HideWirelessSetupInOOBE>\n" +
+                "                <NetworkLocation>Work</NetworkLocation>\n" +
+                "                <ProtectYourPC>3</ProtectYourPC>\n" +
+                "                <SkipMachineOOBE>true</SkipMachineOOBE>\n" +
+                "                <SkipUserOOBE>true</SkipUserOOBE>\n" +
+                "            </OOBE>\n" +
+                "            <UserAccounts>\n" +
+                "                <LocalAccounts>\n" +
+                "                    <LocalAccount wcm:action=\"add\">\n" +
+                "                        <Password>\n" +
+                "                            <Value>" + safePwd + "</Value>\n" +
+                "                            <PlainText>true</PlainText>\n" +
+                "                        </Password>\n" +
+                "                        <DisplayName>admin</DisplayName>\n" +
+                "                        <Group>Administrators</Group>\n" +
+                "                        <Name>admin</Name>\n" +
+                "                    </LocalAccount>\n" +
+                "                </LocalAccounts>\n" +
+                "            </UserAccounts>\n" +
+                "            <AutoLogon>\n" +
+                "                <Password>\n" +
+                "                    <Value>" + safePwd + "</Value>\n" +
+                "                    <PlainText>true</PlainText>\n" +
+                "                </Password>\n" +
+                "                <Enabled>true</Enabled>\n" +
+                "                <LogonCount>1</LogonCount>\n" +
+                "                <Username>admin</Username>\n" +
+                "            </AutoLogon>\n" +
+                "            <RegisteredOwner>ZS</RegisteredOwner>\n" +
+                "            <RegisteredOrganization>ZS</RegisteredOrganization>\n" +
+                "        </component>\n" +
+                "    </settings>\n" +
+                "</unattend>\n";
+        }
+
+        private static string ComputeSha256(string filePath)
+        {
+            try
+            {
+                using var stream = File.OpenRead(filePath);
+                using var sha = System.Security.Cryptography.SHA256.Create();
+                return Convert.ToHexString(sha.ComputeHash(stream)).ToLowerInvariant();
+            }
+            catch { return ""; }
         }
 
         public static string FormatSize(long bytes)

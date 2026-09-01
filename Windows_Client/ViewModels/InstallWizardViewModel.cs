@@ -1032,14 +1032,29 @@ namespace Windows_Client.ViewModels
                     await Task.Delay(60);
                 }
 
+                // ===== 方案B 双保险：预下载镜像到数据盘 + 注入离线任务 zs_task.json =====
+                // 即使 WinPE 环境无网络（登录无效），也能通过磁盘扫描到的离线任务完成无人值守装机
+                bool offlineInjected = await PreDownloadAndInjectOfflineTask();
+                if (offlineInjected)
+                {
+                    SetExec(1, "completed", "已预下载");
+                    SetExec(2, "completed", "校验通过");
+                }
+
                 // 完成页：引导重启进 PE，而非报「装机完成」
                 SetExec(10, "completed", "任务已创建");
                 CompletionTitle = "任务已创建";
-                CompletionDesc = "请重启电脑并进入 WinPE 环境，ZS 装机助手将自动检测并继续完成装机，全程无人值守。";
-                RebootText = "进入 WinPE 后，客户端会自动识别本任务并全自动完成装机";
+                CompletionDesc = offlineInjected
+                    ? "请重启电脑并进入 WinPE 环境，ZS 装机助手将自动检测并继续完成装机，全程无人值守。\n已预下载镜像并注入离线任务，即使 WinPE 无网络也能完成装机（无需登录）。"
+                    : "请重启电脑并进入 WinPE 环境，ZS 装机助手将自动检测并继续完成装机，全程无人值守。";
+                RebootText = offlineInjected
+                    ? "进入 WinPE 后，客户端会自动识别本任务（在线或离线）并全自动完成装机"
+                    : "进入 WinPE 后，客户端会自动识别本任务并全自动完成装机";
                 IsFinished = true;
                 IsFinishedOk = true;
-                StatusText = "任务已创建！请重启进入 WinPE 自动继续装机";
+                StatusText = offlineInjected
+                    ? "任务已创建！镜像已预下载，请重启进入 WinPE 自动完成装机"
+                    : "任务已创建！请重启进入 WinPE 自动继续装机";
                 ElapsedText = "耗时: " + FormatDuration(DateTime.Now - _startTime);
             }
             catch (OperationCanceledException)
@@ -1055,6 +1070,134 @@ namespace Windows_Client.ViewModels
                 IsExecuting = false;
             }
         }
+
+        /// <summary>
+        /// 方案B：Windows 下单时预下载镜像到数据盘（D:\ZS_Cache\images）并校验 SHA256，
+        /// 同时取回无人值守应答与首次登录脚本，注入 D:\ZS_Cache\zs_task.json 离线任务。
+        /// PE 环境无网络时，客户端扫描磁盘即可离线完成完整无人值守装机（方案C 双保险）。
+        /// 返回是否成功注入；失败不阻塞主流程（PE 联网仍可自动续装）。
+        /// </summary>
+        private async Task<bool> PreDownloadAndInjectOfflineTask()
+        {
+            try
+            {
+                if (SelectedImage == null || SelectedDisk == null || _taskId <= 0) return false;
+                var image = SelectedImage;
+                string cacheDir = @"D:\ZS_Cache\images";
+                string cacheFile = Path.Combine(cacheDir, image.FileName);
+                bool hasImage = File.Exists(cacheFile);
+
+                // 1) 预下载镜像（真实下载：clientDownload 流式接口，支持断点续传）
+                if (!hasImage)
+                {
+                    SetExec(1, "running", "正在预下载镜像...");
+                    AddLog("方案B 预下载镜像：" + image.FileName);
+                    var dlProgress = new Progress<int>(p =>
+                    {
+                        int mapped = 5 + (int)(p * 0.12);
+                        ProgressValue = Math.Max(ProgressValue, mapped);
+                        SetExec(1, "running", "正在预下载镜像... " + p + "%");
+                    });
+                    var dlUrl = ServerUrl + "/api/v1/images/" + image.Id + "/clientDownload";
+                    var dl = await _api.DownloadFileAsync(dlUrl, cacheFile, dlProgress);
+                    if (!dl.Ok)
+                    {
+                        AddLog("镜像预下载失败：" + dl.Error + "（离线注入已跳过，PE 联网仍可自动下载）");
+                        return false;
+                    }
+                    hasImage = true;
+                    AddLog("镜像预下载完成：" + cacheFile);
+                }
+                else AddLog("镜像已在数据盘缓存，跳过预下载");
+
+                // 2) 校验镜像（SHA256 与服务端 file_hash 比对）
+                if (hasImage && !string.IsNullOrEmpty(image.FileHash) && image.FileHash.Length >= 32)
+                {
+                    string actualHash = ComputeSha256(cacheFile);
+                    if (!string.Equals(actualHash, image.FileHash, StringComparison.OrdinalIgnoreCase))
+                    {
+                        AddLog("镜像 SHA256 校验失败，离线注入已跳过（PE 联网时将重新下载）");
+                        return false;
+                    }
+                    AddLog("镜像 SHA256 校验通过");
+                }
+
+                // 3) 取回无人值守应答 + 首次登录脚本（服务端生成，任务 waiting 状态即可取）
+                string unattendXml = "";
+                string firstLogonCmd = "";
+                try
+                {
+                    var ur = await _api.GetTaskUnattendAsync(_taskId);
+                    if (ur.IsSuccess && ur.Data != null) unattendXml = ur.Data.Xml ?? "";
+                    var fr = await _api.GetTaskFirstLogonAsync(_taskId);
+                    if (fr.IsSuccess && fr.Data != null) firstLogonCmd = fr.Data.Cmd ?? "";
+                }
+                catch { /* 取回失败不影响离线任务注入（无应答时 PE 端自动跳过） */ }
+
+                // 4) 组装并写入离线任务 zs_task.json（PE 按盘符根目录解析相对镜像路径）
+                var offline = new OfflineTask
+                {
+                    Source = "windows",
+                    CreatedAt = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"),
+                    TaskNo = "ZS-OFFLINE-" + DateTime.Now.ToString("yyyyMMdd-HHmmss"),
+                    Image = new OfflineImageInfo
+                    {
+                        Name = image.Name,
+                        FileName = image.FileName,
+                        // 相对 zs_task.json 所在目录（D:\ZS_Cache\）解析：镜像在 D:\ZS_Cache\images\xxx
+                        FilePath = "images\\" + image.FileName,
+                        FileHash = image.FileHash ?? "",
+                        FileSize = image.FileSize,
+                        SizeDisplay = image.SizeDisplay
+                    },
+                    Disk = new OfflineDiskInfo
+                    {
+                        Index = SelectedDisk.Index,
+                        Size = SelectedDisk.Size,
+                        Model = SelectedDisk.Model ?? ""
+                    },
+                    TargetPartition = "C:",
+                    PartitionScheme = PartitionScheme == 0 ? "auto" : "keep",
+                    Options = new OfflineOptions
+                    {
+                        BackupData = Options.First(o => o.Key == "backup_data").IsOn,
+                        AutoPartition = Options.First(o => o.Key == "auto_partition").IsOn,
+                        DriverInject = Options.First(o => o.Key == "driver_inject").IsOn,
+                        BootFix = Options.First(o => o.Key == "boot_fix").IsOn,
+                        Unattended = Options.First(o => o.Key == "unattended").IsOn,
+                        InstallSoftware = Options.First(o => o.Key == "install_software").IsOn,
+                        Optimize = Options.First(o => o.Key == "optimize").IsOn
+                    },
+                    UnattendXml = unattendXml,
+                    FirstLogonCmd = firstLogonCmd
+                };
+                if (OfflineTaskService.Write(@"D:\ZS_Cache\zs_task.json", offline))
+                {
+                    AddLog("离线任务已注入 D:\\ZS_Cache\\zs_task.json（PE 无网也可无人值守装机）");
+                    return true;
+                }
+                AddLog("离线任务注入失败（数据盘不可写，PE 联网仍可自动续装）");
+                return false;
+            }
+            catch (Exception ex)
+            {
+                AddLog("离线注入异常：" + ex.Message);
+                return false;
+            }
+        }
+
+        /// <summary>计算文件 SHA256（校验镜像完整性）</summary>
+        private static string ComputeSha256(string filePath)
+        {
+            try
+            {
+                using var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+                using var sha = System.Security.Cryptography.SHA256.Create();
+                return Convert.ToHexString(sha.ComputeHash(fs)).ToLowerInvariant();
+            }
+            catch { return ""; }
+        }
+
 
         /// <summary>
         /// 构建完整 options 契约（对齐「全功能流程闭环清单」第 7.2 节），

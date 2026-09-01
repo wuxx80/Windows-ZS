@@ -1,240 +1,216 @@
-## 项目结构
+## 项目结构（与磁盘 + Git 实对齐 · 2026-09-02 · R7 架构切换版）
 
-`
-D:\Users\Desktop\Windows-ZS\
+Windows-ZS/
 │
-├── .gitignore                          # Git 忽略规则
-├── README.md                           # 项目说明文档
-├── 项目理解报告.md                     # 项目架构与核心逻辑
-├── 项目结构.txt                        # 项目目录结构
-├── 操作指南.md                         # 安装/配置/启动/部署
-├── 版本更新记录.md                     # 版本历史与变更记录
-├── 开发计划表.md                       # 详细开发计划（第六件套）
-├── ZS_Installer.sln                    # .NET 解决方案文件
-├── publish.ps1                         # 客户端发布脚本（WinPE/Windows）
-├── deploy_server.ps1                   # 服务器端部署包制作脚本（生成 zs_server_deploy.zip）
+├── .gitignore                          # Git 忽略规则（bin/obj/publish/runtime/uploads/.env）
+├── README.md                           # 项目说明（六件套 1/6）
+├── 项目理解报告.md                     # 架构、数据流、P0 缺口、真实完成度（六件套 2/6）
+├── 项目结构.txt                        # 本文件（六件套 3/6）
+├── 操作指南.md                         # 安装/配置/启动/使用/部署（六件套 4/6）
+├── 版本更新记录.md                     # R1~R7 开发轮 + 债务（六件套 5/6）
+├── 开发计划表.md                       # Phase 0~6 排期 + 审计官 + 风险（六件套 6/6）
+├── ZS_Installer.slnx                   # .NET 解决方案（⚠️ 仅含 Windows_Client + WinPE_Client，缺 WinPE_Agent）
+├── publish.ps1                         # 客户端发布脚本（双端：框架依赖 / 自包含）
+├── deploy_server.ps1                   # 服务端部署包制作（生成 zs_server_deploy.zip）
 │
-│   ├── 设计文档\                           # 设计文档目录
-│   │   ├── 详细设计文档.md                 # 系统架构/数据库/API/目录结构
-│   │   ├── Web后台详细设计.md              # 后台各模块详细设计（21章）
-│   │   ├── 一键装机交互设计.md             # 客户端一键装机交互设计（18章）
-│   │   ├── 全功能流程闭环清单.md           # 全流程闭环梳理（首页/一键装机/无人值守全链路）
-│   │   └── U盘制作与工具大全详细设计.md     # U盘制作四步向导 + 工具大全（53工具/10分类）+ B5 工具联动
-│   │
+├── docs/
+│   └── superpowers/
+│       └── specs/
+│           └── 2026-09-01-zs-perfect-unattended-deployment-v1-design.md    # R7 BCD+离线 新主链路设计 v1（唯一有效设计，其他设计为旧架构对照）
 │
-├── _b5_logic_test\                     # B5 逻辑测试脚手架（IncludeTools 合并拷贝/空目录不中断等 4 项）
-├── _b5_ui_harness\                     # B5 UI 自动化测试脚手架（STA WPF 测试 4 项）
-├── _iso_logic_test\                    # ISO 逻辑自测脚手架（FAT12 efisys.bin 生成 + ISO9660 结构校验 + 在线 PE 端到端）
+├── 设计文档/                           # 旧架构设计文档（R1~R6，仅作迁移对照，不作为当前编码依据）
+│   ├── 详细设计文档.md                 # 数据库/API/目录（旧）
+│   ├── Web后台详细设计.md              # 后台 21 模块（旧）
+│   ├── 一键装机交互设计.md             # 客户端六步向导交互（旧）
+│   ├── 全功能流程闭环清单.md           # 旧链路状态机（R1~R3）
+│   └── U盘制作与工具大全详细设计.md     # U盘四步向导 + 工具大全 53/10（辅助链路，仍保留为参考）
 │
-├── database\                           # 数据库脚本
-│   ├── install.sql                     # 35 张表建表 SQL + 种子数据
-│   └── migration_closure.sql           # 闭环轮增量迁移（任务 waiting 状态/取消时间等）
+├── database/
+│   ├── install.sql                     # 35 张表建表 SQL + 种子数据（zs_* 前缀）
+│   └── migration_closure.sql           # R1 闭环轮增量迁移（waiting 状态/取消时间等）
 │
-├── server\                             # PHP 后端项目（ThinkPHP 6）
-│   ├── .env                            # 环境配置（数据库连接等）
-│   ├── .env.example                    # 环境配置模板
-│   ├── composer.json                   # Composer 依赖配置
-│   ├── composer.lock                   # 依赖锁文件
+├── server/                             # PHP 后端（ThinkPHP 6.1.4）
+│   ├── .env.example                    # 环境模板（生产需复制为 .env）
+│   ├── composer.json / composer.lock   # Composer 依赖
 │   ├── think                           # ThinkPHP CLI 入口
-│   ├── e2e_winpe_test.php              # 端到端回归测试脚本（闭环 29 项，含无人值守/心跳/续装）
-│   ├── api_test.php                    # API 测试脚本
-│   ├── apply_migration.php             # 闭环轮增量迁移执行脚本（waiting 状态/取消时间）
-│   ├── schema_check.php                # 表结构核对脚本
-│   ├── router.php                      # 本地开发服务器路由入口（php -S 127.0.0.1:8001）
-│   ├── thinkphp.nginx.rewrite.conf     # 独立伪静态规则文件
+│   ├── router.php                      # 本地 php -S 127.0.0.1:8001 入口
+│   ├── thinkphp.nginx.rewrite.conf     # 独立伪静态规则（⚠️ 需要你手动贴到宝塔面板）
 │   │
-│   ├── app\                            # 应用目录
-│   │   ├── common.php                  # 公共函数
-│   │   ├── BaseController.php          # 基础控制器
+│   ├── app/
+│   │   ├── common.php                  # 公共函数（响应封装、鉴权辅助等）
+│   │   ├── BaseController.php          # 控制器基类
 │   │   │
-│   │   ├── controller\admin\           # 后台控制器（32个）
-│   │   │   ├── BaseController.php      # 后台基础控制器（认证/响应）
-│   │   │   ├── AuthController.php      # 认证（登录/退出/改密/用户注册）
+│   │   ├── controller/admin/           # 后台控制器（共 31 个；⚠️ 缺 RoleController.php）
+│   │   │   ├── BaseController.php      # 后台基类（认证/响应）
+│   │   │   ├── AuthController.php      # 登录 / 退出 / 改密 / 用户注册
 │   │   │   ├── IndexController.php     # 控制台仪表盘
-│   │   │   ├── ImageController.php     # 镜像管理
-│   │   │   ├── ImageSourceController.php # 镜像源管理
+│   │   │   ├── ImageController.php     # 镜像 CRUD / 上传 / 版本
+│   │   │   ├── ImageSourceController.php   # 镜像源
 │   │   │   ├── ImageTagController.php  # 镜像标签
-│   │   │   ├── TaskController.php      # 任务管理（含进度更新，客户端用）
-│   │   │   ├── TaskTemplateController.php # 任务模板
-│   │   │   ├── UnattendController.php  # 无人值守模板
-│   │   │   ├── ClientController.php    # 客户端自注册/心跳（自动 approved）
-│   │   │   ├── ClientGroupController.php # 客户端分组（后台已移除入口，接口保留）
-│   │   │   ├── ClientVersionController.php # 客户端版本（后台已移除入口，接口保留）
+│   │   │   ├── TaskController.php      # 任务（旧链路建档 / 进度 / 认领 / 重试）
+│   │   │   ├── TaskTemplateController.php  # 任务模板
+│   │   │   ├── UnattendController.php  # 无人值守模板（Autounattend.xml 生成）
+│   │   │   ├── ClientController.php    # 客户端自注册 / 心跳（自动 approved）
+│   │   │   ├── ClientGroupController.php    # 客户端分组（后台已无入口，接口保留）
+│   │   │   ├── ClientVersionController.php  # 客户端版本（同上）
 │   │   │   ├── SoftwareController.php  # 软件管理
-│   │   │   ├── SoftwareCategoryController.php # 软件分类
-│   │   │   ├── SoftwareTemplateController.php # 软件模板
+│   │   │   ├── SoftwareCategoryController.php   # 软件分类
+│   │   │   ├── SoftwareTemplateController.php   # 软件模板（装机软件集合）
 │   │   │   ├── DriverController.php    # 驱动管理
 │   │   │   ├── ScriptController.php    # 脚本管理
-│   │   │   ├── PeVersionController.php # PE 版本管理
-│   │   │   ├── PeCustomizeController.php # PE 定制
-│   │   │   ├── PxeConfigController.php # PXE 配置
-│   │   │   ├── NetworkDeployController.php # 网络部署
-│   │   │   ├── CustomerController.php      # 客户管理（后台已移除入口，接口保留）
-│   │   │   ├── WorkOrderController.php     # 工单管理（后台已移除入口，接口保留）
-│   │   │   ├── UserController.php      # 用户管理
-│   │   │   ├── RoleController.php      # 角色管理
-│   │   │   ├── SettingController.php   # 系统设置
-│   │   │   ├── StorageController.php   # 存储管理
-│   │   │   ├── NotificationController.php # 通知管理
-│   │   │   ├── WebhookController.php   # Webhook 管理
-│   │   │   ├── LogController.php       # 日志审计
-│   │   │   ├── RecycleBinController.php # 回收站
+│   │   │   ├── PeVersionController.php # PE 版本
+│   │   │   ├── PeCustomizeController.php   # PE 定制（壁纸 / 工具 / 启动画面）
+│   │   │   ├── PxeConfigController.php # PXE 配置（菜单已移除，Phase3评估删留）
+│   │   │   ├── NetworkDeployController.php # 网络部署（同上）
+│   │   │   ├── CustomerController.php  # 客户管理（业务菜单已移除，同上）
+│   │   │   ├── WorkOrderController.php # 工单管理（同上）
+│   │   │   ├── UserController.php      # 用户管理（⚠️ 角色写入读 role_id，前端提交 role 字符串，契约不一致）
+│   │   │   ├── SettingController.php   # 系统设置（站点信息组：品牌 / 版本 / 版权 / 联系 / 关于）
+│   │   │   ├── NotificationController.php  # 通知
+│   │   │   ├── WebhookController.php   # Webhook 配置
+│   │   │   ├── LogController.php       # 操作日志（⚠️ 中间件未挂所以不写入）
+│   │   │   ├── RecycleBinController.php    # 回收站
 │   │   │   ├── ReportController.php    # 报表统计
-│   │   │   └── DeviceController.php    # 设备信息（磁盘列表）
+│   │   │   └── DeviceController.php    # 磁盘信息接口（客户端用）
 │   │   │
-│   │   ├── controller\api\             # 公开接口控制器（无需登录）
-│   │   │   └── SiteController.php      # 站点信息（GET /api/v1/site/info，客户端首页品牌）
+│   │   ├── controller/api/
+│   │   │   └── SiteController.php      # GET /api/v1/site/info 公开站点信息
 │   │   │
-│   │   ├── model\                      # 数据模型（36个）
-│   │   │   ├── BaseModel.php           # 基础模型
-│   │   │   ├── User.php                # 用户
-│   │   │   ├── ...                     # 其他模型
-│   │   │   └── ScheduledTaskLog.php
+│   │   ├── model/                      # 数据模型（36 个）
+│   │   │   ├── BaseModel.php
+│   │   │   ├── User.php / Role.php
+│   │   │   ├── Image.php / ImageSource.php / ImageTag.php / ImageTagRelation.php / ImageVersion.php
+│   │   │   ├── DownloadLink.php / DownloadLog.php / DownloadQueue.php
+│   │   │   ├── Client.php / ClientGroup.php / ClientVersion.php
+│   │   │   ├── Task.php / TaskRecord.php / TaskTemplate.php
+│   │   │   ├── UnattendTemplate.php
+│   │   │   ├── Software.php / SoftwareCategory.php / SoftwareTemplate.php / Driver.php / Script.php
+│   │   │   ├── PeVersion.php / PeCustomize.php
+│   │   │   ├── PxeConfig.php / NetworkDeploy.php   # （菜单移除，Phase3评估）
+│   │   │   ├── Customer.php / WorkOrder.php        # （业务菜单移除，Phase3评估）
+│   │   │   ├── Setting.php / Log.php
+│   │   │   ├── ScheduledTask.php / ScheduledTaskLog.php
+│   │   │   ├── Notification.php / RecycleBin.php / WebhookLog.php
 │   │   │
-│   │   ├── middleware\                 # 中间件
-│   │   │   ├── AuthMiddleware.php      # 认证中间件
-│   │   │   ├── CorsMiddleware.php      # 跨域中间件
-│   │   │   └── LogMiddleware.php       # 日志中间件（密码脱敏）
+│   │   ├── middleware/                 # 3 个中间件
+│   │   │   ├── AuthMiddleware.php      # （⚠️ 存在未注册到 middleware.php）
+│   │   │   ├── CorsMiddleware.php      # ✓ 已注册
+│   │   │   └── LogMiddleware.php       # （⚠️ 存在未注册）
 │   │   │
-│   │   ├── exception\                  # 异常处理
-│   │   │   └── HttpExceptionHandler.php
+│   │   ├── exception/
+│   │   │   └── HttpExceptionHandler.php   # 异常 JSON 脱敏
 │   │   │
-│   │   └── service\                    # 服务层（8个）
-│   │       ├── AuthService.php         # 认证服务
-│   │       ├── ImageService.php        # 镜像服务
-│   │       ├── TaskService.php         # 任务服务
-│   │       ├── FileService.php         # 文件服务（分片上传）
-│   │       ├── BackupService.php       # 备份服务
-│   │       ├── CacheService.php        # 缓存服务
-│   │       ├── NotificationService.php # 通知服务
-│   │       └── WebSocketService.php    # WebSocket服务
+│   │   └── service/                    # 8 个服务层
+│   │       ├── AuthService.php / ImageService.php / TaskService.php
+│   │       ├── FileService.php / BackupService.php / CacheService.php
+│   │       ├── NotificationService.php / WebSocketService.php
 │   │
-│   ├── config\                         # 配置
-│   │   ├── app.php                     # 应用配置
-│   │   ├── database.php                # 数据库配置
-│   │   ├── cache.php                   # 缓存配置
-│   │   ├── log.php                     # 日志配置
-│   │   ├── status.php                  # 状态码配置（36个）
-│   │   ├── auth.php                    # 认证配置
-│   │   ├── filesystem.php             # 文件系统配置
-│   │   ├── upload.php                  # 上传配置
-│   │   └── middleware.php             # 中间件配置
+│   ├── config/                         # 11 个配置
+│   │   ├── app.php / database.php / cache.php / log.php
+│   │   ├── status.php（36 个业务状态码）
+│   │   ├── jwt.php / upload.php / websocket.php / backup.php
+│   │   ├── route.php
+│   │   └── middleware.php              # ⚠️ 仅注册了 CorsMiddleware
 │   │
-│   ├── route\                          # 路由
-│   │   └── admin.php                   # 后台 API 路由（44个接口）
+│   ├── route/
+│   │   └── admin.php                   # 后台 API 路由（44+ 接口；⚠️ 无 Role 路由）
 │   │
-│   ├── runtime\                        # 运行时（缓存/日志/编译）
-│   └── public\                         # 入口目录
+│   └── public/                         # 入口目录（生产环境网站运行目录指向这里）
 │       ├── index.php                   # ThinkPHP 入口
-│       ├── .htaccess                   # Apache 重写
-│       ├── index.html                  # 首页（介绍下载站）
-│       └── admin\                      # 管理后台前端
+│       ├── admin.php                   # 后台入口（兼容路径）
+│       ├── index.html                  # 首页（介绍 + 客户端下载站）
+│       ├── 404.html / .htaccess
+│       │
+│       ├── assets/
+│       │   ├── css/admin.css / style.css
+│       │   └── js/admin-common.js
+│       │
+│       └── admin/                      # 管理后台前端（Layui 2.9+ 风格）
 │           ├── login.html              # 登录页
-│           ├── index.html              # 主布局（侧边栏+顶部栏+iframe）
-│           ├── pages\                  # 功能页面（22个；客户端管理/任务管理/业务管理页面已移除）
-│           │   ├── dashboard.html      # 控制台
-│           │   ├── images.html         # 镜像列表
-│           │   ├── image-sources.html  # 镜像源
-│           │   ├── image-tags.html     # 镜像标签
-│           │   ├── unattend.html       # 无人值守模板
-│           │   ├── ...                 # 其他管理页面
-│           │   └── recycle-bin.html    # 回收站
-│           └── assets\                 # 静态资源
-│               ├── css\                # 样式
-│               │   └── admin.css       # 统一后台样式
-│               └── js\                 # 脚本
-│                   └── admin-common.js # 通用工具库
+│           ├── index.html              # 主布局（深色侧边栏 + 顶部栏 + iframe 内容区）
+│           │
+│           └── pages/                  # 22 个管理页（现行菜单已精简为 19 项）
+│               ├── dashboard.html      # 控制台
+│               ├── images.html         # 镜像列表
+│               ├── image-sources.html  # 镜像源
+│               ├── image-tags.html     # 镜像标签
+│               ├── unattend.html       # 无人值守模板
+│               ├── software.html       # 软件
+│               ├── software-categories.html # 软件分类
+│               ├── software-templates.html  # 软件模板
+│               ├── drivers.html        # 驱动
+│               ├── scripts.html        # 脚本
+│               ├── pe-versions.html    # PE 版本
+│               ├── pe-customize.html   # PE 定制
+│               ├── users.html          # 用户管理（⚠️ role→role_id 契约错）
+│               ├── settings.html       # 系统设置 + 站点信息组
+│               ├── logs.html           # 操作日志（⚠️ 空，中间件未挂）
+│               ├── notifications.html  # 通知
+│               ├── scheduled-tasks.html    # 定时任务
+│               ├── reports.html        # 报表统计（任务状态/在线客户端分布 7 卡片）
+│               ├── webhook-logs.html   # Webhook 日志
+│               ├── recycle-bin.html    # 回收站
+│               ├── pxe-configs.html        # （无菜单入口，保留文件，Phase3评估）
+│               └── network-deploys.html    # （同上）
 │
-├── WinPE_Client\                       # WinPE 客户端（.NET 8 WPF）
-│   ├── WinPE_Client.csproj             # 项目文件
-│   ├── App.xaml                        # 应用程序入口
-│   ├── MainWindow.xaml                 # 主窗口 UI（首页 4 大入口 + 待执行任务卡片 + 炫彩动态背景）
-│   ├── MainWindow.xaml.cs              # 主窗口代码
-│   ├── InstallWizardWindow.xaml        # 一键装机六步向导窗口 UI
-│   ├── InstallWizardWindow.xaml.cs     # 向导窗口代码（拖拽/关闭）
-│   ├── UDiskWindow.xaml                # U盘制作四步向导窗口 UI（输出方式：写U盘/生成ISO）
-│   ├── UDiskWindow.xaml.cs             # U盘制作窗口代码
-│   ├── ToolsWindow.xaml                # 工具大全窗口 UI
-│   ├── ToolsWindow.xaml.cs             # 工具大全窗口代码
-│   ├── SettingsWindow.xaml/.cs         # 设置窗口（服务器地址等）
-│   ├── AboutWindow.xaml/.cs            # 关于窗口
-│   ├── ContactWindow.xaml/.cs          # 联系窗口
-│   ├── VersionWindow.xaml/.cs          # 版本窗口
-│   ├── Models\                         # 数据模型
-│   │   ├── ApiResponse.cs              # API 响应模型
-│   │   ├── ImageInfo.cs                # 镜像信息模型（含缓存状态）
-│   │   ├── DiskInfo.cs                 # 磁盘/分区模型
-│   │   ├── UDiskModels.cs              # U盘制作模型（RemovableDisk/WritePlan/IsoBuildPlan/PeVersionInfo）
-│   │   └── WizardModels.cs             # 六步向导模型（环境检测/选项/步骤/冲突/分区编辑）
-│   ├── Services\                       # 服务层
-│   │   ├── ApiService.cs               # HTTP API 通信服务（含分页/过滤/任务控制）
-│   │   ├── DeviceService.cs            # 设备信息采集（WMI）
-│   │   ├── ImageDeployService.cs       # 镜像部署引擎
-│   │   ├── DiskPartService.cs          # DiskPart 分区工具
-│   │   ├── UDiskService.cs             # U盘制作服务（枚举/校验/PE下载/写盘/ISO构建/在线URL拉取）
-│   │   ├── IsoBuilder.cs               # 可引导ISO生成器（ISO9660+Joliet+El Torito 双引导）
-│   │   ├── EfiSysGenerator.cs          # UEFI引导镜像生成（FAT12 efisys.bin 兜底）
-│   │   └── ToolService.cs              # 工具大全服务
-│   ├── ViewModels\                     # 视图模型
-│   │   ├── MainViewModel.cs            # 主视图模型
-│   │   ├── UDiskViewModel.cs           # U盘制作视图模型（输出方式/USB与ISO双流程）
-│   │   ├── ToolsViewModel.cs           # 工具大全视图模型
-│   │   └── InstallWizardViewModel.cs   # 六步向导视图模型（完整装机执行）
-│   ├── Data\Tools\tools.json           # 工具清单（53工具/10分类）
-│   └── Helpers\                        # 辅助类
-│       └── Converters.cs               # 值转换器（含 StringToBrush/分区方案单选）
+├── WinPE_Agent/                        # ⚠️ 未入 sln、未入 Git（新主链路 PE 端核心执行者）
+│   ├── WinPE_Agent.csproj              # .NET 8 AOT 发布目标（单文件 / 无运行时依赖）
+│   ├── Models/ApiModels.cs
+│   └── Program.cs                      # §6 八阶段流水线（固件判定/分区尾端验证/WIM/驱动/引导/Unattend/SetupComplete）
 │
-├── Windows_Client\                     # Windows 客户端（.NET 8 WPF）
-│   ├── Windows_Client.csproj           # 项目文件
-│   ├── App.xaml                        # 应用程序入口
-│   ├── MainWindow.xaml                 # 主窗口 UI（四大入口 + 最近任务卡片 + 炫彩动态背景）
-│   ├── MainWindow.xaml.cs              # 主窗口代码
-│   ├── LoginWindow.xaml/.cs            # 用户注册/登录对话框
-│   ├── InstallWizardWindow.xaml        # 一键装机六步向导窗口 UI（安全版）
-│   ├── InstallWizardWindow.xaml.cs     # 向导窗口代码（拖拽/关闭）
-│   ├── UDiskWindow.xaml                # U盘制作四步向导窗口 UI（输出方式：写U盘/生成ISO）
-│   ├── UDiskWindow.xaml.cs             # U盘制作窗口代码
-│   ├── ToolsWindow.xaml                # 工具大全窗口 UI
-│   ├── ToolsWindow.xaml.cs             # 工具大全窗口代码
-│   ├── SoftwareWindow.xaml/.cs         # 绿色软件窗口
-│   ├── SettingsWindow.xaml/.cs         # 设置窗口（服务器地址等）
-│   ├── AboutWindow.xaml/.cs            # 关于窗口
-│   ├── ContactWindow.xaml/.cs          # 联系窗口
-│   ├── VersionWindow.xaml/.cs          # 版本窗口
-│   ├── Models\                         # 数据模型
-│   │   ├── ApiModels.cs                # API 数据模型（含向导相关模型）
-│   │   └── UDiskModels.cs              # U盘制作模型（RemovableDisk/WritePlan/IsoBuildPlan/PeVersionInfo）
-│   ├── Services\                       # 服务层
-│   │   ├── ApiService.cs               # HTTP API 通信服务（含分页/过滤/任务控制）
-│   │   ├── DeviceService.cs            # 设备信息采集（WMI，自 WinPE 迁移）
-│   │   ├── ImageDeployService.cs       # 镜像部署引擎（自 WinPE 迁移）
-│   │   ├── DiskPartService.cs          # DiskPart 分区工具（自 WinPE 迁移）
-│   │   ├── UDiskService.cs             # U盘制作服务（枚举/校验/PE下载/写盘/ISO构建/在线URL拉取）
-│   │   ├── IsoBuilder.cs               # 可引导ISO生成器（ISO9660+Joliet+El Torito 双引导）
-│   │   ├── EfiSysGenerator.cs          # UEFI引导镜像生成（FAT12 efisys.bin 兜底）
-│   │   ├── ToolService.cs              # 工具大全服务
-│   │   └── SessionStore.cs             # 登录会话持久化（本地保存 token + 用户名）
-│   ├── ViewModels\                     # 视图模型
-│   │   ├── MainViewModel.cs            # 主视图模型
-│   │   ├── UDiskViewModel.cs           # U盘制作视图模型（输出方式/USB与ISO双流程）
-│   │   ├── ToolsViewModel.cs           # 工具大全视图模型
-│   │   ├── InstallWizardViewModel.cs   # 六步向导视图模型（安全版：仅建任务，装机在 WinPE 执行）
-│   │   └── SoftwareWindowViewModel.cs  # 绿色软件窗口视图模型
-│   ├── Data\Tools\tools.json           # 工具清单（53工具/10分类）
-│   └── Helpers\                        # 辅助类
-│       └── Converters.cs               # 值转换器（含 StringToBrush/分区方案单选）
+├── WinPE_Client/                       # 旧主链路 WinPE 端 WPF GUI（Phase 3 评估是否降级为手动装机界面）
+│   ├── WinPE_Client.csproj
+│   ├── App.xaml / App.xaml.cs / AssemblyInfo.cs
+│   ├── MainWindow.xaml(.cs)            # 首页（四卡 + 待执行任务卡片）
+│   ├── InstallWizardWindow.xaml(.cs)   # 一键装机六步向导
+│   ├── UDiskWindow.xaml(.cs)           # U盘制作四步向导（写U盘 / 生成ISO）
+│   ├── ToolsWindow.xaml(.cs)           # 工具大全
+│   ├── SettingsWindow / AboutWindow / ContactWindow / VersionWindow
+│   ├── Models/  WizardModels / UDiskModels / OfflineTaskModels / ImageInfo / DiskInfo / ApiResponse
+│   ├── Services/ ApiService / DeviceService / ImageDeployService / DiskPartService
+│   │            UDiskService / IsoBuilder / EfiSysGenerator / OfflineTaskService / ToolService
+│   ├── ViewModels/ Main / UDisk / Tools / InstallWizard
+│   ├── Helpers/Converters.cs
+│   └── Data/Tools/tools.json           # 53 工具 / 10 分类清单
 │
-└── publish\                            # 客户端发布产物（git 忽略）
-    ├── WinPE_Client\                   # WinPE 客户端自包含发布（~146MB）
-    └── Windows_Client\                 # Windows 客户端框架依赖发布（~0.5MB）
-`
+├── Windows_Client/                     # Windows 端 WPF GUI（Phase 2 改一键装机为 P1+P2）
+│   ├── Windows_Client.csproj
+│   ├── App.xaml / App.xaml.cs / AssemblyInfo.cs
+│   ├── MainWindow.xaml(.cs)            # 首页（四卡 + 最近任务卡片）
+│   ├── LoginWindow.xaml(.cs)           # 用户注册 / 登录
+│   ├── InstallWizardWindow.xaml(.cs)   # 一键装机六步向导（安全版，宿主机不破坏磁盘）
+│   ├── UDiskWindow / ToolsWindow / SoftwareWindow / SettingsWindow
+│   ├── AboutWindow / ContactWindow / VersionWindow
+│   ├── Models/ ApiModels / UDiskModels / OfflineTask / ToolModels
+│   ├── Services/ ApiService / DeviceService / ImageDeployService / DiskPartService
+│   │            UDiskService / IsoBuilder / EfiSysGenerator / ToolService
+│   │            SessionStore / OfflineTaskService
+│   ├── ViewModels/ Main / UDisk / Tools / InstallWizard / SoftwareWindow
+│   ├── Helpers/Converters.cs
+│   └── Data/Tools/tools.json           # 双端工具清单一致
+│
+├── _pe_iso_build/                      # PE ISO 构建辅助工程（C#：结构校验 / 打包）
+│   ├── PeIsoBuild.csproj
+│   ├── Program.cs
+│   └── IsoVerify.cs
+│
+├── _pe_build/                          # 本地构建临时工作区（非源码，仅供本机调试）
+│   ├── iso_staging/                    # PE ISO 解包（微软官方 Boot/ / EFI/ 文件 + 测试 zs_task.json）
+│   ├── wim_mount/                      # WIM 挂载目录（WIM 未安全卸载时 Windows 注册表句柄锁定）
+│   ├── easyu_mount/                    # 参考对比挂载目录（同注册表锁定，留空）
+│   └── vm_test/ZS_PE_Test.vmx          # VMware 测试虚拟机配置
+│
+├── 别人易语言写的/                      # ⚠️ 参考借鉴目录（仅作为技术学习和对比材料）
+│   └── 其他运行一键装机后得到的文件/    # —— 内容不纳入本项目、不写入六件套、不作为编码依据
+│
+└── publish/                            # 客户端发布产物目录（.gitignore 忽略）
+    ├── WinPE_Client/  （自包含 ~146MB）
+    └── Windows_Client/  （框架依赖 ~0.5MB）
 
-# 版本更新
 
-当前版本：v0.0.268311（含增补轮 R1~R5）
-API 联调验证 + 性能优化 + 安全审查 + 部署文档 + 打包发布 已完成
-一键装机六步向导（WinPE 完整版 + Windows 安全版）已完成并同步
-全功能流程闭环整理已完成：WinPE 首页 4 大入口 + 待执行任务续装卡片、Windows 首页最近任务卡片、双端 30 秒心跳、无人值守 XML 写入 + 首次登录脚本生成、后端仪表盘智能统计 + 任务停滞检测（详见 设计文档\全功能流程闭环清单.md）
-U盘制作与工具大全已完成（R2）：四步向导 + 53工具/10分类 + B5 工具联动；一键安装 9 项闭环修复完成（R3）
-U盘启动制作完善完成（R4）：输出方式支持「写U盘 / 生成ISO镜像」双模式；在线 URL 直接拉取 PE；纯 C# 可引导 ISO 生成器（ISO9660+Joliet+El Torito 双引导）+ FAT12 efisys.bin 兜底；_iso_logic_test 逻辑自测 + 在线 PE 端到端验证通过
-用户注册/登录体系 + 后台菜单精简 + 客户端炫彩动效完成（R5）：客户端登录改为用户注册/登录（测试账号 wuxx80/a111111）；后台移除客户端管理/任务管理/业务管理菜单；首页品牌信息对接后台设置（api/v1/site/info + 站点信息组）；Windows/WinPE 双端动态渐变背景/漂浮光斑/星尘粒子/呼吸光晕/入场动画
+### 重要删除 / 未跟踪状态（Git 对齐 · 2026-09-02）
+- 已删除但 Git delete 未提交：5 个测试脚手架目录（_b5_logic_test / _b5_ui_harness / _iso_logic_test / _offline_logic_test / _offline_ui_harness）+ 8 个临时 PHP 测试脚本（server/ 下）+ 根目录截图和临时脚本。
+- 未跟踪：WinPE_Agent/、WinPE_Client Models/OfflineTaskModels.cs、WinPE_Client Services/OfflineTaskService.cs、其他 OfflineTask 相关文件。
+- 旧解决方案名 ZS_Installer.sln 不存在（实际是 ZS_Installer.slnx）。
+- 测试脚本 e2e_winpe_test.php / api_test.php / apply_migration.php / schema_check.php：项目根已清理，不再标注存在。
+- 服务器控制器：不存在 RoleController.php、StorageController.php（旧文档虚构项）。

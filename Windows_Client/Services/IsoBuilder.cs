@@ -43,6 +43,9 @@ namespace Windows_Client.Services
 
             /// <summary>UEFI 引导镜像相对 ISO 根路径，须位于 SourceDir 内（如 "EFI/BOOT/EFISYS.BIN"）。为空则跳过。</summary>
             public string? EfiBootRel;
+
+            /// <summary>设为 true 时跳过 Joliet 补充卷描述符（SVD），生成纯 ISO9660 ISO（兼容性优先，Windows 挂载/老 BIOS 更稳）。</summary>
+            public bool NoJoliet;
         }
 
         public static async Task BuildAsync(
@@ -65,6 +68,7 @@ namespace Windows_Client.Services
 
             string label = request.Label ?? Path.GetFileNameWithoutExtension(request.OutputPath);
             var layout = new Layout(Label19(label), root, files, bootLegacy, bootEfi);
+            layout.NoJoliet = request.NoJoliet;
             layout.Allocate();
 
             var outDir = Path.GetDirectoryName(Path.GetFullPath(request.OutputPath));
@@ -78,7 +82,7 @@ namespace Windows_Client.Services
 
                 WriteAt(fs, layout.LbaPvd * SECTOR, BuildPvd(layout));
                 if (layout.LbaBrv >= 0) WriteAt(fs, layout.LbaBrv * SECTOR, BuildBootRecord(layout));
-                WriteAt(fs, layout.LbaSvd * SECTOR, BuildJolietPvd(layout));
+                if (!layout.NoJoliet) WriteAt(fs, layout.LbaSvd * SECTOR, BuildJolietPvd(layout));
                 WriteAt(fs, layout.LbaTerminator * SECTOR, BuildTerminator());
 
                 WriteAt(fs, layout.LbaTypeL * SECTOR, PathTableL(layout));
@@ -86,7 +90,8 @@ namespace Windows_Client.Services
                 if (layout.LbaCat >= 0) WriteAt(fs, layout.LbaCat * SECTOR, BuildBootCatalog(layout));
 
                 foreach (var n in layout.IsoDirs) WriteAt(fs, n.IsoLba * SECTOR, BuildIsoBlock(n, layout));
-                foreach (var n in layout.JolDirs) WriteAt(fs, n.JolLba * SECTOR, BuildJolBlock(n, layout));
+                if (!layout.NoJoliet)
+                    foreach (var n in layout.JolDirs) WriteAt(fs, n.JolLba * SECTOR, BuildJolBlock(n, layout));
 
                 foreach (var f in layout.FilesSorted)
                 {
@@ -197,6 +202,7 @@ namespace Windows_Client.Services
             public readonly IsoNode Root;
             public readonly List<IsoFile> Files;
             public string? BootLegacy, BootEfi;
+            public bool NoJoliet;
 
             public long LbaPvd, LbaSvd, LbaTerminator;
             public long LbaBrv = -1, LbaCat = -1;
@@ -228,7 +234,9 @@ namespace Windows_Client.Services
                 long bytes = 0;
                 foreach (var e in PathEntries)
                 {
-                    int idLen = Encoding.ASCII.GetByteCount(e.Name);
+                    // ECMA-119 9.10.1：路径表根目录记录的标识符为单字节 0x00（长度 1），
+                    // 非根目录按实际名称长度计算。长度 0 会被严格解析器视为路径表结束标记。
+                    int idLen = e.DirNum == 1 ? 1 : Encoding.ASCII.GetByteCount(e.Name);
                     bytes += 8 + idLen + (idLen % 2 == 1 ? 1 : 0);
                 }
                 // PVD 的 PathTableSize 必须是路径表实际字节数（存储时才按扇区对齐），
@@ -242,31 +250,50 @@ namespace Windows_Client.Services
                 LbaPvd = next++;
                 bool anyBoot = !string.IsNullOrEmpty(BootLegacy) || !string.IsNullOrEmpty(BootEfi);
                 if (anyBoot) LbaBrv = next++;
-                LbaSvd = next++;
+                if (!NoJoliet) LbaSvd = next++;
                 LbaTerminator = next++;
                 LbaTypeL = next; next += RoundUp(PathTableBytes, SECTOR) / SECTOR;
                 LbaTypeM = next; next += RoundUp(PathTableBytes, SECTOR) / SECTOR;
                 if (anyBoot) LbaCat = next++;
+
+                // 引导镜像优先分配在 ISO 前部低 LBA（对齐 oscdimg/EasyU/grub-mkrescue 规范）。
+                // 位于 ISO 末尾（高 RBA）的 El Torito 引导镜像在部分 BIOS/固件上读取失败，
+                // 会回退到下一引导设备（网卡 PXE），表现为"选 CD 后直接跳网卡启动"。
+                var bootSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                if (!string.IsNullOrEmpty(BootLegacy)) bootSet.Add(BootLegacy);
+                if (!string.IsNullOrEmpty(BootEfi)) bootSet.Add(BootEfi);
+                foreach (var f in Files)
+                    if (bootSet.Contains(f.IsoPath))
+                    {
+                        f.Extent = next;
+                        next += RoundUp(f.Size, SECTOR) / SECTOR;
+                    }
 
                 var iso = new List<IsoNode>();
                 var jol = new List<IsoNode>();
                 void Traverse(IsoNode n)
                 {
                     n.IsoSize = ComputeDirSize(n, false);
-                    n.JolSize = ComputeDirSize(n, true);
+                    n.JolSize = NoJoliet ? 0 : ComputeDirSize(n, true);
                     foreach (var c in n.Children) Traverse(c);
                     iso.Add(n); jol.Add(n);
                 }
                 Traverse(Root);
 
                 foreach (var n in iso) { n.IsoLba = next; next += RoundUp(n.IsoSize, SECTOR) / SECTOR; }
-                foreach (var n in jol) { n.JolLba = next; next += RoundUp(n.JolSize, SECTOR) / SECTOR; }
+                if (!NoJoliet)
+                    foreach (var n in jol) { n.JolLba = next; next += RoundUp(n.JolSize, SECTOR) / SECTOR; }
 
                 foreach (var e in PathEntries)
                     e.Extent = FindNode(e.DirNum).IsoLba;
 
                 FilesSorted = Files.OrderBy(f => f.IsoName, StringComparer.Ordinal).ToList();
-                foreach (var f in FilesSorted) { f.Extent = next; next += RoundUp(f.Size, SECTOR) / SECTOR; }
+                foreach (var f in FilesSorted)
+                    if (!bootSet.Contains(f.IsoPath))
+                    {
+                        f.Extent = next;
+                        next += RoundUp(f.Size, SECTOR) / SECTOR;
+                    }
 
                 IsoDirs = iso; JolDirs = jol;
                 TotalBytes = next * SECTOR;
@@ -299,7 +326,7 @@ namespace Windows_Client.Services
         {
             long size = RecLen(joliet ? DotName(true) : DotName(false)) + RecLen(joliet ? DotDotName(true) : DotDotName(false));
             foreach (var c in node.Children)
-                size += RecLen(joliet ? Ucs2(c.Name) : Asc(ShortAscii(c.Name, 8)));
+                size += RecLen(joliet ? Ucs2(c.Name) : Asc(SanitizeDirName(c.Name)));
             foreach (var f in node.Files)
                 size += RecLen(joliet ? Ucs2(f.JolietName) : Asc(f.IsoName));
             return RoundUp(size, SECTOR);
@@ -311,8 +338,12 @@ namespace Windows_Client.Services
             return 33 + idLen + (idLen % 2 == 0 ? 1 : 0);
         }
 
+        // ISO9660 (ECMA-119 9.8.3)："." 目录记录标识符为单字节 0x00，".." 为单字节 0x01。
+        // 若写成 0x00 0x00 等错误编码，Windows cdrom.sys 等严格 ISO9660 解析器会拒绝挂载，
+        // 且 etfsboot.com 的 ISO9660 驱动解析失败导致 Legacy BIOS 引导回退到网卡（PXE）。
+        // Joliet 则为 UCS-2 大端编码的 "." / ".."。
         private static byte[] DotName(bool joliet) => joliet ? new byte[] { 0x00, 0x2E } : new byte[] { 0x00 };
-        private static byte[] DotDotName(bool joliet) => joliet ? new byte[] { 0x00, 0x2E, 0x00, 0x2E } : new byte[] { 0x00, 0x00 };
+        private static byte[] DotDotName(bool joliet) => joliet ? new byte[] { 0x00, 0x2E, 0x00, 0x2E } : new byte[] { 0x01 };
 
         private static byte[] BuildIsoBlock(IsoNode node, Layout layout)
         {
@@ -321,7 +352,7 @@ namespace Windows_Client.Services
             var parent = node.Parent ?? node;
             o = PutRecord(buf, o, DotDotName(false), FLAG_DIR, parent.IsoLba, parent.IsoSize, false);
             foreach (var c in node.Children)
-                o = PutRecord(buf, o, Asc(ShortAscii(c.Name, 8)), FLAG_DIR, c.IsoLba, c.IsoSize, false);
+                o = PutRecord(buf, o, Asc(SanitizeDirName(c.Name)), FLAG_DIR, c.IsoLba, c.IsoSize, false);
             foreach (var f in node.Files)
                 o = PutRecord(buf, o, Asc(f.IsoName), 0, f.Extent, f.Size, false);
             return buf;
@@ -361,9 +392,15 @@ namespace Windows_Client.Services
 
         private static void WriteDirDate(byte[] buf, int o)
         {
-            byte[] y = Encoding.ASCII.GetBytes((2024 - 1900).ToString("0000"));
-            buf[o] = y[0]; buf[o + 1] = y[1]; buf[o + 2] = y[2]; buf[o + 3] = y[3];
-            buf[o + 4] = 1; buf[o + 5] = 1; buf[o + 6] = 0;
+            // ISO9660 目录记录日期：7 字节，年份为「自 1900 年起的年数」二进制值
+            var now = DateTime.Now;
+            buf[o] = (byte)(now.Year - 1900);
+            buf[o + 1] = (byte)now.Month;
+            buf[o + 2] = (byte)now.Day;
+            buf[o + 3] = (byte)now.Hour;
+            buf[o + 4] = (byte)now.Minute;
+            buf[o + 5] = (byte)now.Second;
+            buf[o + 6] = 0;
         }
 
         // ==================== 路径表 ====================
@@ -377,7 +414,10 @@ namespace Windows_Client.Services
             int o = 0;
             foreach (var e in layout.PathEntries)
             {
-                var ident = Encoding.ASCII.GetBytes(e.Name);
+                // ECMA-119 9.10.1：根目录记录（DirNum=1）标识符为单字节 0x00（长度 1）。
+                // 若写为长度 0，严格解析器（Windows cdrom.sys / etfsboot cdboot）会把该记录
+                // 当作路径表结束标记，导致挂载失败或 Legacy 引导找不到 BOOTMGR 而回退网卡。
+                var ident = e.DirNum == 1 ? new byte[] { 0x00 } : Encoding.ASCII.GetBytes(e.Name);
                 buf[o] = (byte)ident.Length;
                 buf[o + 1] = 0;
                 if (bigEndian)
@@ -405,43 +445,44 @@ namespace Windows_Client.Services
             b[0] = VD_PRIMARY;
             CopyAscii(b, 1, "CD001");
             b[6] = 1;
-            CopyAsciiPad(b, 8, "L", 0);            // zero unused
-            CopyAsciiPad(b, 40, "", 32);           // system identifier
-            CopyAPad(b, 72, layout.Label, 32);     // volume identifier
-            CopyAsciiPad(b, 104, "", 8);           // volume space size placeholder (unused 8)
-            WriteBoth32(b, 81, layout.TotalBytes / SECTOR);  // volume space size
-            CopyAsciiPad(b, 121, "", 32);          // unused
-            WriteBoth16(b, 129, 1);                // volume set size
-            WriteBoth16(b, 133, 1);                // volume sequence number
-            WriteBoth16(b, 137, SECTOR);           // logical block size
-            WriteBoth32(b, 141, layout.PathTableBytes);  // path table size
-            WriteU32LE(b, 145, (uint)layout.LbaTypeL);          // L path table
-            WriteU32LE(b, 149, 0);                             // L path table optional
-            WriteU32BE(b, 153, (uint)layout.LbaTypeM);         // M path table
-            WriteU32BE(b, 157, 0);                             // M path table optional
+            b[7] = 0;                                  // unused
+            CopyAsciiPad(b, 8, "", 32);                // system identifier
+            CopyAPad(b, 40, layout.Label, 32);         // volume identifier
+            WriteBoth32(b, 80, layout.TotalBytes / SECTOR);    // volume space size
+            WriteBoth16(b, 120, 1);                    // volume set size
+            WriteBoth16(b, 124, 1);                    // volume sequence number
+            WriteBoth16(b, 128, SECTOR);               // logical block size
+            WriteBoth32(b, 132, layout.PathTableBytes);// path table size
+            WriteU32LE(b, 140, (uint)layout.LbaTypeL); // L path table
+            WriteU32LE(b, 144, 0);                     // L path table optional
+            WriteU32BE(b, 148, (uint)layout.LbaTypeM); // M path table
+            WriteU32BE(b, 152, 0);                     // M path table optional
 
-            // 根目录记录（可省略）— 填充记录头保证解析
-            int ro = 0x9D;
+            // 根目录记录（偏移 156，34 字节）
+            int ro = 0x9C;
             b[ro] = 34;
             b[ro + 1] = 0;
             WriteBoth32(b, ro + 2, layout.Root.IsoLba);
             WriteBoth32(b, ro + 10, layout.Root.IsoSize);
             WriteDirDate(b, ro + 18);
             b[ro + 25] = FLAG_DIR;
+            WriteBoth16(b, ro + 28, 1);                // volume sequence number
             b[ro + 32] = 1;
             b[ro + 33] = 0;
 
-            CopyAsciiPad(b, 0x128, "", 128);       // volume set identifier
-            CopyAsciiPad(b, 0x168, "", 128);       // publisher identifier
-            CopyAsciiPad(b, 0x1A8, "", 128);       // data preparer
-            CopyAsciiPad(b, 0x1E8, "", 128);       // application identifier
-            CopyAsciiPad(b, 0x250, "", 37);        // copyright
-            CopyAsciiPad(b, 0x275, "", 37);        // abstract
-            CopyAsciiPad(b, 0x29A, "", 37);        // bibliographic
-            WriteVolumeDate(b, 0x2BF);
-            WriteVolumeDate(b, 0x2D0);
-            b[0x2E1] = 0;
-            CopyAsciiPad(b, 0x2E3, "", 512);       // application use
+            CopyAsciiPad(b, 190, "", 128);             // volume set identifier
+            CopyAsciiPad(b, 318, "", 128);             // publisher identifier
+            CopyAsciiPad(b, 446, "", 128);             // data preparer
+            CopyAsciiPad(b, 574, "", 128);             // application identifier
+            CopyAsciiPad(b, 702, "", 37);              // copyright
+            CopyAsciiPad(b, 739, "", 37);              // abstract
+            CopyAsciiPad(b, 776, "", 37);              // bibliographic
+            WriteVolumeDate(b, 813);                   // creation
+            WriteVolumeDate(b, 830);                   // modification
+            WriteVolumeDate(b, 847);                   // expiration
+            WriteVolumeDate(b, 864);                   // effective
+            b[881] = 1;                                // file structure version
+            CopyAsciiPad(b, 883, "", 512);             // application use
             return b;
         }
 
@@ -454,37 +495,37 @@ namespace Windows_Client.Services
             CopyAscii(b, 1, "CD001");
             b[6] = 1;
             b[7] = 0;                              // flags
-            CopyAsciiPad(b, 8, "L", 0);
-            CopyAsciiPad(b, 40, "", 32);
+            CopyAsciiPad(b, 8, "", 32);            // system identifier
             // Joliet 卷标识为 UCS-2BE（与卷描述符记录一致）
-            CopyUcs2Pad(b, 72, layout.Label, 32);
-            WriteBoth32(b, 81, layout.TotalBytes / SECTOR);
-            CopyAsciiPad(b, 121, "", 32);
-            WriteBoth16(b, 129, 1);
-            WriteBoth16(b, 133, 1);
-            WriteBoth16(b, 137, SECTOR);
-            WriteBoth32(b, 141, layout.PathTableBytes);
-            WriteU32LE(b, 145, (uint)layout.LbaTypeL);
-            WriteU32LE(b, 149, 0);
-            WriteU32BE(b, 153, (uint)layout.LbaTypeM);
-            WriteU32BE(b, 157, 0);
+            CopyUcs2Pad(b, 40, layout.Label, 32);  // volume identifier
+            WriteBoth32(b, 80, layout.TotalBytes / SECTOR);   // volume space size
+            // escape 序列（UCS-2 Level 1）：%/@ 位于偏移 88
+            b[88] = 0x25; b[89] = 0x2F; b[90] = 0x40;
+            WriteBoth16(b, 120, 1);                // volume set size
+            WriteBoth16(b, 124, 1);                // volume sequence number
+            WriteBoth16(b, 128, SECTOR);           // logical block size
+            WriteBoth32(b, 132, layout.PathTableBytes);  // path table size
+            WriteU32LE(b, 140, (uint)layout.LbaTypeL);
+            WriteU32LE(b, 144, 0);
+            WriteU32BE(b, 148, (uint)layout.LbaTypeM);
+            WriteU32BE(b, 152, 0);
 
-            int ro = 0x9D;
+            int ro = 0x9C;
             b[ro] = 34;
             b[ro + 1] = 0;
             WriteBoth32(b, ro + 2, layout.Root.JolLba);
             WriteBoth32(b, ro + 10, layout.Root.JolSize);
             WriteDirDate(b, ro + 18);
             b[ro + 25] = FLAG_DIR;
+            WriteBoth16(b, ro + 28, 1);
             b[ro + 32] = 1;
             b[ro + 33] = 0;
 
-            // 版本 escape 序列：Esc1/Esc%/Esc@ => UCS-2
-            b[0x58] = 0x25; b[0x59] = 0x2F; b[0x5A] = 0x40;
-
-            WriteVolumeDate(b, 0x2BF);
-            WriteVolumeDate(b, 0x2D0);
-            b[0x2E1] = 1;                          //文件结构版本
+            WriteVolumeDate(b, 813);               // creation
+            WriteVolumeDate(b, 830);               // modification
+            WriteVolumeDate(b, 847);               // expiration
+            WriteVolumeDate(b, 864);               // effective
+            b[881] = 1;                            // 文件结构版本
             return b;
         }
 
@@ -492,12 +533,15 @@ namespace Windows_Client.Services
 
         private static byte[] BuildBootRecord(Layout layout)
         {
-            var b = new byte[SECTOR];
+            var b = new byte[SECTOR];              // 全零初始化
             b[0] = VD_BOOT;
             CopyAscii(b, 1, "CD001");
             b[6] = 1;
-            CopyAsciiPad(b, 7, "EL TORITO SPECIFICATION", 32);
-            CopyAsciiPad(b, 39, "", 32);
+            // El Torito 1.0 §2.2：Boot System Identifier（偏移 7，长度 32）必须用 0x00 填充，
+            // unused（偏移 39，长度 32）必须全零。写 0x20 空格会导致部分 BIOS 拒绝识别引导记录，
+            // 进而回退到下一引导设备（网卡 PXE）。
+            CopyAsciiZeroPad(b, 7, "EL TORITO SPECIFICATION", 32);
+            // 偏移 39–70 保持全零（数组默认值），无需显式写入
             WriteBoth32(b, 71, layout.LbaCat);
             return b;
         }
@@ -577,19 +621,23 @@ namespace Windows_Client.Services
         {
             b[o] = BOOTABLE;                   // boot indicator
             b[o + 1] = MEDIA_NO_EMU;
+            var (lba, size) = layout.GetBootImage(legacy);
+            // El Torito 扇区数为 512 字节虚拟扇区数；必须按引导镜像实际大小计算，
+            // 否则 UEFI 固件只读取少量扇区（如固定 4 扇区=8KB）导致无法加载完整引导镜像。
+            int sectors = (int)Math.Max(1, RoundUp(size, 512) / 512);
             if (legacy)
             {
-                WriteU16LE(b, o + 2, 0x07C0);  // load segment
+                // load segment 0 = 加载到 0000:7C00（与微软官方/EasyU 参考一致，兼容性最佳）
+                WriteU16LE(b, o + 2, 0);
                 b[o + 4] = 0;                  // system type
-                WriteU16LE(b, o + 6, 4);       // sector count
+                WriteU16LE(b, o + 6, (ushort)sectors);
             }
             else
             {
                 WriteU16LE(b, o + 2, 0);       // load segment 0
                 b[o + 4] = 0xEF;               // EFI system type
-                WriteU16LE(b, o + 6, 4);       // sector count
+                WriteU16LE(b, o + 6, (ushort)sectors);
             }
-            var (lba, _) = layout.GetBootImage(legacy);
             WriteU32LE(b, o + 8, (uint)lba);   // load RBA
         }
 
@@ -620,7 +668,7 @@ namespace Windows_Client.Services
             return s;
         }
 
-        /// <summary>短名（目录/路径表）：大写、保留数字字母下划线点，最多 8 字节。</summary>
+        /// <summary>短名（保留字母数字下划线点，最多 max 字节）。</summary>
         private static string ShortAscii(string name, int max)
         {
             var sb = new StringBuilder();
@@ -633,6 +681,26 @@ namespace Windows_Client.Services
                 }
             }
             if (sb.Length == 0) sb.Append('_');
+            return sb.ToString();
+        }
+
+        /// <summary>
+        /// ISO-9660 Level 2 目录名：大写、仅保留 [A-Z0-9_.]，最长 31 字符。
+        /// 注意不能截断为 8 字符（Level 1 限制），否则长目录名（如 MICROSOFT）被截成 MICROSOF，
+        /// 导致引导管理器找不到 \EFI\MICROSOFT\BOOT\BCD 而报 0xc000000f。
+        /// </summary>
+        private static string SanitizeDirName(string name)
+        {
+            var sb = new StringBuilder();
+            foreach (var ch in name.ToUpperInvariant())
+            {
+                if ((ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == '_' || ch == '.')
+                {
+                    if (sb.Length >= 31) break;
+                    sb.Append(ch);
+                }
+            }
+            if (sb.Length == 0) return "DIR";
             return sb.ToString();
         }
 
@@ -664,6 +732,13 @@ namespace Windows_Client.Services
         {
             for (int i = 0; i < len; i++)
                 b[offset + i] = i < s.Length ? (byte)s[i] : (byte)0x20;
+        }
+
+        /// <summary>类似 CopyAsciiPad 但用 0x00 填充（用于 El Torito Boot Record 等规范要求零填充的字段）。</summary>
+        private static void CopyAsciiZeroPad(byte[] b, int offset, string s, int len)
+        {
+            for (int i = 0; i < len; i++)
+                b[offset + i] = i < s.Length ? (byte)s[i] : (byte)0x00;
         }
 
         private static void CopyAPad(byte[] b, int offset, string s, int len)

@@ -58,3 +58,9 @@ _tools_shot.png
 _tools_search_shot.png
 _tools_filter_shot.png
 360截图*.jpg
+
+# PE 构建临时工作区（ISO 产物 / WIM 挂载 / VM 测试，非源码）
+_pe_build/
+
+# 参考借鉴目录（仅作技术对比学习，不纳入项目 Git）
+别人易语言写的/

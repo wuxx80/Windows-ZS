@@ -239,6 +239,32 @@ namespace Windows_Client.Models
         public int Progress { get; set; }
     }
 
+    /// <summary>任务无人值守应答（GET /api/v1/tasks/:id/unattend）</summary>
+    public class UnattendPayload
+    {
+        [JsonPropertyName("task_id")]
+        public int TaskId { get; set; }
+        [JsonPropertyName("task_no")]
+        public string TaskNo { get; set; } = "";
+        [JsonPropertyName("template_id")]
+        public int? TemplateId { get; set; }
+        [JsonPropertyName("template_name")]
+        public string TemplateName { get; set; } = "";
+        [JsonPropertyName("xml")]
+        public string Xml { get; set; } = "";
+    }
+
+    /// <summary>任务首次登录脚本（GET /api/v1/tasks/:id/firstLogon）</summary>
+    public class FirstLogonPayload
+    {
+        [JsonPropertyName("task_id")]
+        public int TaskId { get; set; }
+        [JsonPropertyName("task_no")]
+        public string TaskNo { get; set; } = "";
+        [JsonPropertyName("cmd")]
+        public string Cmd { get; set; } = "";
+    }
+
     // ===================== 一键装机六步向导模型（对齐设计文档） =====================
 
     /// <summary>可观察对象基类</summary>

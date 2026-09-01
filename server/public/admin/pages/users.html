@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
@@ -7,14 +7,15 @@
 <link rel="stylesheet" href="../../assets/css/admin.css">
 <style>
 body{padding:24px;background:transparent;}
-h2{margin-bottom:20px;font-size:20px;font-weight:600;color:#334155;}
+h2{margin-bottom:20px;font-size:20px;color:#334155;}
 .data-table th{background:#f8fafc;white-space:nowrap;}
 .data-table td{vertical-align:middle;}
-.role-badge{display:inline-block;padding:2px 10px;border-radius:12px;font-size:12px;font-weight:500;}
-.role-badge.admin{background:#fef2f2;color:#dc2626;}
-.role-badge.operator{background:#fff7ed;color:#ea580c;}
-.role-badge.viewer{background:#f0fdf4;color:#16a34a;}
-.role-badge.user{background:#dbeafe;color:#2563eb;}
+.role-badge{display:inline-block;padding:2px 10px;border-radius:12px;font-size:12px;}
+.role-badge.code-admin{background:#fef2f2;color:#dc2626;}
+.role-badge.code-super_admin{background:#fef2f2;color:#dc2626;}
+.role-badge.code-operator{background:#fff7ed;color:#ea580c;}
+.role-badge.code-viewer{background:#f0fdf4;color:#16a34a;}
+.role-badge.code-user{background:#dbeafe;color:#2563eb;}
 .status-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;}
 .status-dot.online{background:#16a34a;}
 .status-dot.offline{background:#cbd5e1;}
@@ -24,17 +25,10 @@ h2{margin-bottom:20px;font-size:20px;font-weight:600;color:#334155;}
 <h2>用户管理</h2>
 <div class="search-bar">
   <input type="text" id="searchKeyword" placeholder="搜索用户名/邮箱/姓名" style="min-width:200px;">
-  <select id="searchRole">
-    <option value="">全部角色</option>
-    <option value="admin">管理员</option>
-    <option value="operator">操作员</option>
-    <option value="viewer">观察者</option>
-    <option value="user">普通用户</option>
-  </select>
   <select id="searchStatus">
     <option value="">全部状态</option>
-    <option value="active">启用</option>
-    <option value="disabled">禁用</option>
+    <option value="1">启用</option>
+    <option value="0">禁用</option>
   </select>
   <button class="btn-search" onclick="searchUsers()">搜索</button>
   <button class="btn-reset" onclick="resetSearch()">重置</button>
@@ -74,93 +68,55 @@ h2{margin-bottom:20px;font-size:20px;font-weight:600;color:#334155;}
   var currentPage = 1;
   var pageSize = 15;
   var totalCount = 0;
-  var currentList = [];
-  var LOCAL_KEY = "zs_admin_users";
+  // 角色缓存：{ id: { id, name, code, description, status } }
+  var roleMap = {};
 
-  function getLocalUsers() {
-    try {
-      var data = localStorage.getItem(LOCAL_KEY);
-      return data ? JSON.parse(data) : [];
-    } catch(e) {
-      return [];
-    }
+  // 从 API 加载角色列表，缓存到 roleMap
+  function loadRoles() {
+    return api("/roles?pageSize=100").then(function(res) {
+      if (res.code === 0 && res.data && res.data.list) {
+        for (var i = 0; i < res.data.list.length; i++) {
+          var r = res.data.list[i];
+          roleMap[r.id] = r;
+        }
+      }
+    }).catch(function() {});
   }
 
-  function saveLocalUsers(users) {
-    localStorage.setItem(LOCAL_KEY, JSON.stringify(users));
+  function getRoleName(roleId) {
+    var r = roleMap[roleId];
+    return r ? r.name : ("角色#" + roleId);
   }
 
-  function generateId() {
-    var users = getLocalUsers();
-    var maxId = 0;
-    for (var i = 0; i < users.length; i++) {
-      if (users[i].id > maxId) maxId = users[i].id;
-    }
-    return maxId + 1;
-  }
-
-  function getDefaultUsers() {
-    return [
-      { id: 1, username: "admin", email: "admin@zs.com", real_name: "系统管理员", role: "admin", status: "active", last_login: new Date().toISOString(), created_at: "2025-01-01T00:00:00.000Z" },
-      { id: 2, username: "operator", email: "op@zs.com", real_name: "操作员", role: "operator", status: "active", last_login: null, created_at: "2025-01-15T00:00:00.000Z" },
-      { id: 3, username: "viewer", email: "view@zs.com", real_name: "观察员", role: "viewer", status: "active", last_login: null, created_at: "2025-02-01T00:00:00.000Z" }
-    ];
+  function getRoleCode(roleId) {
+    var r = roleMap[roleId];
+    return r ? r.code : "user";
   }
 
   function loadUsers() {
     var keyword = document.getElementById("searchKeyword").value.trim();
-    var role = document.getElementById("searchRole").value;
     var status = document.getElementById("searchStatus").value;
 
     var params = "page=" + currentPage + "&pageSize=" + pageSize;
     if (keyword) params += "&keyword=" + encodeURIComponent(keyword);
-    if (role) params += "&role=" + encodeURIComponent(role);
-    if (status) params += "&status=" + encodeURIComponent(status);
+    if (status !== "") params += "&status=" + encodeURIComponent(status);
 
     var tableBody = document.getElementById("tableBody");
-    tableBody.innerHTML = "<tr><td colspan=\"10\" style=\"text-align:center;padding:40px;color:#94a3b8;\">加载中...</td></tr>";
+    tableBody.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:40px;color:#94a3b8;">加载中...</td></tr>';
 
     api("/users?" + params).then(function(res) {
       if (res.code === 0) {
         totalCount = res.data.total || 0;
-        currentList = res.data.list || [];
-        renderTable(currentList);
+        renderTable(res.data.list || []);
         renderPagination();
       } else {
-        loadFromLocal();
+        toast(res.message || "加载失败", "error");
+        renderTable([]);
       }
     }).catch(function(err) {
-      loadFromLocal();
+      toast("网络错误", "error");
+      renderTable([]);
     });
-  }
-
-  function loadFromLocal() {
-    var users = getLocalUsers();
-    if (users.length === 0) {
-      users = getDefaultUsers();
-      saveLocalUsers(users);
-    }
-
-    var keyword = document.getElementById("searchKeyword").value.trim().toLowerCase();
-    var role = document.getElementById("searchRole").value;
-    var status = document.getElementById("searchStatus").value;
-
-    var filtered = [];
-    for (var i = 0; i < users.length; i++) {
-      var u = users[i];
-      if (keyword && u.username.toLowerCase().indexOf(keyword) === -1 && (u.email || "").toLowerCase().indexOf(keyword) === -1 && (u.real_name || "").toLowerCase().indexOf(keyword) === -1) continue;
-      if (role && u.role !== role) continue;
-      if (status && u.status !== status) continue;
-      filtered.push(u);
-    }
-
-    totalCount = filtered.length;
-    var start = (currentPage - 1) * pageSize;
-    var end = Math.min(start + pageSize, filtered.length);
-    currentList = filtered.slice(start, end);
-
-    renderTable(currentList);
-    renderPagination();
   }
 
   function renderTable(list) {
@@ -177,29 +133,30 @@ h2{margin-bottom:20px;font-size:20px;font-weight:600;color:#334155;}
     var html = "";
     for (var i = 0; i < list.length; i++) {
       var item = list[i];
-      var roleLabel = getRoleLabel(item.role);
-      var roleClass = item.role || "user";
-      var statusHtml = item.status === "active"
-        ? "<span class=\"status-dot online\"></span>启用"
-        : "<span class=\"status-dot offline\"></span>禁用";
-      var avatar = item.real_name ? item.real_name[0].toUpperCase() : (item.username ? item.username[0].toUpperCase() : "?");
+      var roleCode = getRoleCode(item.role_id);
+      var roleName = getRoleName(item.role_id);
+      var statusVal = parseInt(item.status, 10);
+      var statusHtml = statusVal === 1
+        ? '<span class="status-dot online"></span>启用'
+        : '<span class="status-dot offline"></span>禁用';
+      var avatar = (item.nickname || item.username || "?")[0].toUpperCase();
 
       html += "<tr>";
       html += "<td>" + esc(item.id) + "</td>";
-      html += "<td><div style=\"width:32px;height:32px;border-radius:50%;background:var(--primary-light);color:var(--primary);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;\">" + esc(avatar) + "</div></td>";
-      html += "<td><strong>" + esc(item.username) + "</strong></td>";
+      html += '<td><div style="width:32px;height:32px;border-radius:50%;background:var(--primary-light);color:var(--primary);display:flex;align-items:center;justify-content:center;font-size:13px;">' + esc(avatar) + "</div></td>";
+      html += "<td>" + esc(item.username) + "</td>";
       html += "<td>" + esc(item.email || "-") + "</td>";
-      html += "<td>" + esc(item.real_name || "-") + "</td>";
-      html += "<td><span class=\"role-badge " + roleClass + "\">" + esc(roleLabel) + "</span></td>";
+      html += "<td>" + esc(item.nickname || "-") + "</td>";
+      html += '<td><span class="role-badge code-' + esc(roleCode) + '">' + esc(roleName) + "</span></td>";
       html += "<td>" + statusHtml + "</td>";
-      html += "<td style=\"font-size:12px;color:var(--text-light);\">" + fmtDate(item.last_login) + "</td>";
-      html += "<td style=\"font-size:12px;color:var(--text-light);\">" + fmtDate(item.created_at) + "</td>";
+      html += '<td style="font-size:12px;color:var(--text-light);">' + fmtDate(item.last_login) + "</td>";
+      html += '<td style="font-size:12px;color:var(--text-light);">' + fmtDate(item.created_at) + "</td>";
       html += "<td>";
       if (item.username !== "admin") {
-        html += "<button class=\"action-btn edit\" onclick=\"editUser(" + item.id + ")\">编辑</button>";
-        html += "<button class=\"action-btn delete\" onclick=\"deleteUser(" + item.id + ")\">删除</button>";
+        html += '<button class="action-btn edit" onclick="editUser(' + item.id + ')">编辑</button>';
+        html += '<button class="action-btn delete" onclick="deleteUser(' + item.id + ')">删除</button>';
       } else {
-        html += "<span style=\"font-size:12px;color:var(--text-light);\">-</span>";
+        html += '<span style="font-size:12px;color:var(--text-light);">-</span>';
       }
       html += "</td>";
       html += "</tr>";
@@ -214,29 +171,37 @@ h2{margin-bottom:20px;font-size:20px;font-weight:600;color:#334155;}
       container.innerHTML = "";
       return;
     }
-    var html = "<div class=\"pagination\">";
-    html += "<span class=\"page-info\">共 " + totalCount + " 条，第 " + currentPage + "/" + totalPages + " 页</span>";
-    html += "<div class=\"page-btns\">";
+    var html = '<div class="pagination">';
+    html += '<span class="page-info">共 ' + totalCount + ' 条，第 ' + currentPage + "/" + totalPages + " 页</span>";
+    html += '<div class="page-btns">';
     if (currentPage > 1) {
-      html += "<button class=\"page-btn\" onclick=\"goToPage(1)\">首页</button>";
-      html += "<button class=\"page-btn\" onclick=\"goToPage(" + (currentPage - 1) + ")\">上一页</button>";
+      html += '<button class="page-btn" onclick="goToPage(1)">首页</button>';
+      html += '<button class="page-btn" onclick="goToPage(' + (currentPage - 1) + ')">上一页</button>';
     }
     var startPage = Math.max(1, currentPage - 2);
     var endPage = Math.min(totalPages, currentPage + 2);
     for (var i = startPage; i <= endPage; i++) {
-      html += "<button class=\"page-btn" + (i === currentPage ? " active" : "") + "\" onclick=\"goToPage(" + i + ")\">" + i + "</button>";
+      html += '<button class="page-btn' + (i === currentPage ? " active" : "") + '" onclick="goToPage(' + i + ')">' + i + "</button>";
     }
     if (currentPage < totalPages) {
-      html += "<button class=\"page-btn\" onclick=\"goToPage(" + (currentPage + 1) + ")\">下一页</button>";
-      html += "<button class=\"page-btn\" onclick=\"goToPage(" + totalPages + ")\">末页</button>";
+      html += '<button class="page-btn" onclick="goToPage(' + (currentPage + 1) + ')">下一页</button>';
+      html += '<button class="page-btn" onclick="goToPage(' + totalPages + ')">末页</button>';
     }
     html += "</div></div>";
     container.innerHTML = html;
   }
 
-  function getRoleLabel(role) {
-    var map = { "admin": "管理员", "operator": "操作员", "viewer": "观察者", "user": "普通用户" };
-    return map[role] || role || "普通用户";
+  function buildRoleOptions(selectedRoleId) {
+    var html = "";
+    var ids = Object.keys(roleMap);
+    // 按 id 排序
+    ids.sort(function(a, b) { return parseInt(a) - parseInt(b); });
+    for (var i = 0; i < ids.length; i++) {
+      var r = roleMap[ids[i]];
+      var sel = (parseInt(selectedRoleId) === parseInt(r.id)) ? " selected" : "";
+      html += '<option value="' + r.id + '"' + sel + ">" + esc(r.name) + "</option>";
+    }
+    return html;
   }
 
   window.goToPage = function(page) {
@@ -251,7 +216,6 @@ h2{margin-bottom:20px;font-size:20px;font-weight:600;color:#334155;}
 
   window.resetSearch = function() {
     document.getElementById("searchKeyword").value = "";
-    document.getElementById("searchRole").value = "";
     document.getElementById("searchStatus").value = "";
     currentPage = 1;
     loadUsers();
@@ -259,21 +223,21 @@ h2{margin-bottom:20px;font-size:20px;font-weight:600;color:#334155;}
 
   window.showAddUserModal = function() {
     var content = "";
-    content += "<div class=\"form-row\">";
-    content += "<div class=\"form-group\"><label>用户名 <span style=\"color:#dc2626;\">*</span></label><input type=\"text\" id=\"formUsername\" placeholder=\"登录用户名\"></div>";
-    content += "<div class=\"form-group\"><label>密码 <span style=\"color:#dc2626;\">*</span></label><input type=\"password\" id=\"formPassword\" placeholder=\"登录密码\"></div>";
+    content += '<div class="form-row">';
+    content += '<div class="form-group"><label>用户名 <span style="color:#dc2626;">*</span></label><input type="text" id="formUsername" placeholder="登录用户名"></div>';
+    content += '<div class="form-group"><label>密码 <span style="color:#dc2626;">*</span></label><input type="password" id="formPassword" placeholder="登录密码"></div>';
     content += "</div>";
-    content += "<div class=\"form-row\">";
-    content += "<div class=\"form-group\"><label>邮箱</label><input type=\"email\" id=\"formEmail\" placeholder=\"user@example.com\"></div>";
-    content += "<div class=\"form-group\"><label>姓名</label><input type=\"text\" id=\"formRealName\" placeholder=\"真实姓名\"></div>";
+    content += '<div class="form-row">';
+    content += '<div class="form-group"><label>邮箱</label><input type="email" id="formEmail" placeholder="user@example.com"></div>';
+    content += '<div class="form-group"><label>姓名</label><input type="text" id="formNickname" placeholder="昵称"></div>';
     content += "</div>";
-    content += "<div class=\"form-row\">";
-    content += "<div class=\"form-group\"><label>角色</label><select id=\"formRole\"><option value=\"user\">普通用户</option><option value=\"operator\">操作员</option><option value=\"viewer\">观察者</option><option value=\"admin\">管理员</option></select></div>";
-    content += "<div class=\"form-group\"><label>状态</label><select id=\"formStatus\"><option value=\"active\">启用</option><option value=\"disabled\">禁用</option></select></div>";
+    content += '<div class="form-row">';
+    content += '<div class="form-group"><label>角色</label><select id="formRoleId">' + buildRoleOptions() + "</select></div>";
+    content += '<div class="form-group"><label>状态</label><select id="formStatus"><option value="1">启用</option><option value="0">禁用</option></select></div>';
     content += "</div>";
-    content += "<div class=\"form-actions\">";
-    content += "<button class=\"btn-cancel\" onclick=\"closeModal()\">取消</button>";
-    content += "<button class=\"btn-submit\" onclick=\"saveUser()\">保存</button>";
+    content += '<div class="form-actions">';
+    content += '<button class="btn-cancel" onclick="closeModal()">取消</button>';
+    content += '<button class="btn-submit" onclick="saveUser()">保存</button>';
     content += "</div>";
 
     var modal = showModal("添加用户", content);
@@ -282,43 +246,39 @@ h2{margin-bottom:20px;font-size:20px;font-weight:600;color:#334155;}
   };
 
   window.editUser = function(id) {
-    id = parseInt(id, 10);
-    var users = getLocalUsers();
-    var item = null;
-    for (var i = 0; i < users.length; i++) {
-      if (users[i].id === id) { item = users[i]; break; }
-    }
-    if (!item) {
-      toast("用户不存在", "error");
-      return;
-    }
+    // 从当前列表查找用户数据
+    api("/users/" + id).then(function(res) {
+      if (res.code !== 0 || !res.data) {
+        toast("用户不存在", "error");
+        return;
+      }
+      var item = res.data;
 
-    var content = "";
-    content += "<div class=\"form-row\">";
-    content += "<div class=\"form-group\"><label>用户名</label><input type=\"text\" id=\"formUsername\" value=\"" + esc(item.username) + "\" readonly style=\"background:#f8f9fa;\"></div>";
-    content += "<div class=\"form-group\"><label>密码</label><input type=\"password\" id=\"formPassword\" placeholder=\"留空则不修改\"></div>";
-    content += "</div>";
-    content += "<div class=\"form-row\">";
-    content += "<div class=\"form-group\"><label>邮箱</label><input type=\"email\" id=\"formEmail\" value=\"" + esc(item.email || "") + "\"></div>";
-    content += "<div class=\"form-group\"><label>姓名</label><input type=\"text\" id=\"formRealName\" value=\"" + esc(item.real_name || "") + "\"></div>";
-    content += "</div>";
-    content += "<div class=\"form-row\">";
-    content += "<div class=\"form-group\"><label>角色</label><select id=\"formRole\">";
-    var roles = ["user", "operator", "viewer", "admin"];
-    for (var ri = 0; ri < roles.length; ri++) {
-      content += "<option value=\"" + roles[ri] + "\"" + (item.role === roles[ri] ? " selected" : "") + ">" + getRoleLabel(roles[ri]) + "</option>";
-    }
-    content += "</select></div>";
-    content += "<div class=\"form-group\"><label>状态</label><select id=\"formStatus\"><option value=\"active\"" + (item.status === "active" ? " selected" : "") + ">启用</option><option value=\"disabled\"" + (item.status === "disabled" ? " selected" : "") + ">禁用</option></select></div>";
-    content += "</div>";
-    content += "<div class=\"form-actions\">";
-    content += "<button class=\"btn-cancel\" onclick=\"closeModal()\">取消</button>";
-    content += "<button class=\"btn-submit\" onclick=\"saveUser()\">保存</button>";
-    content += "</div>";
+      var content = "";
+      content += '<div class="form-row">';
+      content += '<div class="form-group"><label>用户名</label><input type="text" id="formUsername" value="' + esc(item.username) + '" readonly style="background:#f8f9fa;"></div>';
+      content += '<div class="form-group"><label>密码</label><input type="password" id="formPassword" placeholder="留空则不修改"></div>';
+      content += "</div>";
+      content += '<div class="form-row">';
+      content += '<div class="form-group"><label>邮箱</label><input type="email" id="formEmail" value="' + esc(item.email || "") + '"></div>';
+      content += '<div class="form-group"><label>姓名</label><input type="text" id="formNickname" value="' + esc(item.nickname || "") + '"></div>';
+      content += "</div>";
+      content += '<div class="form-row">';
+      content += '<div class="form-group"><label>角色</label><select id="formRoleId">' + buildRoleOptions(item.role_id) + "</select></div>";
+      var statusSel = parseInt(item.status) === 1 ? "1" : "0";
+      content += '<div class="form-group"><label>状态</label><select id="formStatus"><option value="1"' + (statusSel === "1" ? " selected" : "") + '>启用</option><option value="0"' + (statusSel === "0" ? " selected" : "") + '>禁用</option></select></div>';
+      content += "</div>";
+      content += '<div class="form-actions">';
+      content += '<button class="btn-cancel" onclick="closeModal()">取消</button>';
+      content += '<button class="btn-submit" onclick="saveUser()">保存</button>';
+      content += "</div>";
 
-    var modal = showModal("编辑用户 - " + esc(item.username), content);
-    modal.setAttribute("data-mode", "edit");
-    modal.setAttribute("data-id", id);
+      var modal = showModal("编辑用户 - " + esc(item.username), content);
+      modal.setAttribute("data-mode", "edit");
+      modal.setAttribute("data-id", id);
+    }).catch(function() {
+      toast("加载用户失败", "error");
+    });
   };
 
   window.saveUser = function() {
@@ -329,78 +289,74 @@ h2{margin-bottom:20px;font-size:20px;font-weight:600;color:#334155;}
     var username = document.getElementById("formUsername").value.trim();
     var password = document.getElementById("formPassword").value;
     var email = document.getElementById("formEmail").value.trim();
-    var realName = document.getElementById("formRealName").value.trim();
-    var role = document.getElementById("formRole").value;
-    var status = document.getElementById("formStatus").value;
+    var nickname = document.getElementById("formNickname").value.trim();
+    var roleId = parseInt(document.getElementById("formRoleId").value, 10) || 0;
+    var status = parseInt(document.getElementById("formStatus").value, 10);
 
     if (!username) {
       toast("请输入用户名", "error");
       return;
     }
-
     if (mode === "add" && !password) {
       toast("请输入密码", "error");
       return;
     }
 
-    var users = getLocalUsers();
+    var body = {
+      username: username,
+      email: email,
+      nickname: nickname,
+      role_id: roleId,
+      status: status
+    };
+    if (password) body.password = password;
 
     if (mode === "add") {
-      for (var i = 0; i < users.length; i++) {
-        if (users[i].username === username) {
-          toast("用户名已存在", "error");
-          return;
+      api("/users", "POST", body).then(function(res) {
+        if (res.code === 0) {
+          toast("用户添加成功", "success");
+          closeModal();
+          loadUsers();
+        } else {
+          toast(res.message || "添加失败", "error");
         }
-      }
-
-      var newUser = {
-        id: generateId(),
-        username: username,
-        email: email,
-        real_name: realName,
-        role: role,
-        status: status,
-        last_login: null,
-        created_at: new Date().toISOString()
-      };
-      users.push(newUser);
-      saveLocalUsers(users);
-      toast("用户添加成功", "success");
+      }).catch(function() {
+        toast("网络错误", "error");
+      });
     } else {
-      for (var j = 0; j < users.length; j++) {
-        if (users[j].id === id) {
-          users[j].email = email;
-          users[j].real_name = realName;
-          users[j].role = role;
-          users[j].status = status;
-          break;
+      api("/users/" + id, "PUT", body).then(function(res) {
+        if (res.code === 0) {
+          toast("用户更新成功", "success");
+          closeModal();
+          loadUsers();
+        } else {
+          toast(res.message || "更新失败", "error");
         }
-      }
-      saveLocalUsers(users);
-      toast("用户更新成功", "success");
+      }).catch(function() {
+        toast("网络错误", "error");
+      });
     }
-
-    closeModal();
-    loadUsers();
   };
 
   window.deleteUser = function(id) {
-    id = parseInt(id, 10);
     if (!confirm("确定要删除该用户吗？此操作不可恢复。")) return;
 
-    var users = getLocalUsers();
-    var newUsers = [];
-    for (var i = 0; i < users.length; i++) {
-      if (users[i].id !== id) {
-        newUsers.push(users[i]);
+    api("/users/" + id, "DELETE").then(function(res) {
+      if (res.code === 0) {
+        toast("用户删除成功", "success");
+        loadUsers();
+      } else {
+        toast(res.message || "删除失败", "error");
       }
-    }
-    saveLocalUsers(newUsers);
-    toast("用户删除成功", "success");
-    loadUsers();
+    }).catch(function() {
+      toast("网络错误", "error");
+    });
   };
 
-  loadUsers();
+  // 先加载角色，再加载用户
+  loadRoles().then(function() {
+    loadUsers();
+  });
 
 })();
 </script>

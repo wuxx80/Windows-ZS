@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>ZS_Agent</AssemblyName>
+    <RootNamespace>WinPE_Agent</RootNamespace>
+    <!-- 与客户端一致的版本语义 0.0.268311（程序集版本拆分为 268.311） -->
+    <Version>0.0.268.311</Version>
+    <!-- PE 环境无 .NET 运行时：自包含单文件发布 -->
+    <PublishSingleFile>true</PublishSingleFile>
+    <SelfContained>true</SelfContained>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.Management" Version="8.0.0" />
+    <PackageReference Include="System.Text.Json" Version="8.0.5" />
+  </ItemGroup>
+
+  <!-- 复用 WinPE 客户端已有的服务与模型源码（保持单一数据源，避免重复维护） -->
+  <ItemGroup>
+    <Compile Include="..\WinPE_Client\Services\ApiService.cs" Link="Services\ApiService.cs" />
+    <Compile Include="..\WinPE_Client\Services\OfflineTaskService.cs" Link="Services\OfflineTaskService.cs" />
+    <Compile Include="..\WinPE_Client\Services\ImageDeployService.cs" Link="Services\ImageDeployService.cs" />
+    <Compile Include="..\WinPE_Client\Services\DiskPartService.cs" Link="Services\DiskPartService.cs" />
+    <Compile Include="..\WinPE_Client\Services\DeviceService.cs" Link="Services\DeviceService.cs" />
+    <Compile Include="..\WinPE_Client\Models\ApiResponse.cs" Link="Models\ApiResponse.cs" />
+    <Compile Include="..\WinPE_Client\Models\ImageInfo.cs" Link="Models\ImageInfo.cs" />
+    <Compile Include="..\WinPE_Client\Models\DiskInfo.cs" Link="Models\DiskInfo.cs" />
+    <Compile Include="..\WinPE_Client\Models\OfflineTaskModels.cs" Link="Models\OfflineTaskModels.cs" />
+  </ItemGroup>
+
+</Project>

@@ -1,31 +1,41 @@
 # ZS 装机助手
 
-> 全栈 Windows 装机解决方案 —— Web 管理后台 + WinPE/Windows 客户端
+> 全栈 Windows 装机解决方案 —— Web 管理后台 + WinPE 端 + Windows 客户端
+> 当前版本：v0.0.268311（架构切换中，版本号不变）
+> **主链路切换声明（2026-09-01 · R7）：原方案「Windows 下单 → U盘/ISO → PE端联网认领任务续装」已废弃；新主链路「Windows 预下载全部资源到任务目录 → BCD 一次性启动项从硬盘加载 PE → PE 完全离线完成装机」。旧代码保留供 Phase 0~2 迁移阶段逐步替换，Phase 3 评估是否移除。**
 
 ## 项目简介
 
-ZS 装机助手是一套完整的 Windows 系统安装与维护解决方案，提供 Web 管理后台、WinPE 客户端和 Windows 客户端三端协同工作。支持一键装机、U 盘制作、系统修复、驱动注入、无人值守、网络部署等专业功能，适用于电脑维修店、企业 IT 部门、系统集成商等场景。
+ZS 装机助手是一套完整的 Windows 系统安装与维护解决方案，提供 Web 管理后台（PHP + MySQL + Layui 风格）、WinPE 端（.NET 8）和 Windows 客户端（C# WPF）三端协同。主无人值守链路采用 **全离线架构**：用户在正常 Windows 下单时就把镜像 / 驱动 / 软件 / PE WIM / PE Agent 100% 下载完毕并校验，写到 **非系统分区根目录** 的 **ZS_Task** 任务目录，通过 **BCD bootsequence 一次性启动项** 从硬盘加载 PE，PE 端不假设任何网络存在即可完成「分区 → 部署 → 驱动注入 → 引导修复 → SetupComplete.cmd 首次启动自执行」全链路。U 盘 / ISO 生成仅作为 BitLocker / 多引导管理器场景下的兜底逃生通道。
 
 ## 功能特性
 
-### 核心功能
-- 一键装机：镜像选择、磁盘分区、驱动注入、无人值守、引导修复全自动完成
-- U 盘制作：本地写盘 + 生成 ISO 双模式，PE 写入、格式化还原、多 PE 启动盘、在线 URL 拉取 PE
-- 工具大全：磁盘管理、系统修复、密码重置、数据恢复
-- 绿色软件：软件分类、在线安装、静默安装
-- 用户登录：客户端支持用户注册/登录（用户名+密码），核心功能登录后使用；WinPE 无人值守环境自动登录
-- 炫彩动效：客户端动态流动渐变背景 + 彩色漂浮光斑 + 星尘粒子 + 入口按钮呼吸光晕
+### 核心功能（R7 新主链路）
+- **一键装机（BCD 离线版，P1~P5）**：Windows 端 P1 选盘 → 下载全部资源 → 生成 task.ini / zs_manifest.key → P2 注入 BCD 一次性启动项 → 30 秒倒计时重启 → PE 端 P3 10 秒逃生窗 → P4 八阶段流水线（固件判定 / 分区尾端验证 / SHA256 校验 / 镜像展开 / 驱动注入 / 引导修复 / Unattend 注入 / SetupComplete 注入）→ P5 首次进系统自动装软件 + 系统优化
+- **三重逃生安全窗**：Windows 侧 30 秒 shutdown /a 取消；PE 侧 10 秒倒计时，按任意键进入手动装机；任何外部命令 ExitCode 非 0 立即停机
+- **PE 永远无网**：真实硬件 50%+ 缺少 PE 网卡驱动，本方案 PE 阶段完全不依赖 HTTP / 网卡
+- **固件判定双重方案**：优先注册表快速判定，冲突时以 diskpart Gpt 列事实为准；均未知则停止装机
+- **分区脚本尾端验证**：GPT 分支验证 ESP 卷标 + FAT/FAT32；MBR 分支验证 Active 标志
+- **U盘制作 / 生成 ISO（兜底）**：写 U 盘 / 生成 ISO 双模式；PE 来源三选一；纯 C# ISO9660 + Joliet + El Torito 双引导生成器
+- **工具大全（53 工具 / 10 分类）**：本地运行 + 自动提权；U 盘勾选后 PE 内离线可用
+- **绿色软件**：客户端入口卡片（列表 / 详情 / 静默安装）
+- **用户注册 / 登录体系**：用户名 + 密码注册登录，本地 SessionStore 保存 Token
+- **品牌信息对接后台**：首页品牌渲染 + 边框项（设置 / 登录·退出 / 版权 / 版本 / 联系 / 关于）均读取后台「站点信息」组
 
-### 后台管理
-- 控制台仪表盘：统计卡片、装机趋势、镜像排行、快捷操作
-- 镜像管理：上传/下载/格式转换/校验/版本历史/标签系统
-- 无人值守模板：可视化编辑/JSON 编辑/验证
-- 软件/驱动管理：分类/上传/注入/模板
-- 网络部署：PXE 配置/网络克隆/部署报告
-- PE 定制：壁纸/启动画面/内置工具/构建导出
-- 系统管理：用户权限/存储管理/通知/定时任务/站点信息（品牌 Logo/标题/标语/版权/联系/关于）
-- 日志审计：操作日志/类型分布/清理
-- 报告统计：装机报表/客户端统计/镜像排行/工单统计
+### P0 基建缺口（Phase 0 最高优先级）
+| # | 缺口 | 影响 |
+|---|------|------|
+| 1 | RoleController.php 文件缺失 | 后台用户管理角色 CRUD 失效 |
+| 2 | 前后端 role 契约不一致（string vs int） | 保存后角色写空或 0 |
+| 3 | WinPE_Agent 未入 sln / 未入 Git | 新 clone 缺新主链路 PE 核心执行者 |
+| 4 | AuthMiddleware / LogMiddleware 未注册 | zs_logs 永不写入；认证完全手动判断 |
+| 5 | 5 个测试脚手架已删未提交 | 原 R2/R4/R6「测试通过」源码不存在 |
+| 6 | Git 工作树脏（28改 / 8删 / 6未跟踪） | 新 clone 不能复现本机状态 |
+
+### 后台管理（现行菜单 19 项）
+控制台 / 镜像列表 / 镜像源 / 镜像标签 / 无人值守模板 / 软件管理 / 软件分类 / 软件模板 / 驱动 / 脚本 / PE 版本 / PE 定制 / 用户管理 / 系统设置 / 操作日志 / 通知 / 定时任务 / 报表统计 / Webhook 日志 / 回收站。
+
+> 已从菜单移除（底层保留作过渡期复用，Phase 3 评估是否永久删除）：PXE 配置、网络部署、客户端管理（3 项）、任务管理（2 项）、客户 / 工单。
 
 ## 技术栈
 
@@ -34,187 +44,52 @@ ZS 装机助手是一套完整的 Windows 系统安装与维护解决方案，�
 | 后端语言 | PHP | 8.0+ |
 | 后端框架 | ThinkPHP 6 | 6.1.4 |
 | 数据库 | MySQL | 5.7+ |
-| 缓存 | 文件缓存 | 默认 |
 | Web 服务器 | Nginx | 1.20+ |
 | 后台前端 | Layui 2.9+ 风格 | 原生 HTML/CSS/JS |
-| 客户端 | C# WPF (.NET 8) | WinPE + Windows 双端 |
-| API 协议 | RESTful JSON | - |
+| 旧 GUI 客户端 | C# WPF (.NET 8) | WinPE_Client + Windows_Client |
+| 新 PE 端核心执行者 | .NET 8 AOT 控制台 | WinPE_Agent |
+| API 协议 | RESTful JSON | — |
 
-## 项目状态
+## 项目真实状态（磁盘实查 · 2026-09-02）
 
-当前版本：v0.0.268311（联调部署完成，客户端可打包发布）
-
-| 阶段 | 状态 |
-|------|------|
-| 设计文档 | ✅ 已完成 |
-| 后端骨架（ThinkPHP 6 + 35张表 + 30个控制器） | ✅ 已完成 |
-| 管理后台前端（29个管理页面，Layui风格） | ✅ 已完成 |
-| 核心业务逻辑（所有控制器+服务层，浏览器全量测试验证） | ✅ 已完成 |
-| WinPE 客户端（.NET 8 WPF，六步向导 + U盘制作 + 工具大全） | ✅ 已完成 |
-| Windows 客户端（.NET 8 WPF，六步向导 + U盘制作 + 工具大全） | ✅ 已完成 |
-| 客户端集成（注册/建任务/进度上报） | ✅ 已完成 |
-| API 全量联调测试（44/44 接口通过） | ✅ 已完成 |
-| 客户端端到端回归测试（36 项 PASS） | ✅ 已完成 |
-| 全功能流程闭环整理（首页 + 一键装机 + 无人值守全链路，见 设计文档/全功能流程闭环清单.md） | ✅ 已完成 |
-| U 盘制作与工具大全（B5 联动：写入内置工具，PE 内离线可用） | ✅ 已完成 |
-| 一键安装闭环修复（9 项：真实下载/校验/备份、认领并发保护、身份校验、任务重试复用等） | ✅ 已完成 |
-| U 盘启动制作完善（输出方式：写U盘/生成ISO；在线URL拉取PE；纯C#可引导ISO生成器 + FAT12 efisys.bin 兜底；_iso_logic_test 逻辑自测 + 在线 PE 端到端验证） | ✅ 已完成 |
-| 用户注册/登录体系 + 后台菜单精简 + 客户端炫彩动效（测试账号 wuxx80/a111111；移除客户端管理/任务管理/业务管理菜单；品牌信息对接后台设置；双端动态背景） | ✅ 已完成 |
-| 性能优化（N+1 查询消除） | ✅ 已完成 |
-| 安全审查（认证/CORS/上传/日志） | ✅ 已完成 |
-| 部署文档与打包发布（publish.ps1 / deploy_server.ps1） | ✅ 已完成 |
+| 项 | 状态 | 说明 |
+|---|---|---|
+| BCD 离线架构设计 v1 | ✅ 完成 | docs/superpowers/specs/…-design.md |
+| 后端骨架（35 表 / 31 控制器 / 36 模型） | ✅ 可用 | 缺 RoleController；中间件未注册 |
+| 管理后台前端（22 页 + 登录 + 控制台） | ✅ 基本可用 | 角色分配失效 / 日志页空（P0-1/4） |
+| WinPE_Client（WPF 六步 + U盘 + 工具） | ✅ 编译 0 错 0 警 | Phase 3 评估是否降级 |
+| WinPE_Agent（§6 八阶段流水线） | ⚠️ 磁盘存在未入编 | P0-3 |
+| Windows_Client（登录 + 六步 + U盘 + 工具 + 绿软） | ✅ 编译 0 错 0 警 | Phase 2 改一键装机为 P1+P2 |
+| 5 个测试脚手架 | ❌ 已删、Git delete 未提交 | 可选恢复 |
+| 旧主链路心跳 / 认领 / 进度 API | ⚠️ 代码保留 | Phase 3 评估删留 |
+| Git 工作树 | ⚠️ 脏 | 必须先过 Phase 0 |
 
 ## 文档列表（六件套）
 
 | 文档 | 说明 |
 |------|------|
-| [README.md](README.md) | 项目说明（本文档） |
-| [项目理解报告.md](项目理解报告.md) | 项目架构与技术方案 |
-| [项目结构.txt](项目结构.txt) | 目录结构说明 |
-| [操作指南.md](操作指南.md) | 安装/配置/启动/使用/部署 |
-| [版本更新记录.md](版本更新记录.md) | 版本变更历史 |
-| [开发计划表.md](开发计划表.md) | 详细开发任务清单与里程碑 |
+| README.md | 项目说明（本文件） |
+| 项目理解报告.md | 架构 + 数据流 + P0 缺口 + 真实完成度 |
+| 项目结构.txt | 实际目录结构（对齐 Git + 磁盘） |
+| 操作指南.md | 安装 / 配置 / 启动 / 使用 / 部署 |
+| 版本更新记录.md | R1~R7 开发轮索引 + 债务记录 |
+| 开发计划表.md | Phase 0~6 任务分解 + 审计官 + 风险 |
 
-## 目录结构
-
-```
-Windows-ZS/
-├── .gitignore
-├── README.md
-├── 项目理解报告.md
-├── 项目结构.txt
-├── 操作指南.md
-├── 版本更新记录.md
-├── 开发计划表.md                    ← 第六件套
-├── ZS_Installer.sln                 ← .NET 解决方案文件
-├── publish.ps1                      ← 客户端发布脚本
-├── deploy_server.ps1                ← 服务器端部署包制作脚本
-├── 设计文档/
-│   ├── 详细设计文档.md
-│   ├── Web后台详细设计.md
-│   ├── 一键装机交互设计.md
-│   ├── 全功能流程闭环清单.md          ← 全流程闭环梳理（入口→执行→退出→联动→状态）
-│   └── U盘制作与工具大全详细设计.md     ← U盘四步向导 + 工具大全（53工具/10分类）+ B5 工具联动
-├── _b5_logic_test/                  ← B5 逻辑测试脚手架（IncludeTools 合并拷贝等 4 项）
-├── _b5_ui_harness/                  ← B5 UI 自动化测试脚手架（STA WPF 测试 4 项）
-├── _iso_logic_test/                 ← ISO 逻辑自测脚手架（FAT12 efisys.bin + ISO 结构 + 在线 PE 端到端）
-├── database/
-│   ├── install.sql                  ← 35张表建表SQL
-│   └── migration_closure.sql        ← 闭环轮增量迁移（waiting 状态等）
-├── server/                          ← PHP 后端项目
-│   ├── app/
-│   │   ├── controller/admin/        ← 32个后台控制器
-│   │   ├── controller/api/          ← 公开接口控制器（api/Site 站点信息）
-│   │   ├── model/                   ← 36个数据模型
-│   │   ├── service/                 ← 8个服务层
-│   │   ├── middleware/              ← 3个中间件
-│   │   └── exception/              ← 异常处理
-│   ├── config/                      ← 11个配置文件
-│   ├── route/
-│   ├── public/
-│   │   ├── index.php                ← ThinkPHP 入口
-│   │   ├── index.html               ← 首页（介绍下载网站）
-│   │   ├── admin/                   ← 管理后台前端页面
-│   │   │   ├── login.html           ← 登录页
-│   │   │   ├── index.html           ← 主布局（侧边栏+顶部栏+iframe）
-│   │   │   └── pages/               ← 功能页面（客户端管理/任务管理/业务管理已移除，保留 22 个）
-│   │   └── assets/                  ← 前端静态资源
-│   │       ├── css/
-│   │       │   ├── admin.css        ← 后台样式
-│   │       │   └── style.css        ← 首页样式
-│   │       └── js/
-│   │           └── admin-common.js  ← 后台通用工具库
-│   ├── .env
-│   ├── composer.json
-│   └── thinkphp.nginx.rewrite.conf  ← 独立伪静态规则
-├── WinPE_Client/                    ← WinPE 客户端 (.NET 8 WPF)
-│   ├── WinPE_Client.csproj
-│   ├── App.xaml
-│   ├── MainWindow.xaml              ← 首页（品牌信息 + 边框 + 炫彩动态背景）
-│   ├── InstallWizardWindow.xaml       ← 一键装机六步向导窗口
-│   ├── UDiskWindow.xaml               ← U 盘制作四步向导窗口
-│   ├── ToolsWindow.xaml               ← 工具大全窗口
-│   ├── SettingsWindow.xaml            ← 设置窗口（服务器地址等）
-│   ├── AboutWindow.xaml / ContactWindow.xaml / VersionWindow.xaml
-│   ├── Models/                       （含 WizardModels.cs 向导模型 / UDiskModels.cs U盘与ISO模型）
-│   ├── Services/                     （含 UDiskService/IsoBuilder/EfiSysGenerator/ToolService）
-│   ├── ViewModels/                   （含 InstallWizardViewModel/UDiskViewModel/ToolsViewModel）
-│   ├── Data/Tools/tools.json          ← 工具清单（53工具/10分类）
-│   └── Helpers/
-├── Windows_Client/                  ← Windows 客户端 (.NET 8 WPF)
-│   ├── Windows_Client.csproj
-│   ├── App.xaml
-│   ├── MainWindow.xaml              ← 首页（品牌信息 + 边框 + 炫彩动态背景）
-│   ├── LoginWindow.xaml               ← 用户注册/登录对话框
-│   ├── InstallWizardWindow.xaml       ← 一键装机六步向导窗口（安全版）
-│   ├── UDiskWindow.xaml               ← U 盘制作四步向导窗口（写U盘/生成ISO）
-│   ├── ToolsWindow.xaml               ← 工具大全窗口
-│   ├── SoftwareWindow.xaml            ← 绿色软件窗口
-│   ├── SettingsWindow.xaml            ← 设置窗口（服务器地址等）
-│   ├── AboutWindow.xaml / ContactWindow.xaml / VersionWindow.xaml
-│   ├── Models/
-│   ├── Services/                     （含 Device/DiskPart/ImageDeploy/UDiskService/IsoBuilder/EfiSysGenerator/ToolService/SessionStore）
-│   ├── ViewModels/                   （含 InstallWizardViewModel/UDiskViewModel/ToolsViewModel/SoftwareWindowViewModel）
-│   ├── Data/Tools/tools.json          ← 工具清单（53工具/10分类）
-│   └── Helpers/
-└── publish/                         ← 客户端发布产物（git 忽略）
-    ├── WinPE_Client/                ← 自包含发布（~146MB）
-    └── Windows_Client/              ← 框架依赖发布（~0.5MB）
-```
+> 架构演进参考：docs/superpowers/specs/2026-09-01-zs-perfect-unattended-deployment-v1-design.md
 
 ## 快速开始
 
-### 1. 环境要求
-- PHP 8.0+
-- MySQL 5.7+
-- Nginx
-- Composer
-- 宝塔面板（推荐）
-
-### 2. 配置伪静态（宝塔面板）
-进入 宝塔面板 → 网站 → 设置 → 伪静态 → 选择"自定义规则"，粘贴以下内容：
-
-```
-location / {
-    if (!-e $request_filename) {
-        rewrite ^(.*)$ /index.php?s=$1 last;
-        break;
-    }
-}
-```
-
-或者直接使用项目中的 server/thinkphp.nginx.rewrite.conf 文件内容。
-
-### 3. 导入数据库
-```sql
-source /path/to/database/install.sql;
-```
-
-### 4. 配置环境
-复制 .env.example 为 .env，修改数据库连接信息。
-
-### 5. 安装依赖
-```bash
-cd server
-composer install
-```
-
-### 6. 访问后台
-浏览器访问 http://你的域名/admin/login.html
-
-### 7. 构建客户端
-```powershell
-# 发布所有客户端（WinPE 自包含 + Windows 框架依赖）
-.\publish.ps1
-
-# 或单独发布
-.\publish.ps1 -WinPE
-.\publish.ps1 -Windows
-```
+1. 环境：PHP 8.0+、MySQL 5.7+、Nginx（宝塔面板）、Composer、.NET 8 SDK
+2. 伪静态：⚠️ **需要你操作**，宝塔面板 → 网站 → 设置 → 伪静态，粘贴 server/thinkphp.nginx.rewrite.conf 内容。严禁修改宝塔 PHP 配置文件。
+3. 数据库：source database/install.sql
+4. .env：复制 server/.env.example → server/.env，填数据库 + JWT
+5. 依赖：cd server ; composer install
+6. 后台：http://IP/admin/login.html （admin / admin123）
+7. ⚠️ **登录后先做 Phase 0 基建修复**：① 补齐 RoleController + 路由 ② users.html role → role_id ③ 注册 Auth + Log 中间件 ④ WinPE_Agent 入 sln + Git
+8. 编译客户端：dotnet restore ZS_Installer.slnx ; dotnet build ZS_Installer.slnx -c Release
 
 ## 默认账号
-- 后台管理员：admin / admin123
-- 客户端测试账号：wuxx80 / a111111（普通用户，客户端注册/登录用）
+- 后台：admin / admin123
+- 客户端测试：wuxx80 / a111111（仅本地联调）
 
-## 许可证
 Copyright © 2026 ZS Studio. All rights reserved.
