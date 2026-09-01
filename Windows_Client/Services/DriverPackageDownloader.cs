@@ -36,7 +36,7 @@ namespace Windows_Client.Services
 
             // 下载到临时文件
             var tmpZip = Path.Combine(driversDir, packageName + ".tmp");
-            var url = $"{_api.GetBaseUrl()}/api/v1/drivers/{driverId}/download";
+            var url = $"{_api.GetBaseUrl()}/api/v1/drivers/{driverId}/clientDownload";
             var (ok, _, err) = await _api.DownloadFileAsync(url, tmpZip, progress, ct);
             if (!ok) return (false, "", err);
 

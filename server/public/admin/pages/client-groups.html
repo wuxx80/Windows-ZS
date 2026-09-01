@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>客户端分组 - ZS 装机助手</title>
+<link rel="stylesheet" href="../../assets/css/admin.css">
+<style>
+body{padding:0;background:transparent;font-family:-apple-system,"Microsoft YaHei","PingFang SC",sans-serif;}
+h2{margin-bottom:16px;font-size:20px;font-weight:600;color:#334155;}
+.search-bar{margin-bottom:16px;}
+.panel-body{position:relative;}
+.data-table th{background:#f8fafc;white-space:nowrap;}
+.data-table td{vertical-align:middle;}
+.dropdown-wrap{display:inline-block;position:relative;vertical-align:top;}
+.dropdown-menu{display:none;position:absolute;right:0;top:100%;min-width:120px;background:#fff;border:1px solid #e2e8f0;border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,0.1);z-index:100;padding:4px 0;}
+.dropdown-menu.show{display:block;}
+.dropdown-menu a{display:block;padding:8px 16px;font-size:13px;color:#334155;text-decoration:none;cursor:pointer;white-space:nowrap;}
+.dropdown-menu a:hover{background:#f1f5f9;}
+.dropdown-menu a.danger{color:#dc2626;}
+</style>
+</head>
+<body>
+
+<h2>客户端分组</h2>
+
+<div class="search-bar">
+  <button class="btn-create" onclick="showAddModal()">新增分组</button>
+</div>
+
+<div class="panel">
+  <div class="panel-body" style="padding:0;">
+    <table class="data-table" id="dataTable">
+      <thead>
+        <tr>
+          <th style="width:50px;">ID</th>
+          <th>名称</th>
+          <th>描述</th>
+          <th style="width:80px;">排序</th>
+          <th style="width:70px;">状态</th>
+          <th style="width:140px;">创建时间</th>
+          <th style="width:150px;">操作</th>
+        </tr>
+      </thead>
+      <tbody id="tableBody"></tbody>
+    </table>
+    <div id="emptyState" class="empty-state" style="display:none;">
+      <div class="empty-icon">&#x1F4C1;</div>
+      <p>暂无分组数据</p>
+    </div>
+  </div>
+</div>
+
+<script src="../../assets/js/admin-common.js"></script>
+<script>
+(function() {
+  function closeDropdowns() {
+    document.querySelectorAll('.dropdown-menu.show').forEach(function(el) { el.classList.remove('show'); });
+  }
+  document.addEventListener('click', function(e) {
+    if (!e.target.closest('.dropdown-wrap')) closeDropdowns();
+  });
+
+  var currentList = [];
+
+  function loadList() {
+    var tableBody = document.getElementById('tableBody');
+    tableBody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:40px;color:#94a3b8;">加载中...</td></tr>';
+
+    api('/clientGroups').then(function(res) {
+      if (res.code === 0 && res.data && res.data.list) {
+        currentList = res.data.list;
+        renderTable(currentList);
+        document.getElementById('emptyState').style.display = currentList.length === 0 ? 'block' : 'none';
+      } else {
+        var list = res.data;
+        if (Array.isArray(list)) {
+          currentList = list;
+          renderTable(list);
+          document.getElementById('emptyState').style.display = list.length === 0 ? 'block' : 'none';
+        } else {
+          toast(res.message || '加载失败', 'error');
+          tableBody.innerHTML = '';
+          document.getElementById('emptyState').style.display = 'block';
+        }
+      }
+    }).catch(function(err) {
+      toast('网络请求失败: ' + (err.message || '未知错误'), 'error');
+      tableBody.innerHTML = '';
+    });
+  }
+
+  function renderTable(list) {
+    var tableBody = document.getElementById('tableBody');
+    tableBody.innerHTML = '';
+    list.forEach(function(item) {
+      var html = '<tr>';
+      html += '<td>' + item.id + '</td>';
+      html += '<td>' + esc(item.name) + '</td>';
+      html += '<td>' + esc(item.description || '-') + '</td>';
+      html += '<td>' + (item.sort || item.sort_order || 0) + '</td>';
+      html += '<td>' + statusBadge(item.status, item.status === 'enabled' ? '启用' : '禁用') + '</td>';
+      html += '<td>' + fmtDate(item.created_at) + '</td>';
+      html += '<td>';
+      html += '<button class="action-btn edit" onclick="showEditModal(' + item.id + ')">编辑</button>';
+      html += '<button class="action-btn delete" onclick="deleteGroup(' + item.id + ')">删除</button>';
+      html += '</td></tr>';
+      tableBody.innerHTML += html;
+    });
+  }
+
+  window.showAddModal = function() {
+    var content = '';
+    content += '<div class="form-row">';
+    content += '<div class="form-group"><label>名称 <span style="color:#dc2626;">*</span></label><input type="text" id="formName" placeholder="请输入分组名称"></div>';
+    content += '<div class="form-group"><label>排序</label><input type="number" id="formSort" value="0" min="0"></div>';
+    content += '</div>';
+    content += '<div class="form-group"><label>描述</label><textarea id="formDescription" rows="2" placeholder="分组描述"></textarea></div>';
+    content += '<div class="form-group"><label>状态</label><select id="formStatus"><option value="enabled">启用</option><option value="disabled">禁用</option></select></div>';
+    content += '<div class="form-actions">';
+    content += '<button class="btn-cancel" onclick="closeModal()">取消</button>';
+    content += '<button class="btn-submit" onclick="saveAdd()">创建</button>';
+    content += '</div>';
+
+    var modal = showModal('新增分组', content);
+    modal.setAttribute('data-mode', 'add');
+  };
+
+  window.saveAdd = function() {
+    var name = document.getElementById('formName').value.trim();
+    var description = document.getElementById('formDescription').value.trim();
+    var sort = document.getElementById('formSort').value;
+    var status = document.getElementById('formStatus').value;
+
+    if (!name) { toast('请输入分组名称', 'error'); return; }
+
+    api('/clientGroups', { method: 'POST', body: { name: name, description: description, sort: parseInt(sort, 10) || 0, status: status } }).then(function(res) {
+      if (res.code === 0) { toast('创建成功', 'success'); closeModal(); loadList(); }
+      else { toast(res.message || '创建失败', 'error'); }
+    });
+  };
+
+  window.showEditModal = function(id) {
+    var item = currentList.find(function(g) { return g.id === id; });
+    if (!item) { toast('未找到分组信息', 'error'); return; }
+
+    var content = '';
+    content += '<div class="form-row">';
+    content += '<div class="form-group"><label>名称 <span style="color:#dc2626;">*</span></label><input type="text" id="formName" value="' + esc(item.name) + '"></div>';
+    content += '<div class="form-group"><label>排序</label><input type="number" id="formSort" value="' + (item.sort || item.sort_order || 0) + '" min="0"></div>';
+    content += '</div>';
+    content += '<div class="form-group"><label>描述</label><textarea id="formDescription" rows="2">' + esc(item.description || '') + '</textarea></div>';
+    content += '<div class="form-group"><label>状态</label><select id="formStatus"><option value="enabled"' + ((item.status === 'enabled' || item.status == 1) ? ' selected' : '') + '>启用</option><option value="disabled"' + ((item.status === 'disabled' || item.status == 0) ? ' selected' : '') + '>禁用</option></select></div>';
+    content += '<div class="form-actions">';
+    content += '<button class="btn-cancel" onclick="closeModal()">取消</button>';
+    content += '<button class="btn-submit" onclick="saveEdit(' + id + ')">保存</button>';
+    content += '</div>';
+
+    showModal('编辑分组', content);
+  };
+
+  window.saveEdit = function(id) {
+    var name = document.getElementById('formName').value.trim();
+    var description = document.getElementById('formDescription').value.trim();
+    var sort = document.getElementById('formSort').value;
+    var status = document.getElementById('formStatus').value;
+
+    if (!name) { toast('请输入分组名称', 'error'); return; }
+
+    api('/clientGroups/' + id, { method: 'PUT', body: { name: name, description: description, sort: parseInt(sort, 10) || 0, status: status } }).then(function(res) {
+      if (res.code === 0) { toast('保存成功', 'success'); closeModal(); loadList(); }
+      else { toast(res.message || '保存失败', 'error'); }
+    });
+  };
+
+  window.deleteGroup = function(id) {
+    if (!confirm('确定要删除该分组吗？')) return;
+    api('/clientGroups/' + id, { method: 'DELETE' }).then(function(res) {
+      if (res.code === 0) { toast('删除成功', 'success'); loadList(); }
+      else { toast(res.message || '删除失败', 'error'); }
+    });
+  };
+
+  loadList();
+})();
+</script>
+</body>
+</html>

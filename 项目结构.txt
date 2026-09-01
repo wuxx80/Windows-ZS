@@ -130,7 +130,7 @@ Windows-ZS/
 │           ├── login.html              # 登录页
 │           ├── index.html              # 主布局（深色侧边栏 + 顶部栏 + iframe 内容区）
 │           │
-│           └── pages/                  # 22 个管理页（现行菜单已精简为 19 项）
+│           └── pages/                  # 18 个管理页（现行菜单 14 项；R7-E 移除客户端管理 3 项 + 之前已移除的 5 项）
 │               ├── dashboard.html      # 控制台
 │               ├── images.html         # 镜像列表
 │               ├── image-sources.html  # 镜像源
@@ -145,14 +145,7 @@ Windows-ZS/
 │               ├── pe-customize.html   # PE 定制
 │               ├── users.html          # 用户管理（⚠️ role→role_id 契约错）
 │               ├── settings.html       # 系统设置 + 站点信息组
-│               ├── logs.html           # 操作日志（⚠️ 空，中间件未挂）
-│               ├── notifications.html  # 通知
-│               ├── scheduled-tasks.html    # 定时任务
-│               ├── reports.html        # 报表统计（任务状态/在线客户端分布 7 卡片）
-│               ├── webhook-logs.html   # Webhook 日志
-│               ├── recycle-bin.html    # 回收站
-│               ├── pxe-configs.html        # （无菜单入口，保留文件，Phase3评估）
-│               └── network-deploys.html    # （同上）
+│               └── logs.html           # 操作日志（⚠️ 空，中间件未挂）
 │
 ├── WinPE_Agent/                        # ✅ 已入 sln + Git（R7 主轮 commit 75a6196）；新主链路 PE 端核心执行者
 │   ├── WinPE_Agent.csproj              # .NET 8 单文件发布（自包含 / 无运行时依赖）；通过 Compile Link 复用 WinPE_Client 源码；✨R7-D：新增 4 个 Service Compile Link（FirmwareDetector / PartitionVerifier / SetupCompleteBuilder / UnattendXmlBuilder）
@@ -229,11 +222,20 @@ Windows-ZS/
 
 
 ### 重要删除 / 未跟踪状态（Git 对齐 · 2026-09-02）
-- 已删除但 Git delete 未提交：5 个测试脚手架目录（_b5_logic_test / _b5_ui_harness / _iso_logic_test / _offline_logic_test / _offline_ui_harness）+ 8 个临时 PHP 测试脚本（server/ 下）+ 根目录截图和临时脚本。
-- 未跟踪：WinPE_Agent/、WinPE_Client Models/OfflineTaskModels.cs、WinPE_Client Services/OfflineTaskService.cs、其他 OfflineTask 相关文件。
+- ✅ 已提交 Git delete：5 个测试脚手架目录 + 8 个临时 PHP 测试脚本 + 根目录截图和临时脚本（P0-6 已修复，commit 75a6196）
+- ✅ WinPE_Agent 已入 Git（P0-3 已修复，commit 75a6196）
+- 未跟踪：`别人易写的/` 参考目录（已加入 .gitignore）、`database/migration_fix_columns.sql`、`database/migration_r7_assets.sql`、`docs/缺失功能模块清单.md`、`server/public/admin/pages/clients.html / client-groups.html / client-versions.html`（已从菜单移除，文件仍保留）
 - 旧解决方案名 ZS_Installer.sln 不存在（实际是 ZS_Installer.slnx）。
-- 测试脚本 e2e_winpe_test.php / api_test.php / apply_migration.php / schema_check.php：项目根已清理，不再标注存在。
 - 服务器控制器：不存在 RoleController.php、StorageController.php（旧文档虚构项）。
+
+### R7-E 子轮变更（2026-09-02 · UI 同步 + 镜像管理修复 + 清理逻辑补全 + 菜单精简）
+- **页面缩减**：admin/pages/ 从 22 页减至 18 页（移除 notifications/scheduled-tasks/reports/webhook-logs/recycle-bin/pxe-configs/network-deploys 后，R7-E 再移除 3 项客户端管理页面入口）
+- **菜单缩减**：admin/index.html 侧边栏从 14 项减至 14 项（R7-D 已移除 5 项，R7-E 移除客户端管理 3 项，保持 14 项不变）
+- **InstallWizardViewModel.cs**：新增 IsStepImage/IsStepDisk/IsStepProgress 等 3 步向导映射属性 + NextStepCommand/PrevStepCommand/StartInstallCommand 命令映射 + ShowCloseButton/StatusMessage
+- **FirstBootCleanup 默认值**：ZsTaskBuilder.cs、TaskIni.cs、InstallWizardViewModel.cs 均改为 true（PE 装机完成后自动清理 ZS_Task 目录）
+- **ImageController.php**：delete 改为真删除（Image::destroy）；edit 方法 status 字段新增 parseStatus 解析；download 方法 $image->filename→$image->file_name
+- **images.html**：item.filename→item.file_name（3 处）；status 比较兼容整数/字符串（3 处：表格、详情、编辑表单）
+- **三端编译 0 错 0 警**
 
 ### R7-D 子轮代码层变更（2026-09-02 · 全链路代码层闭环）
 本子轮打通 R7 新主链路「Windows 下单 → ZS_Task 构建 → BCD 注入 → 自动重启进 PE → 八阶段装机」全部代码层环节，两端编译均 0 错 0 警。

@@ -31,7 +31,7 @@ namespace Windows_Client.Services
             Directory.CreateDirectory(swDir);
             var savePath = Path.Combine(swDir, installerFile);
 
-            var url = $"{_api.GetBaseUrl()}/api/v1/software/{softwareId}/download";
+            var url = $"{_api.GetBaseUrl()}/api/v1/software/{softwareId}/clientDownload";
             var (ok, _, err) = await _api.DownloadFileAsync(url, savePath, progress, ct);
             if (!ok) return (false, "", err);
 

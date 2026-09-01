@@ -60,7 +60,7 @@ class ImageController extends BaseController
     public function create()
     {
         $name = input("name");
-        $filename = input("filename");
+        $filename = input("file_name");
 
         if (empty($name)) {
             return $this->error("param_error", "镜像名称不能为空");
@@ -124,14 +124,19 @@ class ImageController extends BaseController
         }
 
         $data = [];
-        $fields = ["name", "description", "filename", "file_path", "format", "file_size",
+        $fields = ["name", "description", "file_name", "file_path", "format", "file_size",
                     "file_hash", "os_type", "os_edition", "os_version", "os_arch",
-                    "os_language", "source_id", "source_url", "status", "is_public"];
+                    "os_language", "source_id", "source_url", "is_public"];
         foreach ($fields as $field) {
             $val = input($field);
             if ($val !== null) {
                 $data[$field] = $val;
             }
+        }
+        // 单独处理 status 字段，需 parseStatus 将字符串转为整数
+        $statusVal = input("status");
+        if ($statusVal !== null) {
+            $data["status"] = self::parseStatus($statusVal);
         }
 
         if (!empty($data)) {
@@ -165,9 +170,14 @@ class ImageController extends BaseController
         }
 
         $imageData = $image->toArray();
-        $image->status = 0;
-        $image->save();
 
+        // 先删除关联标签
+        Db::name("image_tag_relations")->where("image_id", $id)->delete();
+
+        // 删除关联版本记录
+        Db::name("image_versions")->where("image_id", $id)->delete();
+
+        // 记录到回收站后真删除
         Db::name("recycle_bin")->insert([
             "original_table" => "zs_images",
             "original_id"   => $id,
@@ -177,8 +187,10 @@ class ImageController extends BaseController
             "expire_at"     => date("Y-m-d H:i:s", strtotime("+30 days")),
         ]);
 
+        Image::destroy($id);
+
         $this->log("image", "删除镜像: " . $image->name, $id);
-        return $this->success(null, "已移入回收站");
+        return $this->success(null, "删除成功");
     }
 
     public function detail($id)
@@ -394,7 +406,7 @@ class ImageController extends BaseController
         Cache::set("download_token_" . $downloadToken, [
             "image_id" => $id,
             "path"     => $filePath,
-            "filename" => $image->filename ?: basename($filePath),
+            "filename" => $image->file_name ?: basename($filePath),
         ], $expire);
 
         Db::name("download_logs")->insert([
@@ -410,7 +422,7 @@ class ImageController extends BaseController
             "download_url" => url("/api/v1/images/downloadFile/" . $downloadToken),
             "token"        => $downloadToken,
             "expires_in"   => $expire,
-            "filename"     => $image->filename ?: basename($filePath),
+            "filename"     => $image->file_name ?: basename($filePath),
             "file_size"    => $image->file_size,
             "file_size_human" => FileService::formatBytes($image->file_size),
         ]);
@@ -504,17 +516,20 @@ class ImageController extends BaseController
         $images = Image::whereIn("id", $ids)->select();
         foreach ($images as $image) {
             $imageData = $image->toArray();
-            $image->delete_time = time();
-            $image->status = 0;
-            $image->save();
+
+            // 删除关联标签和版本
+            Db::name("image_tag_relations")->where("image_id", $image->id)->delete();
+            Db::name("image_versions")->where("image_id", $image->id)->delete();
 
             Db::name("recycle_bin")->insert([
                 "original_table" => "zs_images",
                 "original_id"   => $image->id,
-                "deleted_content" => json_encode($imageData),
+                "data"          => json_encode($imageData),
                 "deleted_by"    => $this->userId,
                 "deleted_at"    => date("Y-m-d H:i:s"),
             ]);
+
+            Image::destroy($image->id);
         }
 
         $this->log("image", "批量删除镜像: " . implode(",", $ids));

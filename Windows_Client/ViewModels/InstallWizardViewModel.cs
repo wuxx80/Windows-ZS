@@ -93,7 +93,7 @@ namespace Windows_Client.ViewModels
         public int CurrentStep
         {
             get => _currentStep;
-            set { _currentStep = value; OnPropertyChanged(); OnPropertyChanged(nameof(IsStep0)); OnPropertyChanged(nameof(IsStep1)); OnPropertyChanged(nameof(IsStep2)); OnPropertyChanged(nameof(IsStep3)); OnPropertyChanged(nameof(IsStep4)); OnPropertyChanged(nameof(IsStep5)); OnPropertyChanged(nameof(NextText)); OnPropertyChanged(nameof(ShowForceContinue)); OnPropertyChanged(nameof(ShowCompletion)); OnPropertyChanged(nameof(ShowExecution)); UpdateStepStates(); }
+            set { _currentStep = value; OnPropertyChanged(); OnPropertyChanged(nameof(IsStep0)); OnPropertyChanged(nameof(IsStep1)); OnPropertyChanged(nameof(IsStep2)); OnPropertyChanged(nameof(IsStep3)); OnPropertyChanged(nameof(IsStep4)); OnPropertyChanged(nameof(IsStep5)); OnPropertyChanged(nameof(IsStepImage)); OnPropertyChanged(nameof(IsStepDisk)); OnPropertyChanged(nameof(IsStepProgress)); OnPropertyChanged(nameof(NextText)); OnPropertyChanged(nameof(ShowForceContinue)); OnPropertyChanged(nameof(ShowCompletion)); OnPropertyChanged(nameof(ShowExecution)); OnPropertyChanged(nameof(ShowCloseButton)); UpdateStepStates(); }
         }
         public bool IsStep0 => CurrentStep == 0;
         public bool IsStep1 => CurrentStep == 1;
@@ -101,12 +101,24 @@ namespace Windows_Client.ViewModels
         public bool IsStep3 => CurrentStep == 3;
         public bool IsStep4 => CurrentStep == 4;
         public bool IsStep5 => CurrentStep == 5;
+        /// <summary>简化版 3 步向导映射（供已简化的 XAML 使用）</summary>
+        public bool IsStepImage => CurrentStep == 1;
+        public bool IsStepDisk => CurrentStep >= 2 && CurrentStep <= 4;
+        public bool IsStepProgress => CurrentStep == 5;
         /// <summary>底部「上一步」可见：步骤 1-4 且未执行中</summary>
         public bool ShowPrevBottom => CurrentStep > 0 && CurrentStep < 5 && !IsExecuting;
         /// <summary>底部「下一步/开始装机」可见：步骤 0-4 且未执行中</summary>
         public bool ShowNextBottom => CurrentStep < 5 && !IsExecuting;
 
         public string NextText => CurrentStep == 4 ? "开始装机" : "下一步";
+
+        // 简化版 3 步向导命令映射
+        public ICommand NextStepCommand => NextCommand;
+        public ICommand PrevStepCommand => PrevCommand;
+        public ICommand StartInstallCommand => GoConfirmCommand;
+        public bool ShowCloseButton => !IsExecuting && (CurrentStep == 5 || IsFinished);
+        private string _statusMessage = "";
+        public string StatusMessage { get => _statusMessage; set { _statusMessage = value; OnPropertyChanged(); } }
 
         public ObservableCollection<StepNav> Steps { get; } = new();
         public ObservableCollection<EnvCheckItem> Checks { get; } = new();
@@ -1214,19 +1226,24 @@ namespace Windows_Client.ViewModels
                 AddLog("R7: 任务盘 = " + taskDrive + ":\\");
 
                 // 获取 PE 版本（从服务器，失败用 latest）
+                int peVersionId = 0;
                 string peVersion = "latest";
                 try
                 {
                     var peVersions = await _api.GetPeVersionsAsync();
                     if (peVersions.IsSuccess && peVersions.Data != null && peVersions.Data.Count > 0)
+                    {
+                        peVersionId = peVersions.Data[0].Id;
                         peVersion = peVersions.Data[0].Version;
+                    }
                 }
                 catch { /* 取不到 PE 版本不阻塞，用 latest */ }
 
-                // 构造 BuildRequest（软件/驱动列表待 UI 层后续补充）
+                // 构造 BuildRequest
                 var req = new ZsTaskBuilder.BuildRequest
                 {
                     TaskDrive = taskDrive,
+                    PeVersionId = peVersionId,
                     PeVersion = peVersion,
                     ImageId = SelectedImage.Id,
                     ImageFileName = SelectedImage.FileName,
@@ -1234,7 +1251,7 @@ namespace Windows_Client.ViewModels
                     ImageName = SelectedImage.Name,
                     DiskIndex = SelectedDisk.Index,
                     OobeMode = OptionOn("unattended") ? "auto" : "manual",
-                    FirstBootCleanup = false,
+                    FirstBootCleanup = true,
                     ServerApi = ServerUrl,
                     PartitionTable = PartitionScheme == 0 ? "auto" : "force_gpt",
                 };

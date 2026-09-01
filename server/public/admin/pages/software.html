@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
@@ -27,6 +27,12 @@ h2{margin-bottom:16px;font-size:20px;font-weight:600;color:#334155;}
 .detail-item .dt-label{font-size:12px;color:#64748b;margin-bottom:2px;}
 .detail-item .dt-value{font-size:14px;color:#1e293b;font-weight:500;word-break:break-all;}
 .detail-full{grid-column:1 / -1;}
+.dropdown-wrap{display:inline-block;position:relative;vertical-align:top;}
+.dropdown-menu{display:none;position:absolute;right:0;top:100%;min-width:120px;background:#fff;border:1px solid #e2e8f0;border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,0.1);z-index:100;padding:4px 0;}
+.dropdown-menu.show{display:block;}
+.dropdown-menu a{display:block;padding:8px 16px;font-size:13px;color:#334155;text-decoration:none;cursor:pointer;white-space:nowrap;}
+.dropdown-menu a:hover{background:#f1f5f9;}
+.dropdown-menu a.danger{color:#dc2626;}
 </style>
 </head>
 <body>
@@ -45,8 +51,13 @@ h2{margin-bottom:16px;font-size:20px;font-weight:600;color:#334155;}
   </select>
   <button class="btn-search" onclick="searchSoftware()">搜索</button>
   <button class="btn-reset" onclick="resetSearch()">重置</button>
-  <button class="btn-create" onclick="showAddModal()">新增软件</button>
-  <button class="btn-create" style="background:#7c3aed;" onclick="showUploadModal()">上传软件</button>
+  <div class="dropdown-wrap">
+    <button class="btn-create" onclick="this.nextElementSibling.classList.toggle('show')">新增</button>
+    <div class="dropdown-menu">
+      <a onclick="closeDropdowns();showAddModal()">新增软件</a>
+      <a onclick="closeDropdowns();showUploadModal()">上传软件</a>
+    </div>
+  </div>
 </div>
 
 <div class="panel">
@@ -80,6 +91,13 @@ h2{margin-bottom:16px;font-size:20px;font-weight:600;color:#334155;}
 <script src="../../assets/js/admin-common.js"></script>
 <script>
 (function() {
+  function closeDropdowns() {
+    document.querySelectorAll('.dropdown-menu.show').forEach(function(el) { el.classList.remove('show'); });
+  }
+  document.addEventListener('click', function(e) {
+    if (!e.target.closest('.dropdown-wrap')) closeDropdowns();
+  });
+
   var currentPage = 1;
   var pageSize = 15;
   var totalSoftwares = 0;
@@ -87,7 +105,7 @@ h2{margin-bottom:16px;font-size:20px;font-weight:600;color:#334155;}
   var categoryMap = {};
 
   function loadCategories() {
-    api('/software/categories').then(function(res) {
+    api('/softwareCategories').then(function(res) {
       if (res.code === 0 && res.data && res.data.list) {
         var sel = document.getElementById('searchCategory');
         var list = res.data.list;
@@ -160,8 +178,12 @@ h2{margin-bottom:16px;font-size:20px;font-weight:600;color:#334155;}
       html += '<td>' + fmtDate(item.created_at) + '</td>';
       html += '<td>';
       html += '<button class="action-btn edit" onclick="showEditModal(\'' + item.id + '\')">编辑</button>';
-      html += '<button class="action-btn delete" onclick="deleteSoftware(\'' + item.id + '\')">删除</button>';
-      html += '<button class="action-btn more" onclick="viewDetail(\'' + item.id + '\')">详情</button>';
+      html += '<div class="dropdown-wrap" style="display:inline-block;vertical-align:top;">';
+      html += '<button class="action-btn more" onclick="event.stopPropagation();this.nextElementSibling.classList.toggle(\'show\')">更多</button>';
+      html += '<div class="dropdown-menu">';
+      html += '<a onclick="closeDropdowns();viewDetail(\'' + item.id + '\')">查看详情</a>';
+      html += '<a onclick="closeDropdowns();if(confirm(\'确定要删除该软件吗？此操作不可恢复。\'))deleteSoftware(\'' + item.id + '\')" class="danger">删除</a>';
+      html += '</div></div>';
       html += '</td>';
       html += '</tr>';
     }
@@ -260,6 +282,10 @@ h2{margin-bottom:16px;font-size:20px;font-weight:600;color:#334155;}
       content += '<div class="form-row">';
       content += '<div class="form-group"><label>下载地址</label><input type="text" id="formDownloadUrl" value="' + esc(item.download_url || '') + '"></div>';
       content += '<div class="form-group"><label>文件大小 (字节)</label><input type="number" id="formFileSize" value="' + (item.file_size || 0) + '" min="0"></div>';
+      content += '</div>';
+      content += '<div class="form-row">';
+      content += '<div class="form-group"><label>文件路径</label><input type="text" id="formFilePath" value="' + esc(item.file_path || '') + '" placeholder="上传后自动填写" readonly style="background:#f1f5f9;color:#64748b;"></div>';
+      content += '<div class="form-group"><label>文件名</label><input type="text" id="formFileName" value="' + esc(item.file_name || '') + '" placeholder="上传后自动填写" readonly style="background:#f1f5f9;color:#64748b;"></div>';
       content += '</div>';
       content += '<div class="form-group"><label>状态</label><select id="formStatus"><option value="enabled"' + (item.status === 'enabled' ? ' selected' : '') + '>启用</option><option value="disabled"' + (item.status === 'disabled' ? ' selected' : '') + '>禁用</option></select></div>';
       content += '<div class="form-actions">';
@@ -376,6 +402,8 @@ h2{margin-bottom:16px;font-size:20px;font-weight:600;color:#334155;}
       content += '<div class="detail-item"><div class="dt-label">发布者</div><div class="dt-value">' + esc(item.publisher || '-') + '</div></div>';
       content += '<div class="detail-item"><div class="dt-label">分类</div><div class="dt-value">' + esc(categoryName) + '</div></div>';
       content += '<div class="detail-item"><div class="dt-label">文件大小</div><div class="dt-value">' + fmtSize(item.file_size) + '</div></div>';
+      content += '<div class="detail-item detail-full"><div class="dt-label">文件路径</div><div class="dt-value" style="font-size:12px;word-break:break-all;">' + esc(item.file_path || '-') + '</div></div>';
+      content += '<div class="detail-item"><div class="dt-label">文件名</div><div class="dt-value">' + esc(item.file_name || '-') + '</div></div>';
       content += '<div class="detail-item detail-full"><div class="dt-label">下载地址</div><div class="dt-value" style="font-size:12px;word-break:break-all;">' + esc(item.download_url || '-') + '</div></div>';
       content += '<div class="detail-item"><div class="dt-label">状态</div><div class="dt-value">' + statusBadge(item.status, item.status === 'enabled' ? '启用' : '禁用') + '</div></div>';
       content += '<div class="detail-item"><div class="dt-label">创建时间</div><div class="dt-value">' + fmtDate(item.created_at) + '</div></div>';

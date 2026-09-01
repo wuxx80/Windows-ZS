@@ -65,22 +65,7 @@
       <a class="menu-item" href="pages/logs.html" target="contentFrame" onclick="return switchPage(this, event)">
         <span class="icon">📝</span><span class="label">操作日志</span>
       </a>
-      <a class="menu-item" href="pages/notifications.html" target="contentFrame" onclick="return switchPage(this, event)">
-        <span class="icon">🔔</span><span class="label">通知消息</span>
-      </a>
-      <a class="menu-item" href="pages/scheduled-tasks.html" target="contentFrame" onclick="return switchPage(this, event)">
-        <span class="icon">⏰</span><span class="label">定时任务</span>
-      </a>
-      <div class="menu-section">其他</div>
-      <a class="menu-item" href="pages/reports.html" target="contentFrame" onclick="return switchPage(this, event)">
-        <span class="icon">📊</span><span class="label">报表统计</span>
-      </a>
-      <a class="menu-item" href="pages/webhook-logs.html" target="contentFrame" onclick="return switchPage(this, event)">
-        <span class="icon">🔗</span><span class="label">Webhook日志</span>
-      </a>
-      <a class="menu-item" href="pages/recycle-bin.html" target="contentFrame" onclick="return switchPage(this, event)">
-        <span class="icon">🗑️</span><span class="label">回收站</span>
-      </a>
+      
     </nav>
   </aside>
   <div class="main-content">
@@ -110,9 +95,7 @@ var pageTitles = {
   'software.html': '软件管理', 'software-categories.html': '软件分类', 'software-templates.html': '软件模板',
   'drivers.html': '驱动管理', 'scripts.html': '脚本管理',
   'pe-versions.html': 'PE版本', 'pe-customize.html': 'PE定制',
-  'users.html': '用户管理', 'settings.html': '系统设置', 'logs.html': '操作日志',
-  'notifications.html': '通知消息', 'scheduled-tasks.html': '定时任务',
-  'reports.html': '报表统计', 'webhook-logs.html': 'Webhook日志', 'recycle-bin.html': '回收站'
+  'users.html': '用户管理', 'settings.html': '系统设置', 'logs.html': '操作日志'
 };
 (function() {
   var token = localStorage.getItem(TOKEN_KEY);

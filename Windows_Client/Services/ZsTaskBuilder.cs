@@ -45,6 +45,8 @@ namespace Windows_Client.Services
         public class BuildRequest
         {
             public string TaskDrive { get; set; } = "D"; // 无冒号
+            public int PeVersionId { get; set; }
+            [Obsolete("改用 PeVersionId")]
             public string PeVersion { get; set; } = "";
             public int ImageId { get; set; }
             public string ImageFileName { get; set; } = "";
@@ -52,7 +54,7 @@ namespace Windows_Client.Services
             public string ImageName { get; set; } = "";
             public int DiskIndex { get; set; } = 0;
             public string OobeMode { get; set; } = "manual";
-            public bool FirstBootCleanup { get; set; } = false;
+            public bool FirstBootCleanup { get; set; } = true;
             public string ServerApi { get; set; } = "";
             public string PartitionTable { get; set; } = "auto"; // auto/force_gpt/force_mbr
             public List<(int Id, string Key, string Installer)> SoftwareList { get; set; } = new();
@@ -87,15 +89,15 @@ namespace Windows_Client.Services
 
                 // 步骤 2：下载 PE 资产（§3.1 步骤 3）
                 Report(progress, 10, "下载 PE 资产", "boot.wim");
-                var (wimOk, _, wimErr) = await _peDownloader.DownloadBootWimAsync(req.PeVersion, taskRoot, null, ct);
+                var (wimOk, _, wimErr) = await _peDownloader.DownloadBootWimAsync(req.PeVersionId, taskRoot, null, ct);
                 if (!wimOk) throw new Exception("boot.wim 下载失败: " + wimErr);
 
                 Report(progress, 30, "下载 PE 资产", "boot.sdi");
-                var (sdiOk, _, sdiErr) = await _peDownloader.DownloadBootSdiAsync(req.PeVersion, taskRoot, null, ct);
+                var (sdiOk, _, sdiErr) = await _peDownloader.DownloadBootSdiAsync(req.PeVersionId, taskRoot, null, ct);
                 if (!sdiOk) throw new Exception("boot.sdi 下载失败: " + sdiErr);
 
                 Report(progress, 40, "下载 PE 资产", "ZS_PE_Agent.exe");
-                var (agentOk, _, agentErr) = await _peDownloader.DownloadAgentAsync(req.PeVersion, taskRoot, null, ct);
+                var (agentOk, _, agentErr) = await _peDownloader.DownloadAgentAsync(req.PeVersionId, taskRoot, null, ct);
                 if (!agentOk) throw new Exception("ZS_PE_Agent.exe 下载失败: " + agentErr);
 
                 // 步骤 3：下载系统镜像（§3.1 步骤 3）

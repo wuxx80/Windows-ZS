@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
@@ -20,6 +20,12 @@ h2{margin-bottom:16px;font-size:20px;font-weight:600;color:#334155;}
 .detail-item .dt-value{font-size:14px;color:#1e293b;font-weight:500;word-break:break-all;}
 .detail-full{grid-column:1 / -1;}
 .software-tag{display:inline-block;padding:2px 8px;margin:2px;background:#dbeafe;color:#2563eb;border-radius:4px;font-size:12px;}
+.dropdown-wrap{display:inline-block;position:relative;vertical-align:top;}
+.dropdown-menu{display:none;position:absolute;right:0;top:100%;min-width:120px;background:#fff;border:1px solid #e2e8f0;border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,0.1);z-index:100;padding:4px 0;}
+.dropdown-menu.show{display:block;}
+.dropdown-menu a{display:block;padding:8px 16px;font-size:13px;color:#334155;text-decoration:none;cursor:pointer;white-space:nowrap;}
+.dropdown-menu a:hover{background:#f1f5f9;}
+.dropdown-menu a.danger{color:#dc2626;}
 </style>
 </head>
 <body>
@@ -58,6 +64,13 @@ h2{margin-bottom:16px;font-size:20px;font-weight:600;color:#334155;}
 <script src="../../assets/js/admin-common.js"></script>
 <script>
 (function() {
+  function closeDropdowns() {
+    document.querySelectorAll('.dropdown-menu.show').forEach(function(el) { el.classList.remove('show'); });
+  }
+  document.addEventListener('click', function(e) {
+    if (!e.target.closest('.dropdown-wrap')) closeDropdowns();
+  });
+
   var currentPage = 1;
   var pageSize = 15;
   var totalCount = 0;
@@ -143,10 +156,14 @@ h2{margin-bottom:16px;font-size:20px;font-weight:600;color:#334155;}
       html += '<td>' + fmtDate(item.created_at) + '</td>';
       html += '<td>';
       html += '<button class="action-btn edit" onclick="showEditModal(\'' + item.id + '\')">编辑</button>';
+      html += '<div class="dropdown-wrap" style="display:inline-block;vertical-align:top;">';
+      html += '<button class="action-btn more" onclick="event.stopPropagation();this.nextElementSibling.classList.toggle(\'show\')">更多</button>';
+      html += '<div class="dropdown-menu">';
       if (!item.is_default) {
-        html += '<button class="action-btn more" onclick="setAsDefault(\'' + item.id + '\')">设为默认</button>';
+        html += '<a onclick="closeDropdowns();setAsDefault(\'' + item.id + '\')">设为默认</a>';
       }
-      html += '<button class="action-btn delete" onclick="deleteTemplate(\'' + item.id + '\')">删除</button>';
+      html += '<a onclick="closeDropdowns();if(confirm(\'确定要删除该软件模板吗？此操作不可恢复。\'))deleteTemplate(\'' + item.id + '\')" class="danger">删除</a>';
+      html += '</div></div>';
       html += '</td>';
       html += '</tr>';
     }

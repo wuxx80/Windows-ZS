@@ -110,6 +110,7 @@ Route::group('api/v1', function () {
     Route::post('unattendTemplates', 'admin.Unattend/create');
 
     // Software
+    Route::get('software/:id/clientDownload', 'admin.Software/clientDownload');
     Route::post('software/upload', 'admin.Software/upload');
     Route::put('software/:id', 'admin.Software/edit');
     Route::delete('software/:id', 'admin.Software/delete');
@@ -131,6 +132,7 @@ Route::group('api/v1', function () {
     Route::post('softwareTemplates', 'admin.SoftwareTemplate/create');
 
     // Drivers
+    Route::get('drivers/:id/clientDownload', 'admin.Driver/clientDownload');
     Route::post('drivers/upload', 'admin.Driver/upload');
     Route::put('drivers/:id', 'admin.Driver/edit');
     Route::delete('drivers/:id', 'admin.Driver/delete');
@@ -147,6 +149,12 @@ Route::group('api/v1', function () {
     // PE Versions
     Route::get('peVersions/clientList', 'admin.PeVersion/clientList');
     Route::get('peVersions/:id/download', 'admin.PeVersion/clientDownload');
+    // R7 PE 资产端点（必须在通用 :id 之前）
+    Route::get('peVersions/:id/bootWim', 'admin.PeVersion/bootWim');
+    Route::get('peVersions/:id/bootSdi', 'admin.PeVersion/bootSdi');
+    Route::get('peVersions/:id/agent', 'admin.PeVersion/agent');
+    Route::get('peVersions/:id/assetsMeta', 'admin.PeVersion/assetsMeta');
+    Route::post('peVersions/:id/uploadAsset', 'admin.PeVersion/uploadAsset');
     Route::put('peVersions/:id', 'admin.PeVersion/edit');
     Route::delete('peVersions/:id', 'admin.PeVersion/delete');
     Route::get('peVersions', 'admin.PeVersion/index');
@@ -159,21 +167,6 @@ Route::group('api/v1', function () {
     Route::delete('peCustomize/:id', 'admin.PeCustomize/delete');
     Route::get('peCustomize', 'admin.PeCustomize/index');
     Route::post('peCustomize', 'admin.PeCustomize/create');
-
-    // PXE Configs
-    Route::post('pxeConfigs/:id/activate', 'admin.PxeConfig/activate');
-    Route::put('pxeConfigs/:id', 'admin.PxeConfig/edit');
-    Route::delete('pxeConfigs/:id', 'admin.PxeConfig/delete');
-    Route::get('pxeConfigs', 'admin.PxeConfig/index');
-    Route::post('pxeConfigs', 'admin.PxeConfig/create');
-
-    // Network Deploy
-    Route::post('networkDeploys/:id/start', 'admin.NetworkDeploy/start');
-    Route::get('networkDeploys/:id/report', 'admin.NetworkDeploy/report');
-    Route::put('networkDeploys/:id', 'admin.NetworkDeploy/edit');
-    Route::delete('networkDeploys/:id', 'admin.NetworkDeploy/delete');
-    Route::get('networkDeploys', 'admin.NetworkDeploy/index');
-    Route::post('networkDeploys', 'admin.NetworkDeploy/create');
 
     // Roles（角色 CRUD，供用户管理下拉选择）
     Route::get('roles/:id', 'admin.Role/detail');
@@ -189,21 +182,6 @@ Route::group('api/v1', function () {
     Route::get('users', 'admin.User/index');
     Route::post('users', 'admin.User/create');
 
-    // Customers
-    Route::get('customers/:id', 'admin.Customer/detail');
-    Route::put('customers/:id', 'admin.Customer/edit');
-    Route::delete('customers/:id', 'admin.Customer/delete');
-    Route::get('customers', 'admin.Customer/index');
-    Route::post('customers', 'admin.Customer/create');
-
-    // Work Orders
-    Route::get('workOrders/:id/detail', 'admin.WorkOrder/detail');
-    Route::put('workOrders/:id/status', 'admin.WorkOrder/updateStatus');
-    Route::put('workOrders/:id', 'admin.WorkOrder/edit');
-    Route::delete('workOrders/:id', 'admin.WorkOrder/delete');
-    Route::get('workOrders', 'admin.WorkOrder/index');
-    Route::post('workOrders', 'admin.WorkOrder/create');
-
     // Settings（/settings/:key 优先于 /settings，避免懒匹配）
     Route::get('settings/:key', 'admin.Setting/get');
     Route::get('settings', 'admin.Setting/index');
@@ -214,35 +192,4 @@ Route::group('api/v1', function () {
     Route::get('logTypes', 'admin.Log/types');
     Route::post('logs/clear', 'admin.Log/clear');
     Route::get('logs', 'admin.Log/index');
-
-    // Reports
-    Route::get('reports/install', 'admin.Report/installReport');
-    Route::get('reports/client', 'admin.Report/clientReport');
-    Route::get('reports/imageRanking', 'admin.Report/imageRanking');
-    Route::get('reports/order', 'admin.Report/orderReport');
-    Route::get('reports/workOrder', 'admin.Report/workOrderReport');
-
-    // Notifications
-    Route::get('notifications/unread_count', 'admin.Notification/unreadCount');
-    Route::post('notifications/:id/read', 'admin.Notification/read');
-    Route::post('notifications/batchRead', 'admin.Notification/batchRead');
-    Route::get('notifications', 'admin.Notification/index');
-
-    // Scheduled Tasks
-    Route::get('scheduledTasks/:id/logs', 'admin.ScheduledTask/logs');
-    Route::post('scheduledTasks/:id/trigger', 'admin.ScheduledTask/trigger');
-    Route::put('scheduledTasks/:id', 'admin.ScheduledTask/edit');
-    Route::delete('scheduledTasks/:id', 'admin.ScheduledTask/delete');
-    Route::get('scheduledTasks', 'admin.ScheduledTask/index');
-    Route::post('scheduledTasks', 'admin.ScheduledTask/create');
-
-    // Webhook Logs
-    Route::post('webhookLogs/:id/retry', 'admin.Webhook/retry');
-    Route::get('webhookLogs', 'admin.Webhook/index');
-
-    // Recycle Bin
-    Route::post('recycleBin/:id/restore', 'admin.RecycleBin/restore');
-    Route::delete('recycleBin/:id', 'admin.RecycleBin/delete');
-    Route::delete('recycleBin', 'admin.RecycleBin/clear');
-    Route::get('recycleBin', 'admin.RecycleBin/index');
 })->middleware(app\middleware\AuthMiddleware::class);

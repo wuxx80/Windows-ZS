@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>客户端管理 - ZS 装机助手</title>
+<link rel="stylesheet" href="../../assets/css/admin.css">
+<style>
+body{padding:0;background:transparent;font-family:-apple-system,"Microsoft YaHei","PingFang SC",sans-serif;}
+h2{margin-bottom:16px;font-size:20px;font-weight:600;color:#334155;}
+.search-bar{margin-bottom:16px;display:flex;flex-wrap:wrap;gap:8px;align-items:center;}
+.panel-body{position:relative;}
+.data-table th{background:#f8fafc;white-space:nowrap;}
+.data-table td{vertical-align:middle;}
+.stats-bar{display:flex;gap:16px;margin-bottom:16px;flex-wrap:wrap;}
+.stat-card{flex:1;min-width:140px;padding:14px 18px;background:#fff;border:1px solid #e2e8f0;border-radius:8px;text-align:center;}
+.stat-card .num{font-size:24px;font-weight:700;color:#1e293b;}
+.stat-card .label{font-size:12px;color:#64748b;margin-top:2px;}
+.stat-card.online{border-left:3px solid #16a34a;}
+.stat-card.offline{border-left:3px solid #94a3b8;}
+.stat-card.total{border-left:3px solid #1a73e8;}
+.stat-card.blocked{border-left:3px solid #dc2626;}
+.status-badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:500;}
+.status-badge.online{background:#dcfce7;color:#16a34a;}
+.status-badge.offline{background:#f1f5f9;color:#94a3b8;}
+.status-badge.approved{background:#dbeafe;color:#2563eb;}
+.status-badge.blocked{background:#fef2f2;color:#dc2626;}
+.status-badge.pending{background:#fef9c3;color:#ca8a04;}
+.dropdown-wrap{display:inline-block;position:relative;vertical-align:top;}
+.dropdown-menu{display:none;position:absolute;right:0;top:100%;min-width:130px;background:#fff;border:1px solid #e2e8f0;border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,0.1);z-index:100;padding:4px 0;}
+.dropdown-menu.show{display:block;}
+.dropdown-menu a{display:block;padding:8px 16px;font-size:13px;color:#334155;text-decoration:none;cursor:pointer;white-space:nowrap;}
+.dropdown-menu a:hover{background:#f1f5f9;}
+.dropdown-menu a.danger{color:#dc2626;}
+.detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+.detail-item{padding:10px 14px;background:#f8fafc;border-radius:6px;}
+.detail-item .dt-label{font-size:12px;color:#64748b;margin-bottom:2px;}
+.detail-item .dt-value{font-size:14px;color:#1e293b;font-weight:500;word-break:break-all;}
+.detail-full{grid-column:1 / -1;}
+</style>
+</head>
+<body>
+
+<h2>客户端管理</h2>
+
+<div class="stats-bar" id="statsBar">
+  <div class="stat-card total"><div class="num" id="statTotal">0</div><div class="label">总客户端</div></div>
+  <div class="stat-card online"><div class="num" id="statOnline">0</div><div class="label">在线</div></div>
+  <div class="stat-card offline"><div class="num" id="statOffline">0</div><div class="label">离线</div></div>
+  <div class="stat-card blocked"><div class="num" id="statBlocked">0</div><div class="label">已禁用</div></div>
+</div>
+
+<div class="search-bar">
+  <input type="text" id="searchKeyword" placeholder="关键词（主机名/IP/MAC）" style="min-width:180px;">
+  <select id="searchStatus">
+    <option value="">全部状态</option>
+    <option value="approved">已批准</option>
+    <option value="blocked">已禁用</option>
+  </select>
+  <select id="searchGroup">
+    <option value="">全部分组</option>
+  </select>
+  <button class="btn-search" onclick="searchClients()">搜索</button>
+  <button class="btn-reset" onclick="resetSearch()">重置</button>
+</div>
+
+<div class="panel">
+  <div class="panel-body" style="padding:0;">
+    <table class="data-table" id="dataTable">
+      <thead>
+        <tr>
+          <th style="width:50px;">ID</th>
+          <th style="width:160px;">Client ID</th>
+          <th>主机名</th>
+          <th style="width:130px;">IP</th>
+          <th style="width:130px;">MAC</th>
+          <th style="width:90px;">系统</th>
+          <th style="width:70px;">版本</th>
+          <th style="width:70px;">分组</th>
+          <th style="width:70px;">状态</th>
+          <th style="width:140px;">最后心跳</th>
+          <th style="width:170px;">操作</th>
+        </tr>
+      </thead>
+      <tbody id="tableBody"></tbody>
+    </table>
+    <div id="emptyState" class="empty-state" style="display:none;">
+      <div class="empty-icon">&#x1F5B3;</div>
+      <p>暂无客户端数据</p>
+    </div>
+  </div>
+</div>
+
+<div id="paginationContainer"></div>
+
+<script src="../../assets/js/admin-common.js"></script>
+<script>
+(function() {
+  function closeDropdowns() {
+    document.querySelectorAll('.dropdown-menu.show').forEach(function(el) { el.classList.remove('show'); });
+  }
+  document.addEventListener('click', function(e) {
+    if (!e.target.closest('.dropdown-wrap')) closeDropdowns();
+  });
+
+  var currentPage = 1;
+  var pageSize = 15;
+  var totalCount = 0;
+  var currentList = [];
+  var groupMap = {};
+
+  function loadGroups() {
+    api('/clientGroups').then(function(res) {
+      if (res.code === 0 && res.data && res.data.list) {
+        var sel = document.getElementById('searchGroup');
+        res.data.list.forEach(function(g) {
+          groupMap[g.id] = g.name;
+          sel.innerHTML += '<option value="' + g.id + '">' + esc(g.name) + '</option>';
+        });
+      }
+    });
+  }
+
+  function loadClients() {
+    var keyword = document.getElementById('searchKeyword').value.trim();
+    var status = document.getElementById('searchStatus').value;
+    var groupId = document.getElementById('searchGroup').value;
+
+    var params = 'page=' + currentPage + '&pageSize=' + pageSize;
+    if (keyword) params += '&keyword=' + encodeURIComponent(keyword);
+    if (status) params += '&status=' + status;
+    if (groupId) params += '&group_id=' + groupId;
+
+    var tableBody = document.getElementById('tableBody');
+    tableBody.innerHTML = '<tr><td colspan="11" style="text-align:center;padding:40px;color:#94a3b8;">加载中...</td></tr>';
+
+    api('/clients?' + params).then(function(res) {
+      if (res.code === 0) {
+        totalCount = res.data.total || 0;
+        currentList = res.data.list || [];
+        renderTable(currentList);
+        renderPagination();
+        updateStats(currentList);
+      } else {
+        toast(res.message || '加载失败', 'error');
+        tableBody.innerHTML = '';
+        document.getElementById('emptyState').style.display = 'block';
+      }
+    }).catch(function(err) {
+      toast('网络请求失败: ' + (err.message || '未知错误'), 'error');
+      tableBody.innerHTML = '';
+    });
+  }
+
+  function updateStats(list) {
+    var total = 0, online = 0, offline = 0, blocked = 0;
+    list.forEach(function(item) {
+      total++;
+      if (item.status === 'blocked') { blocked++; }
+      else if (item.display_status === 'offline') { offline++; }
+      else if (item.online) { online++; }
+    });
+    document.getElementById('statTotal').textContent = total;
+    document.getElementById('statOnline').textContent = online;
+    document.getElementById('statOffline').textContent = offline;
+    document.getElementById('statBlocked').textContent = blocked;
+  }
+
+  function renderTable(list) {
+    var tableBody = document.getElementById('tableBody');
+    var emptyState = document.getElementById('emptyState');
+    tableBody.innerHTML = '';
+
+    if (!list || list.length === 0) {
+      emptyState.style.display = 'block';
+      return;
+    }
+    emptyState.style.display = 'none';
+
+    list.forEach(function(item) {
+      var statusText = '';
+      var statusClass = '';
+      if (item.status === 'blocked') {
+        statusText = '已禁用';
+        statusClass = 'blocked';
+      } else if (item.online) {
+        statusText = '在线';
+        statusClass = 'online';
+      } else {
+        statusText = '离线';
+        statusClass = 'offline';
+      }
+      var groupName = groupMap[item.group_id] || '-';
+      var os = item.os_version || '-';
+      if (os.length > 15) os = os.substring(0, 15) + '...';
+
+      var html = '<tr>';
+      html += '<td>' + item.id + '</td>';
+      html += '<td style="font-family:Consolas,monospace;font-size:12px;">' + esc(item.client_id || '-') + '</td>';
+      html += '<td class="name-cell">' + esc(item.hostname || '-') + '</td>';
+      html += '<td>' + esc(item.last_ip || '-') + '</td>';
+      html += '<td style="font-family:Consolas,monospace;font-size:12px;">' + esc(item.mac_address || '-') + '</td>';
+      html += '<td>' + esc(os) + '</td>';
+      html += '<td>' + esc(item.client_version || '-') + '</td>';
+      html += '<td>' + esc(groupName) + '</td>';
+      html += '<td><span class="status-badge ' + statusClass + '">' + statusText + '</span></td>';
+      html += '<td style="font-size:12px;color:#64748b;">' + fmtDate(item.last_heartbeat) + '</td>';
+      html += '<td style="white-space:nowrap;">';
+      if (item.status === 'approved') {
+        html += '<button class="action-btn more" onclick="blockClient(' + item.id + ')">禁用</button>';
+      } else if (item.status === 'blocked') {
+        html += '<button class="action-btn run" onclick="approveClient(' + item.id + ')">启用</button>';
+      }
+      html += '<button class="action-btn edit" onclick="showEditModal(' + item.id + ')">编辑</button>';
+      html += '<div class="dropdown-wrap" style="display:inline-block;vertical-align:top;">';
+      html += '<button class="action-btn more" onclick="event.stopPropagation();this.nextElementSibling.classList.toggle(\'show\')">更多</button>';
+      html += '<div class="dropdown-menu">';
+      html += '<a onclick="closeDropdowns();viewDetail(' + item.id + ')">查看详情</a>';
+      html += '<a onclick="closeDropdowns();sendCommand(' + item.id + ')">发送命令</a>';
+      html += '<a onclick="closeDropdowns();if(confirm(\'确定要删除该客户端吗？此操作不可恢复。\'))deleteClient(' + item.id + ')" class="danger">删除</a>';
+      html += '</div></div>';
+      html += '</td></tr>';
+      tableBody.innerHTML += html;
+    });
+  }
+
+  function renderPagination() {
+    var container = document.getElementById('paginationContainer');
+    if (!container) return;
+    if (totalCount <= pageSize) { container.innerHTML = ''; return; }
+    var pages = Math.ceil(totalCount / pageSize);
+    var html = '<div class="pagination">';
+    html += '<button class="page-btn" onclick="goPage(' + (currentPage - 1) + ')"' + (currentPage <= 1 ? ' disabled' : '') + '>‹</button>';
+    for (var i = 1; i <= pages; i++) {
+      html += '<button class="page-btn' + (i === currentPage ? ' active' : '') + '" onclick="goPage(' + i + ')">' + i + '</button>';
+    }
+    html += '<button class="page-btn" onclick="goPage(' + (currentPage + 1) + ')"' + (currentPage >= pages ? ' disabled' : '') + '>›</button>';
+    html += '<span class="page-info">共 ' + totalCount + ' 条</span>';
+    html += '</div>';
+    container.innerHTML = html;
+  }
+
+  window.goPage = function(page) {
+    if (page < 1) return;
+    currentPage = page;
+    loadClients();
+  };
+
+  window.searchClients = function() {
+    currentPage = 1;
+    loadClients();
+  };
+  window.resetSearch = function() {
+    document.getElementById('searchKeyword').value = '';
+    document.getElementById('searchStatus').value = '';
+    document.getElementById('searchGroup').value = '';
+    currentPage = 1;
+    loadClients();
+  };
+  window.approveClient = function(id) {
+    api('/clients/' + id + '/approve', { method: 'POST' }).then(function(res) {
+      if (res.code === 0) { toast('操作成功', 'success'); loadClients(); }
+      else { toast(res.message || '操作失败', 'error'); }
+    });
+  };
+  window.blockClient = function(id) {
+    if (!confirm('确定要禁用该客户端吗？')) return;
+    api('/clients/' + id + '/block', { method: 'POST' }).then(function(res) {
+      if (res.code === 0) { toast('已禁用', 'success'); loadClients(); }
+      else { toast(res.message || '操作失败', 'error'); }
+    });
+  };
+  window.deleteClient = function(id) {
+    api('/clients/' + id, { method: 'DELETE' }).then(function(res) {
+      if (res.code === 0) { toast('删除成功', 'success'); loadClients(); }
+      else { toast(res.message || '删除失败', 'error'); }
+    });
+  };
+
+  window.showEditModal = function(id) {
+    api('/clients/' + id).then(function(res) {
+      if (res.code !== 0) { toast(res.message || '获取详情失败', 'error'); return; }
+      var item = res.data;
+      var content = '';
+      content += '<div class="form-row">';
+      content += '<div class="form-group"><label>主机名</label><input type="text" id="formHostname" value="' + esc(item.hostname || '') + '"></div>';
+      content += '<div class="form-group"><label>分组</label><select id="formGroupId">';
+      content += '<option value="">无分组</option>';
+      for (var gid in groupMap) {
+        content += '<option value="' + gid + '"' + (item.group_id == gid ? ' selected' : '') + '>' + esc(groupMap[gid]) + '</option>';
+      }
+      content += '</select></div>';
+      content += '</div>';
+      content += '<div class="form-group"><label>备注</label><textarea id="formRemark" rows="2">' + esc(item.remark || '') + '</textarea></div>';
+      content += '<div class="form-actions">';
+      content += '<button class="btn-cancel" onclick="closeModal()">取消</button>';
+      content += '<button class="btn-submit" onclick="saveClient(' + id + ')">保存</button>';
+      content += '</div>';
+
+      var modal = showModal('编辑客户端', content);
+      modal.setAttribute('data-id', id);
+    });
+  };
+
+  window.saveClient = function(id) {
+    var hostname = document.getElementById('formHostname').value.trim();
+    var groupId = document.getElementById('formGroupId').value;
+    var remark = document.getElementById('formRemark').value.trim();
+
+    var body = {};
+    if (hostname) body.hostname = hostname;
+    if (groupId) body.group_id = parseInt(groupId, 10);
+    if (remark) body.remark = remark;
+
+    api('/clients/' + id, { method: 'PUT', body: body }).then(function(res) {
+      if (res.code === 0) { toast('保存成功', 'success'); closeModal(); loadClients(); }
+      else { toast(res.message || '保存失败', 'error'); }
+    });
+  };
+
+  window.viewDetail = function(id) {
+    toast('正在加载详情...', 'info');
+    api('/clients/' + id).then(function(res) {
+      if (res.code !== 0) { toast(res.message || '获取详情失败', 'error'); return; }
+      var item = res.data;
+      var groupName = groupMap[item.group_id] || '-';
+      var statusText = item.status === 'blocked' ? '已禁用' : (item.online ? '在线' : '离线');
+
+      var content = '';
+      content += '<div class="detail-grid">';
+      content += '<div class="detail-item"><div class="dt-label">ID</div><div class="dt-value">' + item.id + '</div></div>';
+      content += '<div class="detail-item"><div class="dt-label">Client ID</div><div class="dt-value" style="font-size:12px;">' + esc(item.client_id || '-') + '</div></div>';
+      content += '<div class="detail-item"><div class="dt-label">主机名</div><div class="dt-value">' + esc(item.hostname || '-') + '</div></div>';
+      content += '<div class="detail-item"><div class="dt-label">IP 地址</div><div class="dt-value">' + esc(item.last_ip || '-') + '</div></div>';
+      content += '<div class="detail-item"><div class="dt-label">MAC 地址</div><div class="dt-value" style="font-size:12px;">' + esc(item.mac_address || '-') + '</div></div>';
+      content += '<div class="detail-item"><div class="dt-label">操作系统</div><div class="dt-value">' + esc(item.os_version || '-') + '</div></div>';
+      content += '<div class="detail-item"><div class="dt-label">客户端版本</div><div class="dt-value">' + esc(item.client_version || '-') + '</div></div>';
+      content += '<div class="detail-item"><div class="dt-label">客户端类型</div><div class="dt-value">' + esc(item.client_type || '-') + '</div></div>';
+      content += '<div class="detail-item"><div class="dt-label">分组</div><div class="dt-value">' + esc(groupName) + '</div></div>';
+      content += '<div class="detail-item"><div class="dt-label">状态</div><div class="dt-value">' + statusText + '</div></div>';
+      content += '<div class="detail-item"><div class="dt-label">首次IP</div><div class="dt-value">' + esc(item.first_ip || '-') + '</div></div>';
+      content += '<div class="detail-item"><div class="dt-label">最后心跳</div><div class="dt-value">' + fmtDate(item.last_heartbeat) + '</div></div>';
+      content += '<div class="detail-item"><div class="dt-label">创建时间</div><div class="dt-value">' + fmtDate(item.created_at) + '</div></div>';
+      content += '<div class="detail-item"><div class="dt-label">更新时间</div><div class="dt-value">' + fmtDate(item.updated_at) + '</div></div>';
+      if (item.remark) {
+        content += '<div class="detail-item detail-full"><div class="dt-label">备注</div><div class="dt-value">' + esc(item.remark) + '</div></div>';
+      }
+      content += '</div>';
+      content += '<div class="form-actions" style="margin-top:16px;">';
+      content += '<button class="btn-cancel" onclick="closeModal()">关闭</button>';
+      content += '<button class="btn-submit" onclick="closeModal();showEditModal(' + item.id + ')">编辑</button>';
+      content += '</div>';
+
+      showModal('客户端详情 - ' + esc(item.hostname || item.client_id || ''), content);
+    });
+  };
+
+  window.sendCommand = function(id) {
+    var content = '';
+    content += '<div class="form-group"><label>命令 <span style="color:#dc2626;">*</span></label><select id="cmdCommand">';
+    content += '<option value="reboot">重启</option>';
+    content += '<option value="shutdown">关机</option>';
+    content += '<option value="sync_config">同步配置</option>';
+    content += '<option value="execute_task">执行任务</option>';
+    content += '<option value="custom">自定义命令</option>';
+    content += '</select></div>';
+    content += '<div class="form-group" id="customCmdGroup" style="display:none;"><label>自定义命令</label><input type="text" id="cmdCustom" placeholder="输入自定义命令"></div>';
+    content += '<div class="form-actions">';
+    content += '<button class="btn-cancel" onclick="closeModal()">取消</button>';
+    content += '<button class="btn-submit" onclick="doSendCommand(' + id + ')">发送</button>';
+    content += '</div>';
+    var modal = showModal('发送命令', content);
+    // 监听命令选择变化
+    setTimeout(function() {
+      var sel = document.getElementById('cmdCommand');
+      if (sel) {
+        sel.addEventListener('change', function() {
+          document.getElementById('customCmdGroup').style.display = this.value === 'custom' ? 'block' : 'none';
+        });
+      }
+    }, 100);
+  };
+
+  window.doSendCommand = function(id) {
+    var command = document.getElementById('cmdCommand').value;
+    var customCmd = document.getElementById('cmdCustom') ? document.getElementById('cmdCustom').value.trim() : '';
+    if (command === 'custom') {
+      if (!customCmd) { toast('请输入自定义命令', 'error'); return; }
+      command = customCmd;
+    }
+    api('/clients/sendCommand', { method: 'POST', body: { client_id: id, command: command } }).then(function(res) {
+      if (res.code === 0) { toast('命令已发送', 'success'); closeModal(); }
+      else { toast(res.message || '发送失败', 'error'); }
+    });
+  };
+
+  loadGroups();
+  loadClients();
+})();
+</script>
+</body>
+</html>

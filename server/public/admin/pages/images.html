@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
@@ -8,11 +8,6 @@
 body{padding:0;background:transparent;font-family:-apple-system,"Microsoft YaHei","PingFang SC",sans-serif;}
 h2{margin-bottom:16px;font-size:20px;font-weight:600;color:#334155;}
 .search-bar{margin-bottom:16px;}
-.batch-bar{display:flex;gap:8px;align-items:center;margin-bottom:12px;padding:10px 16px;background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0;}
-.batch-bar .label{font-size:13px;color:#64748b;margin-right:4px;}
-.batch-bar .btn-batch{padding:5px 14px;border:1px solid #e2e8f0;border-radius:6px;font-size:12px;cursor:pointer;background:#fff;color:#334155;transition:all 0.2s;}
-.batch-bar .btn-batch:hover{border-color:#1a73e8;color:#1a73e8;}
-.batch-bar .btn-batch.danger:hover{border-color:#dc2626;color:#dc2626;}
 .data-table th{background:#f8fafc;white-space:nowrap;}
 .data-table td{vertical-align:middle;}
 .data-table .name-cell{max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
@@ -31,6 +26,12 @@ h2{margin-bottom:16px;font-size:20px;font-weight:600;color:#334155;}
 .detail-item .dt-label{font-size:12px;color:#64748b;margin-bottom:2px;}
 .detail-item .dt-value{font-size:14px;color:#1e293b;font-weight:500;word-break:break-all;}
 .detail-full{grid-column:1 / -1;}
+.dropdown-wrap{display:inline-block;position:relative;}
+.dropdown-menu{display:none;position:absolute;right:0;top:100%;min-width:120px;background:#fff;border:1px solid #e2e8f0;border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,0.1);z-index:100;padding:4px 0;}
+.dropdown-menu.show{display:block;}
+.dropdown-menu a{display:block;padding:8px 16px;font-size:13px;color:#334155;text-decoration:none;cursor:pointer;}
+.dropdown-menu a:hover{background:#f1f5f9;}
+.dropdown-menu a.danger{color:#dc2626;}
 </style>
 </head>
 <body>
@@ -38,7 +39,7 @@ h2{margin-bottom:16px;font-size:20px;font-weight:600;color:#334155;}
 <h2>镜像列表</h2>
 
 <div class="search-bar">
-  <input type="text" id="searchKeyword" placeholder="关键词搜索（名称/描述/文件名）" style="min-width:200px;">
+  <input type="text" id="searchKeyword" placeholder="名称/描述/文件名" style="min-width:200px;">
   <select id="searchFormat">
     <option value="">全部格式</option>
     <option value="wim">WIM</option>
@@ -53,16 +54,14 @@ h2{margin-bottom:16px;font-size:20px;font-weight:600;color:#334155;}
   </select>
   <button class="btn-search" onclick="searchImages()">搜索</button>
   <button class="btn-reset" onclick="resetSearch()">重置</button>
-  <button class="btn-create" onclick="showAddModal()">新增镜像</button>
-  <button class="btn-create" style="background:#7c3aed;" onclick="showUploadModal()">上传镜像</button>
-  <button class="btn-create" style="background:#0891b2;" onclick="showRemoteUrlModal()">远程导入</button>
-</div>
-
-<div class="batch-bar" id="batchBar" style="display:none;">
-  <span class="label">已选择 <strong id="selectedCount">0</strong> 项</span>
-  <button class="btn-batch" onclick="batchDelete()">批量删除</button>
-  <button class="btn-batch" onclick="batchEnable()">批量启用</button>
-  <button class="btn-batch" onclick="batchDisable()">批量禁用</button>
+  <div class="dropdown-wrap" style="vertical-align:top;">
+    <button class="btn-create" onclick="this.nextElementSibling.classList.toggle('show')">新增</button>
+    <div class="dropdown-menu">
+      <a onclick="closeDropdowns();showAddModal()">新增镜像</a>
+      <a onclick="closeDropdowns();showUploadModal()">上传文件</a>
+      <a onclick="closeDropdowns();showRemoteUrlModal()">远程导入</a>
+    </div>
+  </div>
 </div>
 
 <div class="panel">
@@ -70,7 +69,6 @@ h2{margin-bottom:16px;font-size:20px;font-weight:600;color:#334155;}
     <table class="data-table" id="dataTable">
       <thead>
         <tr>
-          <th style="width:36px;"><input type="checkbox" id="checkAll" onchange="toggleAllCheckbox()"></th>
           <th style="width:60px;">ID</th>
           <th>名称</th>
           <th style="width:160px;">文件名</th>
@@ -79,7 +77,7 @@ h2{margin-bottom:16px;font-size:20px;font-weight:600;color:#334155;}
           <th style="width:130px;">系统类型</th>
           <th style="width:70px;">状态</th>
           <th style="width:140px;">创建时间</th>
-          <th style="width:210px;">操作</th>
+          <th style="width:140px;">操作</th>
         </tr>
       </thead>
       <tbody id="tableBody"></tbody>
@@ -100,7 +98,13 @@ h2{margin-bottom:16px;font-size:20px;font-weight:600;color:#334155;}
   var pageSize = 15;
   var totalImages = 0;
   var currentList = [];
-  var selectedIds = [];
+
+  function closeDropdowns() {
+    document.querySelectorAll('.dropdown-menu.show').forEach(function(el) { el.classList.remove('show'); });
+  }
+  document.addEventListener('click', function(e) {
+    if (!e.target.closest('.dropdown-wrap')) closeDropdowns();
+  });
 
   function loadImages() {
     var keyword = document.getElementById('searchKeyword').value.trim();
@@ -113,7 +117,7 @@ h2{margin-bottom:16px;font-size:20px;font-weight:600;color:#334155;}
     if (status) params += '&status=' + encodeURIComponent(status);
 
     var tableBody = document.getElementById('tableBody');
-    tableBody.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:40px;color:#94a3b8;">加载中...</td></tr>';
+    tableBody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:40px;color:#94a3b8;">加载中...</td></tr>';
 
     api('/images?' + params).then(function(res) {
       if (res.code === 0) {
@@ -147,7 +151,6 @@ h2{margin-bottom:16px;font-size:20px;font-weight:600;color:#334155;}
     var html = '';
     for (var i = 0; i < list.length; i++) {
       var item = list[i];
-      var checked = selectedIds.indexOf(item.id) !== -1 ? 'checked' : '';
       var osType = '';
       if (item.os_type) {
         osType = esc(item.os_type);
@@ -157,25 +160,28 @@ h2{margin-bottom:16px;font-size:20px;font-weight:600;color:#334155;}
         osType = '-';
       }
       html += '<tr>';
-      html += '<td><input type="checkbox" class="row-checkbox" data-id="' + item.id + '" ' + checked + ' onchange="toggleRowCheckbox(this)"></td>';
       html += '<td>' + esc(item.id) + '</td>';
       html += '<td><div class="name-cell" title="' + esc(item.description || item.name) + '">' + esc(item.name) + '</div></td>';
-      html += '<td><div class="filename-cell" title="' + esc(item.filename) + '">' + esc(item.filename) + '</div></td>';
+      html += '<td><div class="filename-cell" title="' + esc(item.file_name) + '">' + esc(item.file_name) + '</div></td>';
       html += '<td>' + esc(item.format) + '</td>';
       html += '<td>' + fmtSize(item.file_size) + '</td>';
       html += '<td>' + osType + '</td>';
-      html += '<td>' + statusBadge(item.status, item.status === 'enabled' ? '启用' : '禁用') + '</td>';
+      html += '<td>' + statusBadge(item.status, (item.status === 1 || item.status === '1' || item.status === 'enabled') ? '启用' : '禁用') + '</td>';
       html += '<td>' + fmtDate(item.created_at) + '</td>';
       html += '<td>';
       html += '<button class="action-btn edit" onclick="showEditModal(\'' + item.id + '\')">编辑</button>';
       html += '<button class="action-btn delete" onclick="deleteImage(\'' + item.id + '\')">删除</button>';
-      html += '<button class="action-btn run" onclick="verifyImage(\'' + item.id + '\')">验证</button>';
-      html += '<button class="action-btn more" onclick="viewDetail(\'' + item.id + '\')">详情</button>';
+      html += '<div class="dropdown-wrap" style="display:inline-block;vertical-align:top;">';
+      html += '<button class="action-btn more" onclick="event.stopPropagation();this.nextElementSibling.classList.toggle(\'show\')">更多</button>';
+      html += '<div class="dropdown-menu">';
+      html += '<a onclick="closeDropdowns();verifyImage(\'' + item.id + '\')">验证文件</a>';
+      html += '<a onclick="closeDropdowns();convertImage(\'' + item.id + '\')">转换格式</a>';
+      html += '<a onclick="closeDropdowns();viewDetail(\'' + item.id + '\')">查看详情</a>';
+      html += '</div></div>';
       html += '</td>';
       html += '</tr>';
     }
     tableBody.innerHTML = html;
-    updateBatchBar();
   }
 
   function renderPagination() {
@@ -212,7 +218,6 @@ h2{margin-bottom:16px;font-size:20px;font-weight:600;color:#334155;}
 
   window.searchImages = function() {
     currentPage = 1;
-    selectedIds = [];
     loadImages();
   };
 
@@ -221,49 +226,10 @@ h2{margin-bottom:16px;font-size:20px;font-weight:600;color:#334155;}
     document.getElementById('searchFormat').value = '';
     document.getElementById('searchStatus').value = '';
     currentPage = 1;
-    selectedIds = [];
     loadImages();
   };
 
-  window.toggleAllCheckbox = function() {
-    var checkAll = document.getElementById('checkAll');
-    var checkboxes = document.querySelectorAll('.row-checkbox');
-    selectedIds = [];
-    if (checkAll.checked) {
-      for (var i = 0; i < currentList.length; i++) {
-        selectedIds.push(currentList[i].id);
-      }
-    }
-    for (var j = 0; j < checkboxes.length; j++) {
-      checkboxes[j].checked = checkAll.checked;
-    }
-    updateBatchBar();
-  };
-
-  window.toggleRowCheckbox = function(el) {
-    var id = el.getAttribute('data-id');
-    if (el.checked) {
-      if (selectedIds.indexOf(id) === -1) selectedIds.push(id);
-    } else {
-      var idx = selectedIds.indexOf(id);
-      if (idx !== -1) selectedIds.splice(idx, 1);
-    }
-    var allChecked = true;
-    var checkboxes = document.querySelectorAll('.row-checkbox');
-    for (var i = 0; i < checkboxes.length; i++) {
-      if (!checkboxes[i].checked) { allChecked = false; break; }
-    }
-    document.getElementById('checkAll').checked = allChecked;
-    updateBatchBar();
-  };
-
-  function updateBatchBar() {
-    var bar = document.getElementById('batchBar');
-    var count = document.getElementById('selectedCount');
-    count.textContent = selectedIds.length;
-    bar.style.display = selectedIds.length > 0 ? 'flex' : 'none';
-  }
-
+  // ---- 新增表单 ----
   window.showAddModal = function() {
     var content = '';
     content += '<div class="form-row">';
@@ -276,16 +242,12 @@ h2{margin-bottom:16px;font-size:20px;font-weight:600;color:#334155;}
     content += '<div class="form-group"><label>文件大小 (字节)</label><input type="number" id="formFileSize" placeholder="0" min="0"></div>';
     content += '</div>';
     content += '<div class="form-row">';
-    content += '<div class="form-group"><label>SHA256</label><input type="text" id="formSha256" placeholder="64位校验值"></div>';
-    content += '<div class="form-group"><label>状态</label><select id="formStatus"><option value="enabled">启用</option><option value="disabled">禁用</option></select></div>';
-    content += '</div>';
-    content += '<div class="form-row">';
     content += '<div class="form-group"><label>系统类型</label><input type="text" id="formOsType" placeholder="如: Windows"></div>';
     content += '<div class="form-group"><label>系统版本</label><input type="text" id="formOsVersion" placeholder="如: 11 Pro"></div>';
     content += '</div>';
     content += '<div class="form-row">';
     content += '<div class="form-group"><label>系统架构</label><select id="formOsArch"><option value="">请选择</option><option value="x64">x64</option><option value="x86">x86</option><option value="arm64">arm64</option></select></div>';
-    content += '<div class="form-group"><label>镜像源ID</label><input type="number" id="formSourceId" placeholder="可选" min="0"></div>';
+    content += '<div class="form-group"><label>状态</label><select id="formStatus"><option value="enabled">启用</option><option value="disabled">禁用</option></select></div>';
     content += '</div>';
     content += '<div class="form-actions">';
     content += '<button class="btn-cancel" onclick="closeModal()">取消</button>';
@@ -316,12 +278,8 @@ h2{margin-bottom:16px;font-size:20px;font-weight:600;color:#334155;}
       content += '</div>';
       content += '<div class="form-group"><label>描述</label><textarea id="formDescription" rows="2">' + esc(item.description || '') + '</textarea></div>';
       content += '<div class="form-row">';
-      content += '<div class="form-group"><label>文件名</label><input type="text" id="formFilename" value="' + esc(item.filename || '') + '"></div>';
+      content += '<div class="form-group"><label>文件名</label><input type="text" id="formFilename" value="' + esc(item.file_name || '') + '"></div>';
       content += '<div class="form-group"><label>文件大小 (字节)</label><input type="number" id="formFileSize" value="' + (item.file_size || 0) + '" min="0"></div>';
-      content += '</div>';
-      content += '<div class="form-row">';
-      content += '<div class="form-group"><label>SHA256</label><input type="text" id="formSha256" value="' + esc(item.sha256 || '') + '"></div>';
-      content += '<div class="form-group"><label>状态</label><select id="formStatus"><option value="enabled"' + (item.status === 'enabled' ? ' selected' : '') + '>启用</option><option value="disabled"' + (item.status === 'disabled' ? ' selected' : '') + '>禁用</option></select></div>';
       content += '</div>';
       content += '<div class="form-row">';
       content += '<div class="form-group"><label>系统类型</label><input type="text" id="formOsType" value="' + esc(item.os_type || '') + '"></div>';
@@ -329,7 +287,7 @@ h2{margin-bottom:16px;font-size:20px;font-weight:600;color:#334155;}
       content += '</div>';
       content += '<div class="form-row">';
       content += '<div class="form-group"><label>系统架构</label><select id="formOsArch"><option value="">请选择</option><option value="x64"' + (item.os_arch === 'x64' ? ' selected' : '') + '>x64</option><option value="x86"' + (item.os_arch === 'x86' ? ' selected' : '') + '>x86</option><option value="arm64"' + (item.os_arch === 'arm64' ? ' selected' : '') + '>arm64</option></select></div>';
-      content += '<div class="form-group"><label>镜像源ID</label><input type="number" id="formSourceId" value="' + (item.source_id || '') + '" min="0"></div>';
+      content += '<div class="form-group"><label>状态</label><select id="formStatus"><option value="enabled"' + ((item.status === 1 || item.status === '1' || item.status === 'enabled') ? ' selected' : '') + '>启用</option><option value="disabled"' + ((item.status === 0 || item.status === '0' || item.status === 'disabled') ? ' selected' : '') + '>禁用</option></select></div>';
       content += '</div>';
       content += '<div class="form-actions">';
       content += '<button class="btn-cancel" onclick="closeModal()">取消</button>';
@@ -354,12 +312,10 @@ h2{margin-bottom:16px;font-size:20px;font-weight:600;color:#334155;}
     var description = document.getElementById('formDescription').value.trim();
     var filename = document.getElementById('formFilename').value.trim();
     var fileSize = document.getElementById('formFileSize').value;
-    var sha256 = document.getElementById('formSha256').value.trim();
     var status = document.getElementById('formStatus').value;
     var osType = document.getElementById('formOsType').value.trim();
     var osVersion = document.getElementById('formOsVersion').value.trim();
     var osArch = document.getElementById('formOsArch').value;
-    var sourceId = document.getElementById('formSourceId').value;
 
     if (!name) {
       toast('请输入镜像名称', 'error');
@@ -369,14 +325,12 @@ h2{margin-bottom:16px;font-size:20px;font-weight:600;color:#334155;}
     var body = {
       name: name,
       description: description,
-      filename: filename,
+      file_name: filename,
       format: format,
       file_size: fileSize ? parseInt(fileSize, 10) : 0,
-      sha256: sha256,
       os_type: osType,
       os_version: osVersion,
       os_arch: osArch,
-      source_id: sourceId ? parseInt(sourceId, 10) : null,
       status: status
     };
 
@@ -405,7 +359,6 @@ h2{margin-bottom:16px;font-size:20px;font-weight:600;color:#334155;}
     api('/images/' + id, { method: 'DELETE' }).then(function(res) {
       if (res.code === 0) {
         toast('删除成功', 'success');
-        selectedIds = selectedIds.filter(function(sid) { return sid !== id; });
         loadImages();
       } else {
         toast(res.message || '删除失败', 'error');
@@ -456,15 +409,13 @@ h2{margin-bottom:16px;font-size:20px;font-weight:600;color:#334155;}
       content += '<div class="detail-grid">';
       content += '<div class="detail-item"><div class="dt-label">ID</div><div class="dt-value">' + esc(item.id) + '</div></div>';
       content += '<div class="detail-item"><div class="dt-label">名称</div><div class="dt-value">' + esc(item.name) + '</div></div>';
-      content += '<div class="detail-item"><div class="dt-label">文件名</div><div class="dt-value">' + esc(item.filename || '-') + '</div></div>';
+      content += '<div class="detail-item"><div class="dt-label">文件名</div><div class="dt-value">' + esc(item.file_name || '-') + '</div></div>';
       content += '<div class="detail-item"><div class="dt-label">格式</div><div class="dt-value">' + esc(item.format) + '</div></div>';
       content += '<div class="detail-item"><div class="dt-label">文件大小</div><div class="dt-value">' + fmtSize(item.file_size) + '</div></div>';
-      content += '<div class="detail-item"><div class="dt-label">SHA256</div><div class="dt-value" style="font-size:11px;font-family:monospace;">' + esc(item.sha256 || '-') + '</div></div>';
       content += '<div class="detail-item"><div class="dt-label">系统类型</div><div class="dt-value">' + esc(item.os_type || '-') + '</div></div>';
       content += '<div class="detail-item"><div class="dt-label">系统版本</div><div class="dt-value">' + esc(item.os_version || '-') + '</div></div>';
       content += '<div class="detail-item"><div class="dt-label">系统架构</div><div class="dt-value">' + esc(item.os_arch || '-') + '</div></div>';
-      content += '<div class="detail-item"><div class="dt-label">状态</div><div class="dt-value">' + statusBadge(item.status, item.status === 'enabled' ? '启用' : '禁用') + '</div></div>';
-      content += '<div class="detail-item"><div class="dt-label">镜像源ID</div><div class="dt-value">' + (item.source_id || '-') + '</div></div>';
+      content += '<div class="detail-item"><div class="dt-label">状态</div><div class="dt-value">' + statusBadge(item.status, (item.status === 1 || item.status === '1' || item.status === 'enabled') ? '启用' : '禁用') + '</div></div>';
       content += '<div class="detail-item"><div class="dt-label">创建时间</div><div class="dt-value">' + fmtDate(item.created_at) + '</div></div>';
       content += '<div class="detail-item"><div class="dt-label">更新时间</div><div class="dt-value">' + fmtDate(item.updated_at) + '</div></div>';
       if (item.description) {
@@ -474,8 +425,6 @@ h2{margin-bottom:16px;font-size:20px;font-weight:600;color:#334155;}
       content += '<div class="form-actions" style="margin-top:16px;">';
       content += '<button class="btn-cancel" onclick="closeModal()">关闭</button>';
       content += '<button class="action-btn edit" style="padding:8px 20px;font-size:13px;" onclick="closeModal();showEditModal(\'' + item.id + '\')">编辑</button>';
-      content += '<button class="action-btn run" style="padding:8px 20px;font-size:13px;" onclick="closeModal();verifyImage(\'' + item.id + '\')">验证</button>';
-      content += '<button class="action-btn more" style="padding:8px 20px;font-size:13px;background:#fff7ed;color:#ea580c;" onclick="closeModal();convertImage(\'' + item.id + '\')">转换格式</button>';
       content += '</div>';
 
       showModal('镜像详情 - ' + esc(item.name), content);
@@ -484,57 +433,12 @@ h2{margin-bottom:16px;font-size:20px;font-weight:600;color:#334155;}
     });
   };
 
-  window.batchDelete = function() {
-    if (selectedIds.length === 0) { toast('请先选择镜像', 'error'); return; }
-    if (!confirm('确定要删除选中的 ' + selectedIds.length + ' 个镜像吗？此操作不可恢复。')) return;
-    api('/images/batchDelete', { method: 'POST', body: { ids: selectedIds } }).then(function(res) {
-      if (res.code === 0) {
-        toast('批量删除成功', 'success');
-        selectedIds = [];
-        loadImages();
-      } else {
-        toast(res.message || '批量删除失败', 'error');
-      }
-    }).catch(function(err) {
-      toast('网络请求失败: ' + (err.message || '未知错误'), 'error');
-    });
-  };
-
-  window.batchEnable = function() {
-    if (selectedIds.length === 0) { toast('请先选择镜像', 'error'); return; }
-    api('/images/batchEnable', { method: 'POST', body: { ids: selectedIds } }).then(function(res) {
-      if (res.code === 0) {
-        toast('批量启用成功', 'success');
-        selectedIds = [];
-        loadImages();
-      } else {
-        toast(res.message || '批量启用失败', 'error');
-      }
-    }).catch(function(err) {
-      toast('网络请求失败: ' + (err.message || '未知错误'), 'error');
-    });
-  };
-
-  window.batchDisable = function() {
-    if (selectedIds.length === 0) { toast('请先选择镜像', 'error'); return; }
-    api('/images/batchDisable', { method: 'POST', body: { ids: selectedIds } }).then(function(res) {
-      if (res.code === 0) {
-        toast('批量禁用成功', 'success');
-        selectedIds = [];
-        loadImages();
-      } else {
-        toast(res.message || '批量禁用失败', 'error');
-      }
-    }).catch(function(err) {
-      toast('网络请求失败: ' + (err.message || '未知错误'), 'error');
-    });
-  };
-
+  // ---- 上传 ----
   window.showUploadModal = function() {
     var content = '';
     content += '<div class="upload-area" id="uploadArea" onclick="document.getElementById(\'fileInput\').click()">';
     content += '<div class="icon">📁</div>';
-    content += '<div class="text">点击选择文件或拖拽文件到此处</div>';
+    content += '<div class="text">点击选择文件</div>';
     content += '<div class="hint">支持 WIM / ISO / GHO / ESD 格式</div>';
     content += '</div>';
     content += '<input type="file" id="fileInput" accept=".wim,.iso,.gho,.esd" style="display:none;" onchange="onFileSelected(this)">';
@@ -638,6 +542,7 @@ h2{margin-bottom:16px;font-size:20px;font-weight:600;color:#334155;}
     xhr.send(formData);
   };
 
+  // ---- 远程导入 ----
   window.showRemoteUrlModal = function() {
     var content = '';
     content += '<div class="form-group"><label>远程URL <span style="color:#dc2626;">*</span></label>';

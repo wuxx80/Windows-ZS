@@ -32,8 +32,8 @@ namespace Windows_Client.Services
             Directory.CreateDirectory(imagesDir);
             var savePath = Path.Combine(imagesDir, fileName);
 
-            // 端点：/api/v1/images/{id}/download
-            var url = $"{_api.GetBaseUrl()}/api/v1/images/{imageId}/download";
+            // 端点：/api/v1/images/{id}/clientDownload
+            var url = $"{_api.GetBaseUrl()}/api/v1/images/{imageId}/clientDownload";
             var (ok, _, err) = await _api.DownloadFileAsync(url, savePath, progress, ct);
             if (!ok) return (false, "", err);
 

@@ -312,7 +312,7 @@ h2{margin-bottom:20px;font-size:20px;color:#334155;}
     if (password) body.password = password;
 
     if (mode === "add") {
-      api("/users", "POST", body).then(function(res) {
+      api("/users", { method: "POST", body: body }).then(function(res) {
         if (res.code === 0) {
           toast("用户添加成功", "success");
           closeModal();
@@ -324,7 +324,7 @@ h2{margin-bottom:20px;font-size:20px;color:#334155;}
         toast("网络错误", "error");
       });
     } else {
-      api("/users/" + id, "PUT", body).then(function(res) {
+      api("/users/" + id, { method: "PUT", body: body }).then(function(res) {
         if (res.code === 0) {
           toast("用户更新成功", "success");
           closeModal();
@@ -341,7 +341,7 @@ h2{margin-bottom:20px;font-size:20px;color:#334155;}
   window.deleteUser = function(id) {
     if (!confirm("确定要删除该用户吗？此操作不可恢复。")) return;
 
-    api("/users/" + id, "DELETE").then(function(res) {
+    api("/users/" + id, { method: "DELETE" }).then(function(res) {
       if (res.code === 0) {
         toast("用户删除成功", "success");
         loadUsers();

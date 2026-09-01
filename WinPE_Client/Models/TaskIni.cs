@@ -41,7 +41,7 @@ namespace WinPE_Client.Models
         /// <summary>auto=用 Unattend.xml 全自动跳过 OOBE / manual=保留 OOBE 让用户操作</summary>
         public string OobeMode { get; set; } = "manual";
         /// <summary>yes=首进系统后删 ZS_Task 目录 / no=保留以备下次复用</summary>
-        public bool FirstBootCleanup { get; set; } = false;
+        public bool FirstBootCleanup { get; set; } = true;
     }
 
     public class TargetDisk

@@ -17,30 +17,30 @@ namespace Windows_Client.Services
 
         public PeAssetDownloader(ApiService api) => _api = api;
 
-        /// <summary>下载 boot.wim 到 taskRoot\boot.wim</summary>
+        /// <summary>下载 boot.wim 到 taskRoot\boot.wim（使用 PE 版本 ID）</summary>
         public async Task<(bool Ok, string Path, string Error)> DownloadBootWimAsync(
-            string version, string taskRoot, IProgress<int>? progress = null, CancellationToken ct = default)
+            int peVersionId, string taskRoot, IProgress<int>? progress = null, CancellationToken ct = default)
         {
             var savePath = Path.Combine(taskRoot, "boot.wim");
-            var url = $"/api/v1/peAssets/bootWim?version={Uri.EscapeDataString(version)}";
+            var url = $"/api/v1/peVersions/{peVersionId}/bootWim";
             return await DownloadAsync(url, savePath, progress, ct);
         }
 
-        /// <summary>下载 boot.sdi 到 taskRoot\boot.sdi</summary>
+        /// <summary>下载 boot.sdi 到 taskRoot\boot.sdi（使用 PE 版本 ID）</summary>
         public async Task<(bool Ok, string Path, string Error)> DownloadBootSdiAsync(
-            string version, string taskRoot, IProgress<int>? progress = null, CancellationToken ct = default)
+            int peVersionId, string taskRoot, IProgress<int>? progress = null, CancellationToken ct = default)
         {
             var savePath = Path.Combine(taskRoot, "boot.sdi");
-            var url = $"/api/v1/peAssets/bootSdi?version={Uri.EscapeDataString(version)}";
+            var url = $"/api/v1/peVersions/{peVersionId}/bootSdi";
             return await DownloadAsync(url, savePath, progress, ct);
         }
 
-        /// <summary>下载 ZS_PE_Agent.exe 到 taskRoot\ZS_PE_Agent.exe</summary>
+        /// <summary>下载 ZS_PE_Agent.exe 到 taskRoot\ZS_PE_Agent.exe（使用 PE 版本 ID）</summary>
         public async Task<(bool Ok, string Path, string Error)> DownloadAgentAsync(
-            string version, string taskRoot, IProgress<int>? progress = null, CancellationToken ct = default)
+            int peVersionId, string taskRoot, IProgress<int>? progress = null, CancellationToken ct = default)
         {
             var savePath = Path.Combine(taskRoot, "ZS_PE_Agent.exe");
-            var url = $"/api/v1/peAssets/agent?version={Uri.EscapeDataString(version)}";
+            var url = $"/api/v1/peVersions/{peVersionId}/agent";
             return await DownloadAsync(url, savePath, progress, ct);
         }
 

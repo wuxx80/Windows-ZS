@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
@@ -16,6 +16,12 @@ h2{margin-bottom:16px;font-size:20px;font-weight:600;color:#334155;}
 .detail-item .dt-label{font-size:12px;color:#64748b;margin-bottom:2px;}
 .detail-item .dt-value{font-size:14px;color:#1e293b;font-weight:500;word-break:break-all;}
 .detail-full{grid-column:1 / -1;}
+.dropdown-wrap{display:inline-block;position:relative;vertical-align:top;}
+.dropdown-menu{display:none;position:absolute;right:0;top:100%;min-width:120px;background:#fff;border:1px solid #e2e8f0;border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,0.1);z-index:100;padding:4px 0;}
+.dropdown-menu.show{display:block;}
+.dropdown-menu a{display:block;padding:8px 16px;font-size:13px;color:#334155;text-decoration:none;cursor:pointer;white-space:nowrap;}
+.dropdown-menu a:hover{background:#f1f5f9;}
+.dropdown-menu a.danger{color:#dc2626;}
 </style>
 </head>
 <body>
@@ -64,6 +70,13 @@ h2{margin-bottom:16px;font-size:20px;font-weight:600;color:#334155;}
 <script src="../../assets/js/admin-common.js"></script>
 <script>
 (function() {
+  function closeDropdowns() {
+    document.querySelectorAll('.dropdown-menu.show').forEach(function(el) { el.classList.remove('show'); });
+  }
+  document.addEventListener('click', function(e) {
+    if (!e.target.closest('.dropdown-wrap')) closeDropdowns();
+  });
+
   var currentPage = 1;
   var pageSize = 15;
   var totalItems = 0;
@@ -131,14 +144,18 @@ h2{margin-bottom:16px;font-size:20px;font-weight:600;color:#334155;}
       html += '<td>' + fmtDate(item.created_at) + '</td>';
       html += '<td>';
       html += '<button class="action-btn edit" onclick="showEditModal(' + item.id + ')">编辑</button>';
-      html += '<button class="action-btn delete" onclick="deleteItem(' + item.id + ')">删除</button>';
       if (item.status === 'draft' || item.status === 'failed') {
         html += '<button class="action-btn run" onclick="buildItem(' + item.id + ')">构建</button>';
       }
       if (item.status === 'completed') {
-        html += '<button class="action-btn more" onclick="downloadItem(' + item.id + ')">下载</button>';
+        html += '<button class="action-btn run" onclick="downloadItem(' + item.id + ')">下载</button>';
       }
-      html += '<button class="action-btn more" onclick="viewDetail(' + item.id + ')">详情</button>';
+      html += '<div class="dropdown-wrap" style="display:inline-block;vertical-align:top;">';
+      html += '<button class="action-btn more" onclick="event.stopPropagation();this.nextElementSibling.classList.toggle(\'show\')">更多</button>';
+      html += '<div class="dropdown-menu">';
+      html += '<a onclick="closeDropdowns();viewDetail(' + item.id + ')">查看详情</a>';
+      html += '<a onclick="closeDropdowns();if(confirm(\'确定要删除该PE定制吗？此操作不可恢复。\'))deleteItem(' + item.id + ')" class="danger">删除</a>';
+      html += '</div></div>';
       html += '</td>';
       html += '</tr>';
     }

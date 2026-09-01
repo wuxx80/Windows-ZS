@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>客户端版本 - ZS 装机助手</title>
+<link rel="stylesheet" href="../../assets/css/admin.css">
+<style>
+body{padding:0;background:transparent;font-family:-apple-system,"Microsoft YaHei","PingFang SC",sans-serif;}
+h2{margin-bottom:16px;font-size:20px;font-weight:600;color:#334155;}
+.search-bar{margin-bottom:16px;}
+.panel-body{position:relative;}
+.data-table th{background:#f8fafc;white-space:nowrap;}
+.data-table td{vertical-align:middle;}
+.dropdown-wrap{display:inline-block;position:relative;vertical-align:top;}
+.dropdown-menu{display:none;position:absolute;right:0;top:100%;min-width:120px;background:#fff;border:1px solid #e2e8f0;border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,0.1);z-index:100;padding:4px 0;}
+.dropdown-menu.show{display:block;}
+.dropdown-menu a{display:block;padding:8px 16px;font-size:13px;color:#334155;text-decoration:none;cursor:pointer;white-space:nowrap;}
+.dropdown-menu a:hover{background:#f1f5f9;}
+.dropdown-menu a.danger{color:#dc2626;}
+</style>
+</head>
+<body>
+
+<h2>客户端版本</h2>
+
+<div class="search-bar">
+  <button class="btn-create" onclick="showAddModal()">新增版本</button>
+</div>
+
+<div class="panel">
+  <div class="panel-body" style="padding:0;">
+    <table class="data-table" id="dataTable">
+      <thead>
+        <tr>
+          <th style="width:50px;">ID</th>
+          <th style="width:100px;">版本号</th>
+          <th style="width:80px;">类型</th>
+          <th>文件名</th>
+          <th style="width:80px;">文件大小</th>
+          <th style="width:70px;">强制更新</th>
+          <th style="width:70px;">状态</th>
+          <th style="width:140px;">发布时间</th>
+          <th style="width:150px;">操作</th>
+        </tr>
+      </thead>
+      <tbody id="tableBody"></tbody>
+    </table>
+    <div id="emptyState" class="empty-state" style="display:none;">
+      <div class="empty-icon">&#x1F4E6;</div>
+      <p>暂无版本数据</p>
+    </div>
+  </div>
+</div>
+
+<div id="paginationContainer"></div>
+
+<script src="../../assets/js/admin-common.js"></script>
+<script>
+(function() {
+  function closeDropdowns() {
+    document.querySelectorAll('.dropdown-menu.show').forEach(function(el) { el.classList.remove('show'); });
+  }
+  document.addEventListener('click', function(e) {
+    if (!e.target.closest('.dropdown-wrap')) closeDropdowns();
+  });
+
+  var currentPage = 1;
+  var pageSize = 15;
+  var totalCount = 0;
+  var currentList = [];
+
+  function loadList() {
+    var params = 'page=' + currentPage + '&pageSize=' + pageSize;
+
+    var tableBody = document.getElementById('tableBody');
+    tableBody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:40px;color:#94a3b8;">加载中...</td></tr>';
+
+    api('/clientVersions?' + params).then(function(res) {
+      if (res.code === 0) {
+        totalCount = res.data.total || 0;
+        currentList = res.data.list || [];
+        renderTable(currentList);
+        renderPagination();
+      } else {
+        var list = res.data;
+        if (Array.isArray(list)) {
+          totalCount = list.length;
+          currentList = list;
+          renderTable(list);
+          renderPagination();
+        } else {
+          toast(res.message || '加载失败', 'error');
+          tableBody.innerHTML = '';
+          document.getElementById('emptyState').style.display = 'block';
+        }
+      }
+    }).catch(function(err) {
+      toast('网络请求失败: ' + (err.message || '未知错误'), 'error');
+      tableBody.innerHTML = '';
+    });
+  }
+
+  function renderTable(list) {
+    var tableBody = document.getElementById('tableBody');
+    var emptyState = document.getElementById('emptyState');
+    tableBody.innerHTML = '';
+    if (!list || list.length === 0) {
+      emptyState.style.display = 'block';
+      return;
+    }
+    emptyState.style.display = 'none';
+
+    list.forEach(function(item) {
+      var typeMap = { windows: 'Windows', winpe: 'WinPE', both: '通用' };
+      var typeText = typeMap[item.client_type] || item.client_type || '-';
+      var isPublished = item.status == 1 || item.status === 'enabled';
+      var isForce = item.is_force_update == 1;
+
+      var html = '<tr>';
+      html += '<td>' + item.id + '</td>';
+      html += '<td style="font-weight:600;">' + esc(item.version) + '</td>';
+      html += '<td>' + typeText + '</td>';
+      html += '<td>' + esc(item.file_name || '-') + '</td>';
+      html += '<td>' + fmtSize(item.file_size) + '</td>';
+      html += '<td>' + (isForce ? '<span style="color:#dc2626;">强制</span>' : '否') + '</td>';
+      html += '<td>' + statusBadge(item.status, isPublished ? '已发布' : '草稿') + '</td>';
+      html += '<td>' + fmtDate(item.publish_time || item.created_at) + '</td>';
+      html += '<td>';
+      html += '<button class="action-btn edit" onclick="showEditModal(' + item.id + ')">编辑</button>';
+      html += '<div class="dropdown-wrap" style="display:inline-block;vertical-align:top;">';
+      html += '<button class="action-btn more" onclick="event.stopPropagation();this.nextElementSibling.classList.toggle(\'show\')">更多</button>';
+      html += '<div class="dropdown-menu">';
+      if (!isPublished) {
+        html += '<a onclick="closeDropdowns();publishVersion(' + item.id + ')">发布</a>';
+      }
+      html += '<a onclick="closeDropdowns();if(confirm(\'确定要删除该版本吗？此操作不可恢复。\'))deleteVersion(' + item.id + ')" class="danger">删除</a>';
+      html += '</div></div>';
+      html += '</td></tr>';
+      tableBody.innerHTML += html;
+    });
+  }
+
+  function renderPagination() {
+    var container = document.getElementById('paginationContainer');
+    if (!container) return;
+    if (totalCount <= pageSize) { container.innerHTML = ''; return; }
+    var pages = Math.ceil(totalCount / pageSize);
+    var html = '<div class="pagination">';
+    html += '<button class="page-btn" onclick="goPage(' + (currentPage - 1) + ')"' + (currentPage <= 1 ? ' disabled' : '') + '>‹</button>';
+    for (var i = 1; i <= pages; i++) {
+      html += '<button class="page-btn' + (i === currentPage ? ' active' : '') + '" onclick="goPage(' + i + ')">' + i + '</button>';
+    }
+    html += '<button class="page-btn" onclick="goPage(' + (currentPage + 1) + ')"' + (currentPage >= pages ? ' disabled' : '') + '>›</button>';
+    html += '<span class="page-info">共 ' + totalCount + ' 条</span>';
+    html += '</div>';
+    container.innerHTML = html;
+  }
+
+  window.goPage = function(page) {
+    if (page < 1) return;
+    currentPage = page;
+    loadList();
+  };
+
+  window.publishVersion = function(id) {
+    if (!confirm('确定要发布该版本吗？之前发布的版本将被取消发布。')) return;
+    api('/clientVersions/' + id + '/publish', { method: 'POST' }).then(function(res) {
+      if (res.code === 0) { toast('发布成功', 'success'); loadList(); }
+      else { toast(res.message || '发布失败', 'error'); }
+    });
+  };
+
+  window.deleteVersion = function(id) {
+    api('/clientVersions/' + id, { method: 'DELETE' }).then(function(res) {
+      if (res.code === 0) { toast('删除成功', 'success'); loadList(); }
+      else { toast(res.message || '删除失败', 'error'); }
+    });
+  };
+
+  window.showAddModal = function() {
+    var content = '';
+    content += '<div class="form-row">';
+    content += '<div class="form-group"><label>版本号 <span style="color:#dc2626;">*</span></label><input type="text" id="formVersion" placeholder="例如 1.0.0"></div>';
+    content += '<div class="form-group"><label>客户端类型</label><select id="formClientType"><option value="windows">Windows</option><option value="winpe">WinPE</option><option value="both">通用</option></select></div>';
+    content += '</div>';
+    content += '<div class="form-row">';
+    content += '<div class="form-group"><label>文件路径 <span style="color:#dc2626;">*</span></label><input type="text" id="formFilePath" placeholder="下载URL或文件路径"></div>';
+    content += '<div class="form-group"><label>文件名</label><input type="text" id="formFileName" placeholder="留空自动从路径提取"></div>';
+    content += '</div>';
+    content += '<div class="form-row">';
+    content += '<div class="form-group"><label>文件大小 (字节)</label><input type="number" id="formFileSize" value="0" min="0"></div>';
+    content += '<div class="form-group"><label>MD5</label><input type="text" id="formMd5" placeholder="文件校验值"></div>';
+    content += '</div>';
+    content += '<div class="form-group"><label>更新日志</label><textarea id="formChangelog" rows="3" placeholder="描述本次更新内容"></textarea></div>';
+    content += '<div class="form-row">';
+    content += '<div class="form-group"><label><input type="checkbox" id="formForceUpdate"> 强制更新</label></div>';
+    content += '<div class="form-group"><label>状态</label><select id="formStatus"><option value="enabled">启用</option><option value="disabled">禁用</option></select></div>';
+    content += '</div>';
+    content += '<div class="form-actions">';
+    content += '<button class="btn-cancel" onclick="closeModal()">取消</button>';
+    content += '<button class="btn-submit" onclick="saveAdd()">创建</button>';
+    content += '</div>';
+
+    var modal = showModal('新增版本', content);
+    modal.setAttribute('data-mode', 'add');
+  };
+
+  window.saveAdd = function() {
+    var version = document.getElementById('formVersion').value.trim();
+    var clientType = document.getElementById('formClientType').value;
+    var filePath = document.getElementById('formFilePath').value.trim();
+    var fileName = document.getElementById('formFileName').value.trim();
+    var fileSize = document.getElementById('formFileSize').value;
+    var md5 = document.getElementById('formMd5').value.trim();
+    var changelog = document.getElementById('formChangelog').value.trim();
+    var forceUpdate = document.getElementById('formForceUpdate').checked ? 1 : 0;
+    var status = document.getElementById('formStatus').value;
+
+    if (!version) { toast('请输入版本号', 'error'); return; }
+    if (!filePath) { toast('请输入文件路径', 'error'); return; }
+
+    var body = {
+      version: version,
+      client_type: clientType,
+      file_path: filePath,
+      file_name: fileName || undefined,
+      file_size: parseInt(fileSize, 10) || 0,
+      md5: md5,
+      description: changelog,
+      force_update: forceUpdate,
+      status: status
+    };
+    // 如果用户没填文件名，让后端自动从路径提取
+    if (!fileName) delete body.file_name;
+
+    api('/clientVersions', { method: 'POST', body: body }).then(function(res) {
+      if (res.code === 0) { toast('创建成功', 'success'); closeModal(); loadList(); }
+      else { toast(res.message || '创建失败', 'error'); }
+    });
+  };
+
+  window.showEditModal = function(id) {
+    // 先获取详情
+    var item = currentList.find(function(v) { return v.id === id; });
+    if (!item) { toast('未找到版本信息', 'error'); return; }
+
+    var isPublished = item.status == 1 || item.status === 'enabled';
+    var isForce = item.is_force_update == 1;
+
+    var content = '';
+    content += '<div class="form-row">';
+    content += '<div class="form-group"><label>版本号</label><input type="text" id="formVersion" value="' + esc(item.version) + '"></div>';
+    content += '<div class="form-group"><label>客户端类型</label><select id="formClientType"><option value="windows"' + (item.client_type === 'windows' ? ' selected' : '') + '>Windows</option><option value="winpe"' + (item.client_type === 'winpe' ? ' selected' : '') + '>WinPE</option><option value="both"' + (item.client_type === 'both' ? ' selected' : '') + '>通用</option></select></div>';
+    content += '</div>';
+    content += '<div class="form-row">';
+    content += '<div class="form-group"><label>文件路径</label><input type="text" id="formFilePath" value="' + esc(item.file_path || '') + '"></div>';
+    content += '<div class="form-group"><label>文件名</label><input type="text" id="formFileName" value="' + esc(item.file_name || '') + '"></div>';
+    content += '</div>';
+    content += '<div class="form-row">';
+    content += '<div class="form-group"><label>文件大小 (字节)</label><input type="number" id="formFileSize" value="' + (item.file_size || 0) + '" min="0"></div>';
+    content += '<div class="form-group"><label>MD5</label><input type="text" id="formMd5" value="' + esc(item.file_hash || '') + '"></div>';
+    content += '</div>';
+    content += '<div class="form-group"><label>更新日志</label><textarea id="formChangelog" rows="3">' + esc(item.changelog || '') + '</textarea></div>';
+    content += '<div class="form-row">';
+    content += '<div class="form-group"><label><input type="checkbox" id="formForceUpdate"' + (isForce ? ' checked' : '') + '> 强制更新</label></div>';
+    content += '<div class="form-group"><label>状态</label><select id="formStatus"><option value="enabled"' + (isPublished ? ' selected' : '') + '>启用</option><option value="disabled"' + (!isPublished ? ' selected' : '') + '>禁用</option></select></div>';
+    content += '</div>';
+    content += '<div class="form-actions">';
+    content += '<button class="btn-cancel" onclick="closeModal()">取消</button>';
+    content += '<button class="btn-submit" onclick="saveEdit(' + id + ')">保存</button>';
+    content += '</div>';
+
+    showModal('编辑版本', content);
+  };
+
+  window.saveEdit = function(id) {
+    var version = document.getElementById('formVersion').value.trim();
+    var clientType = document.getElementById('formClientType').value;
+    var filePath = document.getElementById('formFilePath').value.trim();
+    var fileName = document.getElementById('formFileName').value.trim();
+    var fileSize = document.getElementById('formFileSize').value;
+    var md5 = document.getElementById('formMd5').value.trim();
+    var changelog = document.getElementById('formChangelog').value.trim();
+    var forceUpdate = document.getElementById('formForceUpdate').checked ? 1 : 0;
+    var status = document.getElementById('formStatus').value;
+
+    if (!version) { toast('请输入版本号', 'error'); return; }
+
+    api('/clientVersions/' + id, { method: 'PUT', body: {
+      version: version,
+      client_type: clientType,
+      file_path: filePath,
+      file_name: fileName,
+      file_size: parseInt(fileSize, 10) || 0,
+      file_hash: md5,
+      changelog: changelog,
+      is_force_update: forceUpdate,
+      status: status
+    } }).then(function(res) {
+      if (res.code === 0) { toast('保存成功', 'success'); closeModal(); loadList(); }
+      else { toast(res.message || '保存失败', 'error'); }
+    });
+  };
+
+  loadList();
+})();
+</script>
+</body>
+</html>
