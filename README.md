@@ -55,14 +55,15 @@ ZS 装机助手是一套完整的 Windows 系统安装与维护解决方案，�
 | 项 | 状态 | 说明 |
 |---|---|---|
 | BCD 离线架构设计 v1 | ✅ 完成 | docs/superpowers/specs/…-design.md |
+| 客户端模块调整清单 | ✅ R7-C 新增 | docs/superpowers/specs/2026-09-01-客户端模块调整清单.md |
 | 后端骨架（35 表 / 31 控制器 / 36 模型） | ✅ 可用 | 缺 RoleController；中间件未注册 |
 | 管理后台前端（22 页 + 登录 + 控制台） | ✅ 基本可用 | 角色分配失效 / 日志页空（P0-1/4） |
-| WinPE_Client（WPF 六步 + U盘 + 工具） | ✅ 编译 0 错 0 警 | Phase 3 评估是否降级 |
-| WinPE_Agent（§6 八阶段流水线） | ⚠️ 磁盘存在未入编 | P0-3 |
-| Windows_Client（登录 + 六步 + U盘 + 工具 + 绿软） | ✅ 编译 0 错 0 警 | Phase 2 改一键装机为 P1+P2 |
+| WinPE_Client（WPF 六步 + U盘 + 工具） | ✅ 编译 0 错 0 警 | Phase 3 评估是否降级；R7-C 已新增 TaskIni/TaskIniParser/ManifestValidator 3 个文件供 WinPE_Agent 复用 |
+| WinPE_Agent（§6 八阶段流水线） | ✅ R7-C 契约对齐完成 | 已入 sln + Git；新增 --auto/--task/--manifest/--log 参数 + RunAutoMode 入口；编译 0 错 0 警 |
+| Windows_Client（登录 + 六步 + U盘 + 工具 + 绿软） | ✅ 编译 0 错 0 警 | Phase 2 改一键装机为 P1+P2（11 个新 Service 待新增） |
 | 5 个测试脚手架 | ❌ 已删、Git delete 未提交 | 可选恢复 |
 | 旧主链路心跳 / 认领 / 进度 API | ⚠️ 代码保留 | Phase 3 评估删留 |
-| Git 工作树 | ⚠️ 脏 | 必须先过 Phase 0 |
+| Git 工作树 | ⚠️ 本次 R7-C 变更待提交 | 见下方「本次变更」 |
 
 ## 文档列表（六件套）
 
@@ -72,10 +73,12 @@ ZS 装机助手是一套完整的 Windows 系统安装与维护解决方案，�
 | 项目理解报告.md | 架构 + 数据流 + P0 缺口 + 真实完成度 |
 | 项目结构.txt | 实际目录结构（对齐 Git + 磁盘） |
 | 操作指南.md | 安装 / 配置 / 启动 / 使用 / 部署 |
-| 版本更新记录.md | R1~R7 开发轮索引 + 债务记录 |
+| 版本更新记录.md | R1~R7 开发轮索引 + R7-C 子轮 + 债务记录 |
 | 开发计划表.md | Phase 0~6 任务分解 + 审计官 + 风险 |
 
-> 架构演进参考：docs/superpowers/specs/2026-09-01-zs-perfect-unattended-deployment-v1-design.md
+> 架构演进参考：
+> - docs/superpowers/specs/2026-09-01-zs-perfect-unattended-deployment-v1-design.md（R7 主设计 v1）
+> - docs/superpowers/specs/2026-09-01-客户端模块调整清单.md（R7-C 客户端模块调整清单）
 
 ## 快速开始
 

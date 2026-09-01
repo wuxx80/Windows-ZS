@@ -43,6 +43,8 @@ server/runtime/
 *.ps1
 !publish.ps1
 !deploy_server.ps1
+!make_boot_wim.ps1
+!upload_pe.ps1
 temp_hash.php
 # Publish output
 publish/

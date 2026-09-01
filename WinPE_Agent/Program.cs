@@ -57,15 +57,30 @@ internal static class Program
     {
         var selfTest = args.Contains("--self-test");
         var noReboot = args.Contains("--no-reboot");
+        var autoMode = args.Contains("--auto");
         var serverUrl = GetArg(args, "--server") ?? DefaultServerUrl();
+
+        // R7 契约（设计 §5.1）：Startnet.cmd 调用形式为
+        //   ZS_PE_Agent.exe --auto --task <task.ini> --manifest <zs_manifest.key> --log <pe_log.txt>
+        // 其中 --log 必须在 _log 初始化前解析，以便覆盖默认日志路径
+        var taskPath = GetArg(args, "--task");
+        var manifestPath = GetArg(args, "--manifest");
+        var logArg = GetArg(args, "--log");
 
         _cacheDir = Directory.Exists("D:\\")
             ? "D:\\ZS_Cache\\images"
             : Path.Combine(AppContext.BaseDirectory, "images");
 
         var exeDir = AppContext.BaseDirectory;
-        _logPath = Path.Combine(exeDir, "agent.log");
-        _log = new StreamWriter(_logPath, append: true, new UTF8Encoding(false)) { AutoFlush = true };
+        _logPath = !string.IsNullOrEmpty(logArg) ? logArg : Path.Combine(exeDir, "agent.log");
+        try
+        {
+            var logDir = Path.GetDirectoryName(_logPath);
+            if (!string.IsNullOrEmpty(logDir) && !Directory.Exists(logDir))
+                Directory.CreateDirectory(logDir);
+            _log = new StreamWriter(_logPath, append: true, new UTF8Encoding(false)) { AutoFlush = true };
+        }
+        catch { /* 日志无法创建不阻塞装机 */ }
 
         try { Console.OutputEncoding = Encoding.UTF8; } catch { }
         try { Console.Title = "ZS 装机助手"; } catch { }
@@ -75,6 +90,8 @@ internal static class Program
         {
             Log("========================================");
             Log("ZS Agent start, version 0.0.268311");
+            Log("args: auto=" + autoMode + " task=" + (taskPath ?? "(none)")
+                + " manifest=" + (manifestPath ?? "(none)") + " log=" + _logPath);
 
             Api.SetBaseUrl(serverUrl);
             Deploy.ProgressChanged += (p, m) => Log(string.Format("  [deploy {0}%] {1}", p, m));
@@ -85,6 +102,8 @@ internal static class Program
                 rc = RunOfflineTest();
             else if (selfTest)
                 rc = await RunSelfTest(serverUrl);
+            else if (autoMode && !string.IsNullOrEmpty(taskPath))
+                rc = await RunAutoMode(taskPath, manifestPath, noReboot);
             else
                 rc = await RunInteractive(serverUrl, noReboot);
 
@@ -100,6 +119,153 @@ internal static class Program
         {
             try { _log?.Dispose(); } catch { }
         }
+    }
+
+    // ============ R7 自动装机入口（--auto --task task.ini --manifest zs_manifest.key --log pe_log.txt） ============
+    // 由 Startnet.cmd 在 choice /c XM /t 10 /d X 倒计时结束后调用。
+    // Startnet.cmd 已做完盘符扫描和 10 秒逃生窗，此处直接执行：
+    //   1) 校验 task.ini 存在
+    //   2) 校验 manifest（如果指定）—— 设计 §6.6 装机前第一条命令
+    //   3) 解析 task.ini 为 TaskIni 模型（设计 §2.1 16 字段）
+    //   4) 映射为 InstallOptions + imagePath + diskIndex + targetDrive
+    //   5) 调用 ExecutePipeline 走 7 步装机管线
+    //   6) 返回 0 → Startnet.cmd 让用户按任意键 reboot；非 0 → 停 cmd 救援
+    private static async Task<int> RunAutoMode(string taskPath, string? manifestPath, bool noReboot)
+    {
+        ShowBanner();
+        Console.WriteLine("  [R7] 自动装机模式（由 Startnet.cmd 调起）");
+        Console.WriteLine("  task: " + taskPath);
+        if (!string.IsNullOrEmpty(manifestPath))
+            Console.WriteLine("  manifest: " + manifestPath);
+        Console.WriteLine();
+
+        // 1) 校验 task.ini 存在
+        if (!File.Exists(taskPath))
+        {
+            Log("FATAL: task.ini not found at " + taskPath);
+            Console.Error.WriteLine("  [ERROR] task.ini 不存在: " + taskPath);
+            Console.WriteLine("  按任意键保持命令行以便救援...");
+            try { Console.ReadKey(true); } catch { }
+            return 2;
+        }
+
+        // 2) 解析 task.ini
+        TaskIni taskIni;
+        try
+        {
+            taskIni = TaskIniParser.Parse(taskPath);
+            Log("task.ini 解析成功: task_id=" + taskIni.Meta.TaskId
+                + " image=" + taskIni.SystemImage.File + " index=" + taskIni.SystemImage.Index
+                + " disk=" + taskIni.TargetDisk.DiskIndex + " part_mode=" + taskIni.TargetDisk.PartitionMode
+                + " oobe=" + taskIni.Meta.OobeMode);
+        }
+        catch (Exception ex)
+        {
+            Log("FATAL: task.ini parse failed: " + ex.Message);
+            Console.Error.WriteLine("  [ERROR] task.ini 解析失败: " + ex.Message);
+            Console.WriteLine("  按任意键保持命令行以便救援...");
+            try { Console.ReadKey(true); } catch { }
+            return 2;
+        }
+
+        // 3) 校验 manifest（设计 §6.6：装机前必须 100% 通过）
+        if (!string.IsNullOrEmpty(manifestPath) && File.Exists(manifestPath))
+        {
+            Log("开始 manifest 校验: " + manifestPath);
+            Console.WriteLine("  [ZS] 正在校验文件完整性 (zs_manifest.key)...");
+            var report = ManifestValidator.Verify(manifestPath);
+            Log(string.Format("manifest 校验结果: total={0} pass={1} fail={2}",
+                report.Total, report.Passed, report.Failed));
+
+            if (report.Total == 0)
+            {
+                Log("WARN: manifest 内无任何条目，跳过校验继续装机");
+                Console.WriteLine("  [!] manifest 为空，跳过校验继续");
+            }
+            else if (!report.AllPass)
+            {
+                Log("FATAL: manifest 校验失败，以下文件不匹配:");
+                foreach (var r in report.Results)
+                {
+                    if (r.Pass) continue;
+                    var msg = "    " + r.RelativePath + " expected=" + r.ExpectedHash
+                        + " actual=" + (r.ActualHash ?? "(none)") + " err=" + (r.Error ?? "");
+                    Log(msg);
+                    Console.Error.WriteLine("  [FAIL] " + r.RelativePath + ": " + (r.Error ?? "hash mismatch"));
+                }
+                Console.Error.WriteLine();
+                Console.Error.WriteLine("  [ERROR] 文件完整性校验未通过，已中止部署。");
+                Console.Error.WriteLine("  请回到 Windows 端重新下单生成 ZS_Task，再重启进 PE。");
+                Console.WriteLine("  按任意键保持命令行以便救援...");
+                try { Console.ReadKey(true); } catch { }
+                return 3;
+            }
+            else
+            {
+                Console.WriteLine("  [OK] manifest 全部 " + report.Total + " 项校验通过");
+            }
+        }
+        else
+        {
+            Log("manifest 未指定或不存在，跳过校验（兼容旧版客户端）");
+        }
+
+        // 4) 解析镜像路径 + 磁盘 + 安装选项
+        var imagePath = TaskIniParser.ResolveImagePath(taskPath, taskIni);
+        if (string.IsNullOrEmpty(imagePath) || !File.Exists(imagePath))
+        {
+            Log("FATAL: image file not found, expected: " + taskIni.SystemImage.File);
+            Console.Error.WriteLine("  [ERROR] 镜像文件不存在: " + taskIni.SystemImage.File);
+            Console.Error.WriteLine("  请确认 ZS_Task 目录下镜像文件已下载完整。");
+            Console.WriteLine("  按任意键保持命令行以便救援...");
+            try { Console.ReadKey(true); } catch { }
+            return 4;
+        }
+        Log("镜像路径: " + imagePath);
+
+        var opts = MapTaskIniToOptions(taskIni);
+        int diskIndex = taskIni.TargetDisk.DiskIndex;
+        string targetDrive = taskIni.PartitionScheme.SystemLetter + ":";
+        Log("diskIndex=" + diskIndex + " targetDrive=" + targetDrive
+            + " autoPart=" + opts.AutoPartition + " driverInject=" + opts.DriverInject
+            + " bootFix=" + opts.BootFix + " unattended=" + opts.Unattended);
+
+        // 5) 调用现有 ExecutePipeline 走完整 7 步装机管线
+        //    注：§6.0 固件双判 / §6.1 分区尾端验证 / §6.5 SetupComplete 渲染 是 B 类工作，
+        //    此处仅完成契约对齐，让 Startnet.cmd → Agent 主链路能跑通到 ExecutePipeline。
+        Console.WriteLine();
+        Console.WriteLine("  [ZS] 开始执行无人值守装机流水线...");
+        Console.WriteLine();
+        return await ExecutePipeline(
+            taskId: null,
+            imagePath: imagePath,
+            expectedHash: "",  // manifest 已校验，不再重复校验镜像
+            opts: opts,
+            targetDrive: targetDrive,
+            diskIndex: diskIndex,
+            online: false,
+            offlineUnattendXml: "",  // R7 应答 XML 由 SetupComplete 阶段处理，此处留空
+            offlineFirstLogonCmd: "",  // 同上
+            noReboot: noReboot);
+    }
+
+    /// <summary>把 TaskIni（设计 §2.1）映射为现有 InstallOptions（与 ExecutePipeline 契约对齐）</summary>
+    private static InstallOptions MapTaskIniToOptions(TaskIni task)
+    {
+        var o = new InstallOptions
+        {
+            AutoPartition = string.Equals(task.TargetDisk.PartitionMode, "clean_whole_disk", StringComparison.OrdinalIgnoreCase),
+            BootFix = true,  // 设计 §1.2：bcdboot 是微软原生部署链路必经步骤，默认开
+            DriverInject = task.Drivers.Inject,
+            Unattended = string.Equals(task.Meta.OobeMode, "auto", StringComparison.OrdinalIgnoreCase),
+            InstallSoftware = task.Software.Count > 0,
+            Optimize = true,  // [optimize] section 存在即视为启用
+            BackupData = false,  // R7 clean_whole_disk 默认不备份（设计 §2.1 partition_mode=clean_c_only 才保留数据盘）
+            ImageIndex = task.SystemImage.Index,
+            DriverPackage = "auto",
+            BackupLocation = "auto"
+        };
+        return o;
     }
 
     // ============ 交互式入口（PE 启动后默认路径） ============
@@ -530,7 +696,11 @@ internal static class Program
 
     private static string OnOff(bool v) => v ? "[ON]  是" : "[OFF] 否";
     private static string PadRight(string s, int n) => (s ?? "").PadRight(n);
-    private static string Truncate(string s, int n) => (s ?? "").Length <= n ? (s ?? "") : s[..(n - 1)] + ".";
+    private static string Truncate(string s, int n)
+    {
+        var safe = s ?? "";
+        return safe.Length <= n ? safe : safe[..(n - 1)] + ".";
+    }
 
     private static ConsoleKeyInfo ReadKeyNoEcho()
     {
