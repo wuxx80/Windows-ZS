@@ -230,10 +230,35 @@ internal static class Program
             + " autoPart=" + opts.AutoPartition + " driverInject=" + opts.DriverInject
             + " bootFix=" + opts.BootFix + " unattended=" + opts.Unattended);
 
-        // 5) 调用现有 ExecutePipeline 走完整 7 步装机管线
-        //    注：§6.0 固件双判 / §6.1 分区尾端验证 / §6.5 SetupComplete 渲染 是 B 类工作，
-        //    此处仅完成契约对齐，让 Startnet.cmd → Agent 主链路能跑通到 ExecutePipeline。
+        // 5) §6.0 固件类型判定（GPT/MBR 分流）—— 必须在分区前完成
+        //    设计 §6.0.3：双判 + 6 级冲突处理；Unknown 直接 Exit(2)
+        var overrideMode = taskIni.PartitionScheme?.Table ?? "auto";
+        Log("固件判定: override=" + overrideMode + " disk=" + diskIndex);
+        Console.WriteLine("  [ZS] 正在判定固件类型 (GPT/MBR)...");
+        var firmware = FirmwareDetector.Detect(overrideMode, diskIndex);
+        Log("固件判定结果: type=" + firmware.Type + " source=" + firmware.Source
+            + " reg=" + firmware.RegistryType + " disk=" + firmware.DiskpartType
+            + " conflict=" + firmware.Conflict + " script=" + firmware.PartitionScript);
+        if (!string.IsNullOrEmpty(firmware.Warning))
+            Log("  [FW WARN] " + firmware.Warning);
+
+        if (firmware.IsUnknown)
+        {
+            Log("FATAL: 无法判定固件类型，按设计 §6.0.3 第6项 Exit(2)");
+            Console.Error.WriteLine();
+            Console.Error.WriteLine("  [ERROR] 无法判定固件类型（注册表与 diskpart 均读不到）");
+            Console.Error.WriteLine("  很可能是目标盘压根没初始化或数据线松动。");
+            Console.Error.WriteLine("  硬往下执行 100% 会坏盘，已中止部署。");
+            Console.WriteLine("  按任意键保持命令行以便救援...");
+            try { Console.ReadKey(true); } catch { }
+            return 2;
+        }
+        Console.WriteLine("  [OK] 固件: " + firmware.Type + " (来源: " + firmware.Source
+            + (firmware.Conflict ? "  ⚠ CSM 冲突，将做尾端验证" : "") + ")");
         Console.WriteLine();
+
+        // 6) 调用 ExecutePipeline 走完整 7 步装机管线
+        //    §6.0 固件双判 / §6.1 分区尾端验证 / §6.5 引导修复双路径 / §6.6 SetupComplete 模板渲染 全部在 ExecutePipeline 内集成
         Console.WriteLine("  [ZS] 开始执行无人值守装机流水线...");
         Console.WriteLine();
         return await ExecutePipeline(
@@ -244,9 +269,12 @@ internal static class Program
             targetDrive: targetDrive,
             diskIndex: diskIndex,
             online: false,
-            offlineUnattendXml: "",  // R7 应答 XML 由 SetupComplete 阶段处理，此处留空
+            offlineUnattendXml: "",  // R7 应答 XML 由 UnattendXmlBuilder 渲染，此处留空
             offlineFirstLogonCmd: "",  // 同上
-            noReboot: noReboot);
+            noReboot: noReboot,
+            firmware: firmware,  // §6.0 判定结果，分区/引导/SetupComplete 都按此分流
+            taskIni: taskIni,  // §6.6 模板渲染需要 Software 列表 + Optimize + Meta
+            taskRoot: Path.GetDirectoryName(taskPath) ?? "");  // §6.6 自清理可能需要 ZS_Task 根目录
     }
 
     /// <summary>把 TaskIni（设计 §2.1）映射为现有 InstallOptions（与 ExecutePipeline 契约对齐）</summary>
@@ -863,7 +891,11 @@ internal static class Program
     private static async Task<int> ExecutePipeline(
         int? taskId, string imagePath, string expectedHash, InstallOptions opts,
         string targetDrive, int diskIndex, bool online,
-        string? offlineUnattendXml, string? offlineFirstLogonCmd, bool noReboot)
+        string? offlineUnattendXml, string? offlineFirstLogonCmd, bool noReboot,
+        // R7-C 新增：§6.0 固件双判结果（分区/引导双路径）；§6.6 模板渲染需 taskIni
+        FirmwareDetector.FirmwareResult? firmware = null,
+        TaskIni? taskIni = null,
+        string? taskRoot = null)
     {
         // 校验镜像
         await Progress(taskId, 25, "正在校验镜像", "校验镜像", "running", online);
@@ -896,25 +928,65 @@ internal static class Program
         }
         else Log("未启用数据备份");
 
-        // 分区
+        // 分区 —— §6.1 按 firmware 分流 GPT/MBR；分区后立即调 PartitionVerifier 尾端验证
         if (opts.AutoPartition)
         {
             await Progress(taskId, 45, "正在分区", "分区/格式化", "running", online);
-            Log("分区: 磁盘" + diskIndex + " GPT 自动分区");
-            var op = new PartitionOperation
+
+            if (firmware != null)
             {
-                Operation = "create",
-                DiskIndex = diskIndex,
-                FileSystem = "NTFS",
-                DriveLetter = "C",
-                Label = "Windows"
-            };
-            var partOk = await DiskPart.ExecutePartitionOperation(op);
-            if (!partOk)
+                // R7-C 路径：按 firmware.Type 生成 GPT/MBR 脚本字符串，调 ExecuteRawScriptAsync
+                // 这样能在脚本末尾附加 "detail partition + list volume" 验证段（§6.1 尾端验证要求）
+                var fwType = firmware.Type;
+                Log("分区(R7-C): 磁盘" + diskIndex + " " + firmware.PartitionScript.ToUpperInvariant()
+                    + " 分区（固件源=" + firmware.Source + "）");
+                var script = BuildPartitionScript(diskIndex, fwType, taskIni);
+                var (partOk, partOutput) = await DiskPart.ExecuteRawScriptAsync(script);
+                Log("diskpart 输出（末尾 200 字）: "
+                    + (partOutput.Length > 200 ? partOutput[^200..] : partOutput));
+
+                if (!partOk)
+                {
+                    await Progress(taskId, 0, "DiskPart 分区失败", "分区/格式化", "failed", online);
+                    Log("错误: DiskPart 分区失败（exit code 非 0）");
+                    return 1;
+                }
+
+                // §6.1 尾端验证：GPT 必须 ESP+FAT32；MBR 必须 Active=Yes
+                Log("分区尾端验证: type=" + fwType);
+                var verify = PartitionVerifier.Verify(diskIndex, fwType);
+                Log("尾端验证: pass=" + verify.Pass + " reason=" + (verify.Reason ?? "(空)"));
+                if (!verify.Pass)
+                {
+                    await Progress(taskId, 0, "分区尾端验证失败: " + verify.Reason, "分区/格式化", "failed", online);
+                    Log("FATAL: 分区尾端验证失败，按设计 §6.1 应 Exit(3)");
+                    Log("  原因: " + verify.Reason);
+                    Log("  detail: " + (verify.DetailOutput.Length > 300 ? verify.DetailOutput[^300..] : verify.DetailOutput));
+                    Log("  volume: " + (verify.VolumeOutput.Length > 300 ? verify.VolumeOutput[^300..] : verify.VolumeOutput));
+                    return 3;
+                }
+                Log("分区尾端验证通过: bootLabel=" + verify.BootLabel
+                    + " fs=" + (verify.BootFileSystem ?? "(N/A)"));
+            }
+            else
             {
-                await Progress(taskId, 0, "DiskPart 分区失败", "分区/格式化", "failed", online);
-                Log("错误: DiskPart 分区失败");
-                return 1;
+                // 旧路径：调 DiskPart.ExecutePartitionOperation（仅 GPT）
+                Log("分区(旧): 磁盘" + diskIndex + " GPT 自动分区");
+                var op = new PartitionOperation
+                {
+                    Operation = "create",
+                    DiskIndex = diskIndex,
+                    FileSystem = "NTFS",
+                    DriveLetter = "C",
+                    Label = "Windows"
+                };
+                var partOk = await DiskPart.ExecutePartitionOperation(op);
+                if (!partOk)
+                {
+                    await Progress(taskId, 0, "DiskPart 分区失败", "分区/格式化", "failed", online);
+                    Log("错误: DiskPart 分区失败");
+                    return 1;
+                }
             }
             Log("分区完成");
         }
@@ -947,55 +1019,118 @@ internal static class Program
         }
         else Log("未启用驱动注入");
 
-        // 修复引导
+        // 修复引导 —— §6.5 按 firmware 双路径（UEFI: bcdboot /f UEFI；BIOS: bcdboot /f BIOS）
         if (opts.BootFix)
         {
             await Progress(taskId, 95, "正在修复引导", "修复引导", "running", online);
-            Log("修复引导 (UEFI): " + targetDrive);
-            await Deploy.RepairBoot(targetDrive);
-            Log("引导修复完成");
+            // R7-C 路径：firmware 非 null 时按 firmware.Type 双路径
+            // 旧路径：firmware 为 null，调 Deploy.RepairBoot（自动判定 EFI/BIOS）
+            if (firmware != null)
+            {
+                var fwType = firmware.Type;
+                var bcdFlags = fwType == FirmwareDetector.FirmwareType.Uefi ? "UEFI" : "BIOS";
+                Log("修复引导 (R7-C " + bcdFlags + "): " + targetDrive);
+                // §6.5 UEFI/GPT: bcdboot C:\Windows /s S: /f UEFI /l zh-cn
+                // §6.5 BIOS/MBR: bcdboot C:\Windows /s S: /f BIOS /l zh-cn
+                // 通过 Deploy.RepairBoot 传 firmwareType 参数让它走双路径
+                await Deploy.RepairBoot(targetDrive, bcdFlags);
+                Log("引导修复完成 (" + bcdFlags + ")");
+            }
+            else
+            {
+                Log("修复引导 (旧): " + targetDrive);
+                await Deploy.RepairBoot(targetDrive);
+                Log("引导修复完成");
+            }
         }
         else Log("未启用引导修复");
 
-        // 写入无人值守应答
+        // 写入无人值守应答 —— §6.6c R7-C 路径用 UnattendXmlBuilder 渲染；旧路径用传入 xml 字符串
         if (opts.Unattended)
         {
             await Progress(taskId, 96, "正在写入无人值守应答", "写入无人值守", "running", online);
-            string xml = online ? "" : (offlineUnattendXml ?? "");
-            if (online && taskId is > 0)
+            if (taskIni != null)
             {
-                var ur = await Api.GetTaskUnattendAsync(taskId.Value);
-                if (ur.IsSuccess && ur.Data != null) xml = ur.Data.Xml ?? "";
+                // R7-C 路径：用 UnattendXmlBuilder 按 task.ini meta.oobe_mode 渲染
+                // oobe_mode=auto 时写入完整 Unattend.xml（OOBE 全跳过 + 本地管理员 + BypassNRO）
+                // oobe_mode=manual 时 UnattendXmlBuilder 返回 null，跳过写入
+                var unattendPath = UnattendXmlBuilder.WriteToSystem(taskIni, targetDrive);
+                if (unattendPath != null)
+                    Log("Unattend.xml (R7-C) 已写入: " + unattendPath);
+                else
+                    Log("Unattend.xml (R7-C) 跳过：task.ini meta.oobe_mode 非 auto，保留 OOBE 用户操作");
             }
-            if (!string.IsNullOrWhiteSpace(xml))
+            else
             {
-                var panther = Path.Combine(targetDrive.TrimEnd('\\') + "\\", "Windows", "Panther");
-                Directory.CreateDirectory(panther);
-                File.WriteAllText(Path.Combine(panther, "unattend.xml"), xml, new UTF8Encoding(false));
-                Log("unattend.xml 已写入: " + panther);
+                // 旧路径：使用传入的 xml 字符串
+                string xml = online ? "" : (offlineUnattendXml ?? "");
+                if (online && taskId is > 0)
+                {
+                    var ur = await Api.GetTaskUnattendAsync(taskId.Value);
+                    if (ur.IsSuccess && ur.Data != null) xml = ur.Data.Xml ?? "";
+                }
+                if (!string.IsNullOrWhiteSpace(xml))
+                {
+                    var panther = Path.Combine(targetDrive.TrimEnd('\\') + "\\", "Windows", "Panther");
+                    Directory.CreateDirectory(panther);
+                    File.WriteAllText(Path.Combine(panther, "unattend.xml"), xml, new UTF8Encoding(false));
+                    Log("unattend.xml (旧) 已写入: " + panther);
+                }
+                else Log("无人值守应答为空，跳过");
             }
-            else Log("无人值守应答为空，跳过");
         }
         else Log("未启用无人值守");
 
-        // 首次登录脚本
+        // 首次登录脚本 —— §6.6 Step 6b R7-C 路径用 SetupCompleteBuilder 渲染（含软件列表+优化+自清理+自毁）
         if (opts.Unattended && (opts.InstallSoftware || opts.Optimize))
         {
             await Progress(taskId, 98, "正在生成首次登录脚本", "首次登录脚本", "running", online);
-            string cmd = online ? "" : (offlineFirstLogonCmd ?? "");
-            if (online && taskId is > 0)
+            if (taskIni != null && !string.IsNullOrEmpty(taskRoot))
             {
-                var fr = await Api.GetTaskFirstLogonAsync(taskId.Value);
-                if (fr.IsSuccess && fr.Data != null) cmd = fr.Data.Cmd ?? "";
+                // R7-C 路径：用 SetupCompleteBuilder 按 task.ini Software 列表 + Optimize 渲染
+                var setupPath = SetupCompleteBuilder.WriteToSystem(taskIni, targetDrive, taskRoot);
+                Log("SetupComplete.cmd (R7-C) 已写入: " + setupPath);
+
+                // §6.6 Step 6a：复制 software 目录到新系统 C:\Windows\Setup\Scripts\software\
+                var softwareSrc = Path.Combine(taskRoot, "software");
+                var softwareDst = Path.Combine(targetDrive.TrimEnd('\\') + "\\", "Windows", "Setup", "Scripts", "software");
+                if (Directory.Exists(softwareSrc))
+                {
+                    Log("复制软件目录: " + softwareSrc + " → " + softwareDst);
+                    try
+                    {
+                        CopyDirectory(softwareSrc, softwareDst);
+                        Log("软件目录复制完成");
+                    }
+                    catch (Exception copyEx)
+                    {
+                        // 设计 §6.6 Step 6a：拷贝失败只写警告日志，不中断
+                        Log("WARN: 软件目录复制失败（不中断装机）: " + copyEx.Message);
+                    }
+                }
+                else
+                {
+                    Log("软件目录不存在，跳过复制: " + softwareSrc);
+                }
             }
-            if (!string.IsNullOrWhiteSpace(cmd))
+            else
             {
-                var setup = Path.Combine(targetDrive.TrimEnd('\\') + "\\", "Windows", "Setup", "Scripts");
-                Directory.CreateDirectory(setup);
-                File.WriteAllText(Path.Combine(setup, "SetupComplete.cmd"), cmd, new UTF8Encoding(false));
-                Log("SetupComplete.cmd 已写入: " + setup);
+                // 旧路径：使用传入的 cmd 字符串
+                string cmd = online ? "" : (offlineFirstLogonCmd ?? "");
+                if (online && taskId is > 0)
+                {
+                    var fr = await Api.GetTaskFirstLogonAsync(taskId.Value);
+                    if (fr.IsSuccess && fr.Data != null) cmd = fr.Data.Cmd ?? "";
+                }
+                if (!string.IsNullOrWhiteSpace(cmd))
+                {
+                    var setup = Path.Combine(targetDrive.TrimEnd('\\') + "\\", "Windows", "Setup", "Scripts");
+                    Directory.CreateDirectory(setup);
+                    File.WriteAllText(Path.Combine(setup, "SetupComplete.cmd"), cmd, new UTF8Encoding(false));
+                    Log("SetupComplete.cmd (旧) 已写入: " + setup);
+                }
+                else Log("首次登录脚本为空，跳过");
             }
-            else Log("首次登录脚本为空，跳过");
         }
         else Log("未启用装软件/优化");
 
@@ -1010,6 +1145,81 @@ internal static class Program
         }
         else Log("--no-reboot：不自动重启");
         return 0;
+    }
+
+    // ============ R7 §6.1 分区脚本生成 + 目录复制辅助 ============
+
+    /// <summary>
+    /// 按固件类型 + task.ini 分区方案生成 diskpart 脚本字符串（§6.1）。
+    /// GPT 分支：ESP(FAT32) + MSR + Recovery(可选) + Primary(NTFS)
+    /// MBR 分支：Primary(NTFS, Active)
+    /// 分区完成后由 PartitionVerifier 独立执行尾端验证。
+    /// </summary>
+    private static string BuildPartitionScript(int diskIndex, FirmwareDetector.FirmwareType fwType, TaskIni? taskIni)
+    {
+        var ps = taskIni?.PartitionScheme;
+        var espSize = ps?.EspSizeMb ?? 500;
+        var msrSize = ps?.MsrSizeMb ?? 16;
+        var recSize = ps?.RecoverySizeMb ?? 800;
+        var letter = string.IsNullOrEmpty(ps?.SystemLetter) ? "C" : ps!.SystemLetter;
+        var label = string.IsNullOrEmpty(ps?.SystemLabel) ? "Windows" : ps!.SystemLabel;
+        var fs = string.IsNullOrEmpty(ps?.FormatFs) ? "ntfs" : ps!.FormatFs;
+        var quick = ps?.QuickFormat ?? true;
+        var quickFlag = quick ? " quick" : "";
+
+        var sb = new StringBuilder();
+        sb.AppendLine("select disk " + diskIndex);
+        sb.AppendLine("clean");
+
+        if (fwType == FirmwareDetector.FirmwareType.Uefi)
+        {
+            // GPT 分支（UEFI）：ESP + MSR + Recovery(隐藏不分配盘符) + Primary
+            sb.AppendLine("convert gpt");
+            sb.AppendLine("create partition efi size=" + espSize);
+            sb.AppendLine("format" + quickFlag + " fs=fat32 label=\"System\"");
+            sb.AppendLine("assign letter=S");
+            sb.AppendLine("create partition msr size=" + msrSize);
+            if (recSize > 0)
+            {
+                sb.AppendLine("create partition primary size=" + recSize);
+                sb.AppendLine("format" + quickFlag + " fs=" + fs + " label=\"Recovery\"");
+            }
+            sb.AppendLine("create partition primary");
+            sb.AppendLine("format" + quickFlag + " fs=" + fs + " label=\"" + label + "\"");
+            sb.AppendLine("assign letter=" + letter);
+        }
+        else
+        {
+            // MBR 分支（BIOS）：Primary + Active
+            sb.AppendLine("convert mbr");
+            if (recSize > 0)
+            {
+                sb.AppendLine("create partition primary size=" + recSize);
+                sb.AppendLine("format" + quickFlag + " fs=" + fs + " label=\"Recovery\"");
+            }
+            sb.AppendLine("create partition primary");
+            sb.AppendLine("format" + quickFlag + " fs=" + fs + " label=\"" + label + "\"");
+            sb.AppendLine("assign letter=" + letter);
+            sb.AppendLine("active");
+        }
+        sb.AppendLine("exit");
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// 递归复制目录（§6.6 Step 6a 软件目录拷贝到新系统）。
+    /// </summary>
+    private static void CopyDirectory(string sourceDir, string destDir)
+    {
+        Directory.CreateDirectory(destDir);
+        foreach (var file in Directory.GetFiles(sourceDir))
+        {
+            File.Copy(file, Path.Combine(destDir, Path.GetFileName(file)), overwrite: true);
+        }
+        foreach (var dir in Directory.GetDirectories(sourceDir))
+        {
+            CopyDirectory(dir, Path.Combine(destDir, Path.GetFileName(dir)));
+        }
     }
 
     // ============ 自检模式 ============

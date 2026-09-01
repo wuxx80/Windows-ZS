@@ -1,4 +1,4 @@
-## 项目结构（与磁盘 + Git 实对齐 · 2026-09-02 · R7 架构切换版）
+## 项目结构（与磁盘 + Git 实对齐 · 2026-09-02 · R7 架构切换版 · R7-D 全链路代码层闭环）
 
 Windows-ZS/
 │
@@ -155,9 +155,10 @@ Windows-ZS/
 │               └── network-deploys.html    # （同上）
 │
 ├── WinPE_Agent/                        # ✅ 已入 sln + Git（R7 主轮 commit 75a6196）；新主链路 PE 端核心执行者
-│   ├── WinPE_Agent.csproj              # .NET 8 单文件发布（自包含 / 无运行时依赖）；通过 Compile Link 复用 WinPE_Client 源码
+│   ├── WinPE_Agent.csproj              # .NET 8 单文件发布（自包含 / 无运行时依赖）；通过 Compile Link 复用 WinPE_Client 源码；✨R7-D：新增 4 个 Service Compile Link（FirmwareDetector / PartitionVerifier / SetupCompleteBuilder / UnattendXmlBuilder）
 │   ├── Models/ApiModels.cs
 │   └── Program.cs                      # R7-C 子轮：新增 --auto/--task/--manifest/--log 参数 + RunAutoMode 入口；保留 --self-test/--offline-test/交互式
+│                                       # ✨R7-D 子轮：RunAutoMode 固件判定 + ExecutePipeline 分区脚本/尾端验证/引导修复双路径/SetupComplete/Unattend 集成 + BuildPartitionScript + CopyDirectory 辅助方法
 │
 ├── WinPE_Client/                       # 旧主链路 WinPE 端 WPF GUI（Phase 3 评估是否降级为手动装机界面）
 │   ├── WinPE_Client.csproj             # ⚠️ 当前 OutputType=WinExe + UseWPF=true，R7 §4 要求改为 Exe 控制台
@@ -173,12 +174,17 @@ Windows-ZS/
 │   │            UDiskService / IsoBuilder / EfiSysGenerator / OfflineTaskService / ToolService
 │   │            TaskIniParser ✨R7-C 新增（INI 解析 + 镜像路径解析）
 │   │            ManifestValidator ✨R7-C 新增（SHA-256 校验报告）
+│   │            FirmwareDetector ✨R7-D 新增（§6.0 固件双判 + 6 级冲突矩阵）
+│   │            PartitionVerifier ✨R7-D 新增（§6.1 分区尾端验证：GPT 验 ESP+FAT / MBR 验 Active）
+│   │            SetupCompleteBuilder ✨R7-D 新增（§6.6 模板渲染，PE 阶段生成首次启动脚本）
+│   │            UnattendXmlBuilder ✨R7-D 新增（§6.6c OOBE 模板渲染）
+│   │            （DiskPartService.cs ✨R7-D 修改：新增 ExecuteRawScriptAsync，支持透传整段 diskpart 脚本）
 │   ├── ViewModels/ Main / UDisk / Tools / InstallWizard
 │   ├── Helpers/Converters.cs
 │   └── Data/Tools/tools.json           # 53 工具 / 10 分类清单
 │
 ├── Windows_Client/                     # Windows 端 WPF GUI（Phase 2 改一键装机为 P1+P2）
-│   ├── Windows_Client.csproj
+│   ├── Windows_Client.csproj            # ✨R7-D 修改：新增 TaskIni.cs + FirmwareDetector.cs Compile Link（复用 WinPE_Client 源码）
 │   ├── App.xaml / App.xaml.cs / AssemblyInfo.cs
 │   ├── MainWindow.xaml(.cs)            # 首页（四卡 + 最近任务卡片）
 │   ├── LoginWindow.xaml(.cs)           # 用户注册 / 登录
@@ -189,7 +195,17 @@ Windows-ZS/
 │   ├── Services/ ApiService / DeviceService / ImageDeployService / DiskPartService
 │   │            UDiskService / IsoBuilder / EfiSysGenerator / ToolService
 │   │            SessionStore / OfflineTaskService
+│   │            TaskIniWriter ✨R7-D 新增（task.ini 生成器，按 §2.1 16 字段渲染）
+│   │            ManifestWriter ✨R7-D 新增（zs_manifest.key 生成器，SHA-256 清单）
+│   │            PeAssetDownloader ✨R7-D 新增（boot.wim / boot.sdi / WinPE_Agent 下载与校验）
+│   │            SystemImagePreDownloader ✨R7-D 新增（系统镜像 install.wim/esd 预下载到任务目录）
+│   │            DriverPackageDownloader ✨R7-D 新增（驱动包下载 + 解压到 ZS_Task\drivers）
+│   │            SoftwarePackageDownloader ✨R7-D 新增（软件包批量下载 + 校验）
+│   │            ZsTaskBuilder ✨R7-D 新增（P1 全流程编排器：选盘→下载→生成 task.ini/manifest）
+│   │            BcdInjector ✨R7-D 新增（BCD bootsequence 一次性启动项注入 + 30s 倒计时重启）
+│   │            （ApiService.cs ✨R7-D 修改：新增 GetBaseUrl()，供下载器拼接绝对 URL）
 │   ├── ViewModels/ Main / UDisk / Tools / InstallWizard / SoftwareWindow
+│   │            （InstallWizardViewModel.cs ✨R7-D 修改：新增 ExecuteR7OfflineBuild + SelectTaskDrive，StartExecution 优先走 R7 全流程）
 │   ├── Helpers/Converters.cs
 │   └── Data/Tools/tools.json           # 双端工具清单一致
 │
@@ -218,3 +234,32 @@ Windows-ZS/
 - 旧解决方案名 ZS_Installer.sln 不存在（实际是 ZS_Installer.slnx）。
 - 测试脚本 e2e_winpe_test.php / api_test.php / apply_migration.php / schema_check.php：项目根已清理，不再标注存在。
 - 服务器控制器：不存在 RoleController.php、StorageController.php（旧文档虚构项）。
+
+### R7-D 子轮代码层变更（2026-09-02 · 全链路代码层闭环）
+本子轮打通 R7 新主链路「Windows 下单 → ZS_Task 构建 → BCD 注入 → 自动重启进 PE → 八阶段装机」全部代码层环节，两端编译均 0 错 0 警。
+
+**新增 12 个 .cs 文件**
+- WinPE_Client/Services/（4 个，WinPE_Agent 通过 csproj Compile Link 复用）：
+  - FirmwareDetector.cs        —— §6.0 固件双判（注册表快速判定 + diskpart Gpt 事实判定）+ 6 级冲突矩阵
+  - PartitionVerifier.cs       —— §6.1 分区尾端验证（GPT 验 ESP 卷标 + FAT/FAT32；MBR 验 Active 标志）
+  - SetupCompleteBuilder.cs    —— §6.6 模板渲染，PE 阶段生成首次启动脚本
+  - UnattendXmlBuilder.cs      —— §6.6c OOBE 模板渲染
+- Windows_Client/Services/（8 个）：
+  - TaskIniWriter.cs            —— task.ini 生成器，按 §2.1 16 字段渲染
+  - ManifestWriter.cs           —— zs_manifest.key 生成器（SHA-256 校验清单）
+  - PeAssetDownloader.cs        —— boot.wim / boot.sdi / WinPE_Agent 下载与校验
+  - SystemImagePreDownloader.cs —— 系统镜像 install.wim/esd 预下载到任务目录
+  - DriverPackageDownloader.cs  —— 驱动包下载 + 解压到 ZS_Task\drivers
+  - SoftwarePackageDownloader.cs—— 软件包批量下载 + 校验
+  - ZsTaskBuilder.cs            —— P1 全流程编排器（选盘 → 下载 → 生成 task.ini/manifest）
+  - BcdInjector.cs              —— BCD bootsequence 一次性启动项注入 + 30s 倒计时重启
+
+**修改 6 个文件**
+- WinPE_Agent/Program.cs                                —— RunAutoMode 固件判定 + ExecutePipeline 分区脚本/尾端验证/引导修复双路径/SetupComplete/Unattend 集成 + BuildPartitionScript + CopyDirectory 辅助方法
+- WinPE_Client/Services/DiskPartService.cs              —— 新增 ExecuteRawScriptAsync，支持透传整段 diskpart 脚本
+- WinPE_Agent/WinPE_Agent.csproj                        —— 添加 4 个新 Service Compile Link
+- Windows_Client/Windows_Client.csproj                  —— 添加 TaskIni.cs + FirmwareDetector.cs Compile Link
+- Windows_Client/Services/ApiService.cs                 —— 新增 GetBaseUrl()，供下载器拼接绝对 URL
+- Windows_Client/ViewModels/InstallWizardViewModel.cs   —— 新增 ExecuteR7OfflineBuild + SelectTaskDrive，StartExecution 优先走 R7 流程
+
+**编译验证**：WinPE_Agent + Windows_Client 编译 0 错 0 警。

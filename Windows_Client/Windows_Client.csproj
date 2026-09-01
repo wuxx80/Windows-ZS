@@ -27,4 +27,10 @@
     </None>
   </ItemGroup>
 
+  <!-- R7 共享源码：复用 WinPE_Client 的 TaskIni 模型 + 固件判定（单一数据源） -->
+  <ItemGroup>
+    <Compile Include="..\WinPE_Client\Models\TaskIni.cs" Link="Models\TaskIni.cs" />
+    <Compile Include="..\WinPE_Client\Services\FirmwareDetector.cs" Link="Services\FirmwareDetector.cs" />
+  </ItemGroup>
+
 </Project>

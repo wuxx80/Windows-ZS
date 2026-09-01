@@ -31,6 +31,10 @@
     <Compile Include="..\WinPE_Client\Services\DeviceService.cs" Link="Services\DeviceService.cs" />
     <Compile Include="..\WinPE_Client\Services\TaskIniParser.cs" Link="Services\TaskIniParser.cs" />
     <Compile Include="..\WinPE_Client\Services\ManifestValidator.cs" Link="Services\ManifestValidator.cs" />
+    <Compile Include="..\WinPE_Client\Services\FirmwareDetector.cs" Link="Services\FirmwareDetector.cs" />
+    <Compile Include="..\WinPE_Client\Services\PartitionVerifier.cs" Link="Services\PartitionVerifier.cs" />
+    <Compile Include="..\WinPE_Client\Services\SetupCompleteBuilder.cs" Link="Services\SetupCompleteBuilder.cs" />
+    <Compile Include="..\WinPE_Client\Services\UnattendXmlBuilder.cs" Link="Services\UnattendXmlBuilder.cs" />
     <Compile Include="..\WinPE_Client\Models\ApiResponse.cs" Link="Models\ApiResponse.cs" />
     <Compile Include="..\WinPE_Client\Models\ImageInfo.cs" Link="Models\ImageInfo.cs" />
     <Compile Include="..\WinPE_Client\Models\DiskInfo.cs" Link="Models\DiskInfo.cs" />

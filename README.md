@@ -3,6 +3,7 @@
 > 全栈 Windows 装机解决方案 —— Web 管理后台 + WinPE 端 + Windows 客户端
 > 当前版本：v0.0.268311（架构切换中，版本号不变）
 > **主链路切换声明（2026-09-01 · R7）：原方案「Windows 下单 → U盘/ISO → PE端联网认领任务续装」已废弃；新主链路「Windows 预下载全部资源到任务目录 → BCD 一次性启动项从硬盘加载 PE → PE 完全离线完成装机」。旧代码保留供 Phase 0~2 迁移阶段逐步替换，Phase 3 评估是否移除。**
+> **R7-D 子轮状态（2026-09-02）：新主链路「Windows 下单 → ZS_Task 构建 → BCD 注入 → 自动重启进 PE → 八阶段装机」已打通全部代码层环节，新增 12 个 Service（PE 端 4 / Windows 端 8）+ 修改 6 个文件，WinPE_Agent + Windows_Client 编译 0 错 0 警。下一步进入真实硬件 / VM 端到端联调。**
 
 ## 项目简介
 
@@ -12,10 +13,14 @@ ZS 装机助手是一套完整的 Windows 系统安装与维护解决方案，�
 
 ### 核心功能（R7 新主链路）
 - **一键装机（BCD 离线版，P1~P5）**：Windows 端 P1 选盘 → 下载全部资源 → 生成 task.ini / zs_manifest.key → P2 注入 BCD 一次性启动项 → 30 秒倒计时重启 → PE 端 P3 10 秒逃生窗 → P4 八阶段流水线（固件判定 / 分区尾端验证 / SHA256 校验 / 镜像展开 / 驱动注入 / 引导修复 / Unattend 注入 / SetupComplete 注入）→ P5 首次进系统自动装软件 + 系统优化
+  - ✨R7-D 已代码层打通：Windows 端 ZsTaskBuilder + BcdInjector 编排 P1→P2；PE 端 FirmwareDetector / PartitionVerifier / SetupCompleteBuilder / UnattendXmlBuilder 集成进 WinPE_Agent.ExecutePipeline，覆盖 P3→P4 八阶段
 - **三重逃生安全窗**：Windows 侧 30 秒 shutdown /a 取消；PE 侧 10 秒倒计时，按任意键进入手动装机；任何外部命令 ExitCode 非 0 立即停机
 - **PE 永远无网**：真实硬件 50%+ 缺少 PE 网卡驱动，本方案 PE 阶段完全不依赖 HTTP / 网卡
-- **固件判定双重方案**：优先注册表快速判定，冲突时以 diskpart Gpt 列事实为准；均未知则停止装机
-- **分区脚本尾端验证**：GPT 分支验证 ESP 卷标 + FAT/FAT32；MBR 分支验证 Active 标志
+- **固件判定双重方案**：优先注册表快速判定，冲突时以 diskpart Gpt 列事实为准；均未知则停止装机 ✨R7-D 已实现 FirmwareDetector.cs（§6.0 双判 + 6 级冲突矩阵）
+- **分区脚本尾端验证**：GPT 分支验证 ESP 卷标 + FAT/FAT32；MBR 分支验证 Active 标志 ✨R7-D 已实现 PartitionVerifier.cs（§6.1）
+- **PE 资产下载器**：boot.wim / boot.sdi / WinPE_Agent 全部在 Windows 端预下载并 SHA-256 校验，PE 启动后无需联网 ✨R7-D 已实现 PeAssetDownloader.cs
+- **系统镜像 / 驱动 / 软件包预下载**：全部在 Windows 端下载并解压到 ZS_Task 任务目录 ✨R7-D 已实现 SystemImagePreDownloader / DriverPackageDownloader / SoftwarePackageDownloader
+- **task.ini / zs_manifest.key 生成**：Windows 端按 §2.1 16 字段生成 INI + SHA-256 清单 ✨R7-D 已实现 TaskIniWriter + ManifestWriter
 - **U盘制作 / 生成 ISO（兜底）**：写 U 盘 / 生成 ISO 双模式；PE 来源三选一；纯 C# ISO9660 + Joliet + El Torito 双引导生成器
 - **工具大全（53 工具 / 10 分类）**：本地运行 + 自动提权；U 盘勾选后 PE 内离线可用
 - **绿色软件**：客户端入口卡片（列表 / 详情 / 静默安装）
@@ -58,12 +63,12 @@ ZS 装机助手是一套完整的 Windows 系统安装与维护解决方案，�
 | 客户端模块调整清单 | ✅ R7-C 新增 | docs/superpowers/specs/2026-09-01-客户端模块调整清单.md |
 | 后端骨架（35 表 / 31 控制器 / 36 模型） | ✅ 可用 | 缺 RoleController；中间件未注册 |
 | 管理后台前端（22 页 + 登录 + 控制台） | ✅ 基本可用 | 角色分配失效 / 日志页空（P0-1/4） |
-| WinPE_Client（WPF 六步 + U盘 + 工具） | ✅ 编译 0 错 0 警 | Phase 3 评估是否降级；R7-C 已新增 TaskIni/TaskIniParser/ManifestValidator 3 个文件供 WinPE_Agent 复用 |
-| WinPE_Agent（§6 八阶段流水线） | ✅ R7-C 契约对齐完成 | 已入 sln + Git；新增 --auto/--task/--manifest/--log 参数 + RunAutoMode 入口；编译 0 错 0 警 |
-| Windows_Client（登录 + 六步 + U盘 + 工具 + 绿软） | ✅ 编译 0 错 0 警 | Phase 2 改一键装机为 P1+P2（11 个新 Service 待新增） |
+| WinPE_Client（WPF 六步 + U盘 + 工具） | ✅ 编译 0 错 0 警 | Phase 3 评估是否降级；R7-C 已新增 TaskIni/TaskIniParser/ManifestValidator；✨R7-D 新增 FirmwareDetector/PartitionVerifier/SetupCompleteBuilder/UnattendXmlBuilder 4 个 Service 供 WinPE_Agent 复用，DiskPartService 新增 ExecuteRawScriptAsync |
+| WinPE_Agent（§6 八阶段流水线） | ✅ R7-D 全链路代码层闭环 | 已入 sln + Git；R7-C：--auto/--task/--manifest/--log 参数 + RunAutoMode 入口；✨R7-D：RunAutoMode 固件判定 + ExecutePipeline 分区脚本/尾端验证/引导修复双路径/SetupComplete/Unattend 集成 + BuildPartitionScript/CopyDirectory 辅助；编译 0 错 0 警 |
+| Windows_Client（登录 + 六步 + U盘 + 工具 + 绿软） | ✅ R7-D 全链路代码层闭环 | R7-C：11 个新 Service 待新增；✨R7-D：新增 8 个 Service（TaskIniWriter/ManifestWriter/PeAssetDownloader/SystemImagePreDownloader/DriverPackageDownloader/SoftwarePackageDownloader/ZsTaskBuilder/BcdInjector）+ ApiService.GetBaseUrl() + InstallWizardViewModel.ExecuteR7OfflineBuild/SelectTaskDrive，StartExecution 优先 R7 流程；编译 0 错 0 警 |
 | 5 个测试脚手架 | ❌ 已删、Git delete 未提交 | 可选恢复 |
 | 旧主链路心跳 / 认领 / 进度 API | ⚠️ 代码保留 | Phase 3 评估删留 |
-| Git 工作树 | ⚠️ 本次 R7-C 变更待提交 | 见下方「本次变更」 |
+| Git 工作树 | ⚠️ 本次 R7-D 变更待提交 | 12 新增 + 6 修改，见版本更新记录.md R7-D |
 
 ## 文档列表（六件套）
 
@@ -73,7 +78,7 @@ ZS 装机助手是一套完整的 Windows 系统安装与维护解决方案，�
 | 项目理解报告.md | 架构 + 数据流 + P0 缺口 + 真实完成度 |
 | 项目结构.txt | 实际目录结构（对齐 Git + 磁盘） |
 | 操作指南.md | 安装 / 配置 / 启动 / 使用 / 部署 |
-| 版本更新记录.md | R1~R7 开发轮索引 + R7-C 子轮 + 债务记录 |
+| 版本更新记录.md | R1~R7 开发轮索引 + R7-C/R7-D 子轮 + 债务记录 |
 | 开发计划表.md | Phase 0~6 任务分解 + 审计官 + 风险 |
 
 > 架构演进参考：

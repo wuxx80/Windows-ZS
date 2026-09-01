@@ -25,6 +25,7 @@ namespace Windows_Client.Services
         }
 
         public void SetBaseUrl(string url) => _baseUrl = url.TrimEnd('/');
+        public string GetBaseUrl() => _baseUrl;
 
         public void SetToken(string? token)
         {

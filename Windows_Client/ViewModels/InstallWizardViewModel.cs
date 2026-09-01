@@ -1032,9 +1032,15 @@ namespace Windows_Client.ViewModels
                     await Task.Delay(60);
                 }
 
-                // ===== 方案B 双保险：预下载镜像到数据盘 + 注入离线任务 zs_task.json =====
-                // 即使 WinPE 环境无网络（登录无效），也能通过磁盘扫描到的离线任务完成无人值守装机
-                bool offlineInjected = await PreDownloadAndInjectOfflineTask();
+                // ===== R7 离线任务包 + BCD bootsequence（优先路径） =====
+                // R7: ZsTaskBuilder 下载 10 项资源 + 生成 task.ini/manifest → BcdInjector 注入 BCD → 30s 自动重启
+                // 失败回退到方案B（旧 zs_task.json + 手动进 PE）
+                bool offlineInjected = await ExecuteR7OfflineBuild();
+                if (!offlineInjected)
+                {
+                    AddLog("R7 流程未接管，回退方案B 旧离线注入流程");
+                    offlineInjected = await PreDownloadAndInjectOfflineTask();
+                }
                 if (offlineInjected)
                 {
                     SetExec(1, "completed", "已预下载");
@@ -1184,6 +1190,119 @@ namespace Windows_Client.ViewModels
                 AddLog("离线注入异常：" + ex.Message);
                 return false;
             }
+        }
+
+        /// <summary>
+        /// R7 离线任务包构建 + BCD bootsequence 注入（对应设计文档 §3.1 + §4.1）。
+        /// ZsTaskBuilder 下载 10 项资源 + 生成 task.ini/manifest → BcdInjector 注入 BCD → shutdown /r /t 30。
+        /// 成功后系统 30 秒自动重启进 PE（无需用户手动按 F12）。
+        /// 返回 true=已接管（已触发重启）；false=失败，调用方回退旧流程。
+        /// </summary>
+        private async Task<bool> ExecuteR7OfflineBuild()
+        {
+            try
+            {
+                if (SelectedImage == null || SelectedDisk == null) return false;
+
+                // §3.1 步骤 1：选盘（非 C 盘 NTFS 固定盘，可用空间 ≥ 20GB）
+                var taskDrive = SelectTaskDrive();
+                if (taskDrive == null)
+                {
+                    AddLog("R7: 未找到合适的盘存放 ZS_Task（需非 C 盘 NTFS 且可用 ≥20GB），回退旧流程");
+                    return false;
+                }
+                AddLog("R7: 任务盘 = " + taskDrive + ":\\");
+
+                // 获取 PE 版本（从服务器，失败用 latest）
+                string peVersion = "latest";
+                try
+                {
+                    var peVersions = await _api.GetPeVersionsAsync();
+                    if (peVersions.IsSuccess && peVersions.Data != null && peVersions.Data.Count > 0)
+                        peVersion = peVersions.Data[0].Version;
+                }
+                catch { /* 取不到 PE 版本不阻塞，用 latest */ }
+
+                // 构造 BuildRequest（软件/驱动列表待 UI 层后续补充）
+                var req = new ZsTaskBuilder.BuildRequest
+                {
+                    TaskDrive = taskDrive,
+                    PeVersion = peVersion,
+                    ImageId = SelectedImage.Id,
+                    ImageFileName = SelectedImage.FileName,
+                    ImageIndex = 1,
+                    ImageName = SelectedImage.Name,
+                    DiskIndex = SelectedDisk.Index,
+                    OobeMode = OptionOn("unattended") ? "auto" : "manual",
+                    FirstBootCleanup = false,
+                    ServerApi = ServerUrl,
+                    PartitionTable = PartitionScheme == 0 ? "auto" : "force_gpt",
+                };
+
+                // P1 流程：构建 ZS_Task 目录 + 下载 10 项资源 + 生成 task.ini/manifest
+                var builder = new ZsTaskBuilder(_api);
+                var progress = new Progress<ZsTaskBuilder.BuildProgress>(p =>
+                {
+                    ProgressValue = Math.Max(ProgressValue, p.Percent);
+                    SetExec(1, p.Percent < 100 ? "running" : "completed", p.Detail);
+                    AddLog("R7 " + p.Step + ": " + p.Detail);
+                });
+
+                AddLog("R7: 开始构建 ZS_Task 目录...");
+                var buildResult = await builder.BuildAsync(req, progress);
+                if (!buildResult.Ok)
+                {
+                    AddLog("R7: 构建失败 - " + buildResult.Error + "，回退旧流程");
+                    return false;
+                }
+                AddLog("R7: ZS_Task 构建完成 → " + buildResult.TaskRoot);
+                SetExec(1, "completed", "ZS_Task 构建完成");
+                SetExec(2, "completed", "manifest 校验通过");
+
+                // P2 流程：BCD bootsequence 一次性启动项注入（需管理员权限）
+                var bcd = new BcdInjector();
+                var bcdResult = bcd.Inject(taskDrive);
+                if (!bcdResult.Ok)
+                {
+                    AddLog("R7: BCD 注入失败 - " + bcdResult.Error);
+                    AddLog("R7: 清理 ZS_Task 目录并回退旧流程");
+                    try { if (Directory.Exists(buildResult.TaskRoot)) Directory.Delete(buildResult.TaskRoot, true); } catch { }
+                    return false;
+                }
+                AddLog("R7: BCD bootsequence 注入成功，GUID=" + bcdResult.PeGuid);
+                AddLog("R7: 备份文件=" + bcdResult.BackupPath);
+
+                // 触发 30 秒自动重启
+                AddLog("R7: 30 秒后自动重启进入 PE（shutdown /a 可取消）");
+                using var p = new System.Diagnostics.Process();
+                p.StartInfo.FileName = "shutdown.exe";
+                p.StartInfo.Arguments = "/r /t 30 /c \"ZS 无人值守装机：30 秒后自动重启进入 PE\"";
+                p.StartInfo.UseShellExecute = false;
+                p.StartInfo.CreateNoWindow = true;
+                p.Start();
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                AddLog("R7 构建异常：" + ex.Message);
+                return false;
+            }
+        }
+
+        /// <summary>选盘：非 C 盘 NTFS 固定盘，可用空间 ≥ 20GB（设计 §3.1 步骤 1）</summary>
+        private static string? SelectTaskDrive()
+        {
+            foreach (var drive in DriveInfo.GetDrives())
+            {
+                if (drive.DriveType != DriveType.Fixed) continue;
+                if (drive.Name.StartsWith("C", StringComparison.OrdinalIgnoreCase)) continue;
+                if (!drive.IsReady) continue;
+                if (!string.Equals(drive.DriveFormat, "NTFS", StringComparison.OrdinalIgnoreCase)) continue;
+                if (drive.AvailableFreeSpace < 20L * 1024 * 1024 * 1024) continue;
+                return drive.Name.Substring(0, 1);
+            }
+            return null;
         }
 
         /// <summary>计算文件 SHA256（校验镜像完整性）</summary>
